@@ -37,11 +37,19 @@ type CoordSpec = {
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const workbookUrl = String(body.workbookUrl || "").trim();
-    const templatePdfUrl = String(body.templatePdfUrl || "").trim();
-    const mappingUrl = String(body.mappingUrl || "").trim();
-    const coordsUrl = String(body.coordsUrl || "").trim();
+  const body = await request.json();
+  const workbookUrl = String(body.workbookUrl || "").trim();
+  const templatePdfUrl = String(body.templatePdfUrl || "").trim();
+  const mappingUrl = String(body.mappingUrl || "").trim();
+  const coordsUrl = String(body.coordsUrl || "").trim();
+  const mappingOverride =
+    body.mappingOverride && typeof body.mappingOverride === "object"
+      ? body.mappingOverride
+      : null;
+  const coordsOverride =
+    body.coordsOverride && typeof body.coordsOverride === "object"
+      ? body.coordsOverride
+      : null;
 
     if (!workbookUrl || !templatePdfUrl) {
       return NextResponse.json(
@@ -55,12 +63,16 @@ export async function POST(request: NextRequest) {
       downloadBuffer(templatePdfUrl, "Template PDF"),
     ]);
 
-    const mappingConfig = mappingUrl
-      ? await downloadJson(mappingUrl, "Mapping JSON")
-      : mappingDefault;
-    const coordsConfig = coordsUrl
-      ? await downloadJson(coordsUrl, "Coordinates JSON")
-      : coordinatesDefault;
+    const mappingConfig = mappingOverride
+      ? mappingOverride
+      : mappingUrl
+        ? await downloadJson(mappingUrl, "Mapping JSON")
+        : mappingDefault;
+    const coordsConfig = coordsOverride
+      ? coordsOverride
+      : coordsUrl
+        ? await downloadJson(coordsUrl, "Coordinates JSON")
+        : coordinatesDefault;
 
     const fieldValues = buildFieldValues(workbookBuffer, mappingConfig);
     const outputPdf = await stampPdf(

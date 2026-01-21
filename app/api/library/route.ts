@@ -11,6 +11,8 @@ const MAX_LIST = 1000;
 const TYPE_PREFIX: Record<string, string> = {
   workbook: "workbook:",
   template: "template:",
+  mapping: "mapping:",
+  coordinates: "coordinates:",
 };
 
 type LibraryItem = {
@@ -26,7 +28,10 @@ export async function GET(request: NextRequest) {
     const prefix = TYPE_PREFIX[type];
     if (!prefix) {
       return NextResponse.json(
-        { error: "Invalid type. Use 'workbook' or 'template'." },
+        {
+          error:
+            "Invalid type. Use 'workbook', 'template', 'mapping', or 'coordinates'.",
+        },
         { status: 400 }
       );
     }
@@ -58,9 +63,18 @@ export async function DELETE(request: NextRequest) {
     const prefix = TYPE_PREFIX[type];
     if (!prefix) {
       return NextResponse.json(
-        { error: "Invalid type. Use 'workbook' or 'template'." },
+        {
+          error:
+            "Invalid type. Use 'workbook', 'template', 'mapping', or 'coordinates'.",
+        },
         { status: 400 }
       );
+    }
+
+    const key = request.nextUrl.searchParams.get("key");
+    if (key) {
+      await utapi.deleteFiles([key]);
+      return NextResponse.json({ deletedCount: 1 });
     }
 
     const allFiles = await listAllFiles();

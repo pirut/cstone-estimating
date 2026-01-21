@@ -39,13 +39,27 @@ export const uploadRouter = {
       maxFileSize: "2MB",
       maxFileCount: 1,
     },
-  }).onUploadComplete(() => {}),
+  })
+    .middleware(({ files }) => ({
+      [UTFiles]: files.map((file) => ({
+        ...file,
+        customId: makeCustomId("mapping", file.name),
+      })),
+    }))
+    .onUploadComplete(() => {}),
   coordinates: f({
     "application/json": {
       maxFileSize: "2MB",
       maxFileCount: 1,
     },
-  }).onUploadComplete(() => {}),
+  })
+    .middleware(({ files }) => ({
+      [UTFiles]: files.map((file) => ({
+        ...file,
+        customId: makeCustomId("coordinates", file.name),
+      })),
+    }))
+    .onUploadComplete(() => {}),
 } satisfies FileRouter;
 
 export type UploadRouter = typeof uploadRouter;

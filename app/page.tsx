@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, type ComponentType } from "react";
+import Link from "next/link";
 import { AdvancedOverridesCard } from "@/components/advanced-overrides-card";
 import { BrandMark } from "@/components/brand-mark";
 import { UploadCard } from "@/components/upload-card";
@@ -454,7 +455,12 @@ export default function HomePage() {
             UploadThing handles file storage. Files can be re-used from the
             library tabs in each section.
           </span>
-          <span>Cornerstone Proposal Generator · v{APP_VERSION}</span>
+          <div className="flex items-center gap-4">
+            <Link className="hover:text-foreground" href="/admin">
+              Admin portal
+            </Link>
+            <span>Cornerstone Proposal Generator · v{APP_VERSION}</span>
+          </div>
         </footer>
       </div>
     </main>
