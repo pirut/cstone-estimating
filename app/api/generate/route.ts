@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PDFDocument, StandardFonts } from "pdf-lib";
+import fontkit from "@pdf-lib/fontkit";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import * as XLSX from "xlsx";
 import mappingDefault from "@/config/mapping.json";
 import coordinatesDefault from "@/config/coordinates.json";
@@ -18,6 +19,20 @@ type CoordSpec = {
   max_width?: number;
   min_size?: number;
   font?: string;
+  font_url?: string;
+  color?: string | number[];
+  opacity?: number;
+  background?: {
+    color?: string | number[];
+    opacity?: number;
+    padding?: number;
+    padding_x?: number;
+    padding_y?: number;
+    width?: number;
+    height?: number;
+    offset_x?: number;
+    offset_y?: number;
+  };
 };
 
 export async function POST(request: NextRequest) {
@@ -240,25 +255,34 @@ function parseDate(value: unknown) {
 
 async function stampPdf(
   templateBuffer: Buffer,
-  coordsConfig: Record<string, Record<string, CoordSpec>>,
+  coordsConfig: Record<string, any>,
   fieldValues: Record<string, string>
 ) {
   const pdfDoc = await PDFDocument.load(templateBuffer);
+  pdfDoc.registerFontkit(fontkit);
   const pages = pdfDoc.getPages();
 
-  const fontRegular = await pdfDoc.embedFont(StandardFonts.Helvetica);
-  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
-  const fontMap: Record<string, typeof fontRegular> = {
-    Helvetica: fontRegular,
-    "Helvetica-Bold": fontBold,
+  const standardFontMap: Record<string, string> = {
+    Helvetica: StandardFonts.Helvetica,
+    "Helvetica-Bold": StandardFonts.HelveticaBold,
+    "Times-Roman": StandardFonts.TimesRoman,
+    "Times-Bold": StandardFonts.TimesRomanBold,
+    "Courier": StandardFonts.Courier,
+    "Courier-Bold": StandardFonts.CourierBold,
   };
 
+  const fontCache = new Map<string, any>();
+  const fontsConfig = coordsConfig.fonts ?? {};
+
   for (const [pageKey, pageFields] of Object.entries(coordsConfig)) {
+    if (!pageKey.startsWith("page_")) continue;
     const pageIndex = Number(pageKey.replace("page_", "")) - 1;
     const page = pages[pageIndex];
     if (!page) continue;
 
-    for (const [fieldName, spec] of Object.entries(pageFields)) {
+    const fields = pageFields as Record<string, CoordSpec>;
+    for (const [fieldName, spec] of Object.entries(fields)) {
+      if (!spec) continue;
       const value = fieldValues[fieldName];
       if (!value) continue;
 
@@ -269,7 +293,14 @@ async function stampPdf(
       const maxWidth = spec.max_width ? Number(spec.max_width) : undefined;
       const minSize = Number(spec.min_size ?? 8);
       const fontName = String(spec.font ?? "Helvetica");
-      const font = fontMap[fontName] ?? fontRegular;
+      const font = await resolveFont(
+        pdfDoc,
+        fontCache,
+        fontsConfig,
+        standardFontMap,
+        fontName,
+        spec.font_url
+      );
 
       const fitted = fitText(value, font, size, maxWidth, minSize);
       const textWidth = font.widthOfTextAtSize(fitted.text, fitted.size);
@@ -281,16 +312,125 @@ async function stampPdf(
         drawX = x - textWidth / 2;
       }
 
+      const background = spec.background;
+      if (background) {
+        const padX = Number(background.padding_x ?? background.padding ?? 0);
+        const padY = Number(background.padding_y ?? background.padding ?? 0);
+        const offsetX = Number(background.offset_x ?? 0);
+        const offsetY = Number(background.offset_y ?? 0);
+        const textHeight = font.heightAtSize
+          ? font.heightAtSize(fitted.size)
+          : fitted.size * 1.1;
+        const bgWidth = Number(
+          background.width ?? maxWidth ?? textWidth
+        );
+        const bgHeight = Number(background.height ?? textHeight);
+        const bgX = drawX - padX + offsetX;
+        const bgY = y - textHeight * 0.25 - padY + offsetY;
+        page.drawRectangle({
+          x: bgX,
+          y: bgY,
+          width: bgWidth + padX * 2,
+          height: bgHeight + padY * 2,
+          color: parseColor(background.color, rgb(1, 1, 1)),
+          opacity: clampOpacity(background.opacity),
+        });
+      }
+
       page.drawText(fitted.text, {
         x: drawX,
         y,
         size: fitted.size,
         font,
+        color: parseColor(spec.color, rgb(0, 0, 0)),
+        opacity: clampOpacity(spec.opacity),
       });
     }
   }
 
   return pdfDoc.save();
+}
+
+async function resolveFont(
+  pdfDoc: PDFDocument,
+  cache: Map<string, any>,
+  fontsConfig: Record<string, { url?: string; base64?: string }>,
+  standardFontMap: Record<string, string>,
+  fontName: string,
+  fontUrl?: string
+) {
+  const cacheKey = fontUrl ? `${fontName}:${fontUrl}` : fontName;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+
+  if (standardFontMap[fontName] && !fontUrl && !fontsConfig[fontName]) {
+    const font = await pdfDoc.embedFont(standardFontMap[fontName]);
+    cache.set(cacheKey, font);
+    return font;
+  }
+
+  const source = fontUrl ? { url: fontUrl } : fontsConfig[fontName];
+  if (source?.url) {
+    const bytes = await downloadBuffer(source.url, `Font ${fontName}`);
+    const font = await pdfDoc.embedFont(bytes);
+    cache.set(cacheKey, font);
+    return font;
+  }
+
+  if (source?.base64) {
+    const bytes = decodeBase64(source.base64);
+    const font = await pdfDoc.embedFont(bytes);
+    cache.set(cacheKey, font);
+    return font;
+  }
+
+  const fallback = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  cache.set(cacheKey, fallback);
+  return fallback;
+}
+
+function decodeBase64(input: string) {
+  const cleaned = input.includes(",") ? input.split(",").pop() ?? "" : input;
+  return Buffer.from(cleaned, "base64");
+}
+
+function parseColor(value: unknown, fallback: ReturnType<typeof rgb>) {
+  if (!value) return fallback;
+  if (Array.isArray(value)) {
+    const [r, g, b] = value;
+    return rgb(normalizeColor(r), normalizeColor(g), normalizeColor(b));
+  }
+  if (typeof value === "string") {
+    const hex = value.trim().replace(/^#/, "");
+    if (hex.length === 3 || hex.length === 6) {
+      const expanded =
+        hex.length === 3
+          ? hex
+              .split("")
+              .map((ch) => ch + ch)
+              .join("")
+          : hex;
+      const intVal = Number.parseInt(expanded, 16);
+      if (!Number.isNaN(intVal)) {
+        const r = (intVal >> 16) & 255;
+        const g = (intVal >> 8) & 255;
+        const b = intVal & 255;
+        return rgb(r / 255, g / 255, b / 255);
+      }
+    }
+  }
+  return fallback;
+}
+
+function normalizeColor(value: unknown) {
+  if (typeof value !== "number" || Number.isNaN(value)) return 0;
+  if (value > 1) return Math.min(value / 255, 1);
+  return Math.max(value, 0);
+}
+
+function clampOpacity(value: unknown) {
+  if (typeof value !== "number" || Number.isNaN(value)) return 1;
+  return Math.min(Math.max(value, 0), 1);
 }
 
 function fitText(

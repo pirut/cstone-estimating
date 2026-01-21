@@ -23,12 +23,48 @@ export default function HomePage() {
   const [uploads, setUploads] = useState<UploadState>({});
   const [error, setError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [library, setLibrary] = useState<LibraryState>({
     workbook: { items: [], loading: false, error: null },
     template: { items: [], loading: false, error: null },
   });
 
   const canGenerate = Boolean(uploads.workbook && uploads.template);
+  const progressSteps = useMemo(
+    () => [
+      { label: "Downloading workbook", value: 0.2 },
+      { label: "Downloading template", value: 0.4 },
+      { label: "Reading Excel data", value: 0.58 },
+      { label: "Stamping PDF pages", value: 0.78 },
+      { label: "Finalizing download", value: 0.9 },
+    ],
+    []
+  );
+
+  useEffect(() => {
+    if (!isGenerating) {
+      setProgress(0);
+      setProgressLabel(null);
+      return;
+    }
+
+    let stepIndex = 0;
+    setProgress(progressSteps[0].value);
+    setProgressLabel(progressSteps[0].label);
+
+    const interval = window.setInterval(() => {
+      stepIndex += 1;
+      if (stepIndex >= progressSteps.length) {
+        window.clearInterval(interval);
+        return;
+      }
+      setProgress(progressSteps[stepIndex].value);
+      setProgressLabel(progressSteps[stepIndex].label);
+    }, 900);
+
+    return () => window.clearInterval(interval);
+  }, [isGenerating, progressSteps]);
 
   const status = useMemo(() => {
     if (isGenerating) {
@@ -70,6 +106,8 @@ export default function HomePage() {
     }
 
     setIsGenerating(true);
+    setProgress(0.1);
+    setProgressLabel("Starting generation");
     try {
       const response = await fetch("/api/generate", {
         method: "POST",
@@ -102,6 +140,8 @@ export default function HomePage() {
       link.download = "Cornerstone Proposal - Filled.pdf";
       link.click();
       window.URL.revokeObjectURL(url);
+      setProgress(1);
+      setProgressLabel("Download ready");
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setError(message);
@@ -336,6 +376,19 @@ export default function HomePage() {
               {error ? (
                 <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                   {error}
+                </div>
+              ) : null}
+              {isGenerating ? (
+                <div className="space-y-2 rounded-lg border border-border/60 bg-muted/40 px-4 py-3">
+                  <div className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
+                    {progressLabel ?? "Working..."}
+                  </div>
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-border/60">
+                    <div
+                      className="h-full rounded-full bg-accent transition-all duration-500"
+                      style={{ width: `${Math.min(progress * 100, 100)}%` }}
+                    />
+                  </div>
                 </div>
               ) : null}
               <div className="space-y-3 text-sm">
