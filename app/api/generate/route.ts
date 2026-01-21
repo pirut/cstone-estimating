@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, StandardFonts } from "pdf-lib";
 import * as XLSX from "xlsx";
-import path from "path";
-import fs from "fs/promises";
+import mappingDefault from "@/config/mapping.json";
+import coordinatesDefault from "@/config/coordinates.json";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -42,10 +42,10 @@ export async function POST(request: NextRequest) {
 
     const mappingConfig = mappingUrl
       ? await downloadJson(mappingUrl, "Mapping JSON")
-      : await readLocalJson("config/mapping.json");
+      : mappingDefault;
     const coordsConfig = coordsUrl
       ? await downloadJson(coordsUrl, "Coordinates JSON")
-      : await readLocalJson("config/coordinates.json");
+      : coordinatesDefault;
 
     const fieldValues = buildFieldValues(workbookBuffer, mappingConfig);
     const outputPdf = await stampPdf(templateBuffer, coordsConfig, fieldValues);
@@ -63,12 +63,6 @@ export async function POST(request: NextRequest) {
     const message = error instanceof Error ? error.message : "Unknown error.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
-
-async function readLocalJson(relativePath: string) {
-  const fullPath = path.join(process.cwd(), relativePath);
-  const raw = await fs.readFile(fullPath, "utf-8");
-  return JSON.parse(raw);
 }
 
 async function downloadJson(url: string, label: string) {
