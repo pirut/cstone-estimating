@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { UploadDropzone } from "@/components/uploadthing";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -38,24 +39,42 @@ function OverrideTile({
   onUpload,
   onError,
 }: OverrideTileProps) {
+  const [stagedFiles, setStagedFiles] = useState<File[]>([]);
+  const stagedName = stagedFiles[0]?.name;
+  const stagedCount = stagedFiles.length;
+  const hasStaged = stagedCount > 0;
+
+  useEffect(() => {
+    if (selected?.name) {
+      setStagedFiles([]);
+    }
+  }, [selected?.name]);
+
+  const handleUploadComplete = (
+    files?: { name: string; url: string; ufsUrl?: string }[]
+  ) => {
+    const uploaded = files?.[0];
+    if (!uploaded) return;
+    const url = uploaded.ufsUrl ?? uploaded.url;
+    setStagedFiles([]);
+    onUpload({ name: uploaded.name, url });
+  };
   const dropzoneContent = {
     label: ({
-      files,
       isDragActive,
       isUploading,
     }: {
-      files: File[];
       isDragActive: boolean;
       isUploading: boolean;
     }) => {
       if (isDragActive) {
         return "Drop JSON to upload";
       }
-      if (isUploading && files[0]?.name) {
-        return `Uploading: ${files[0].name}`;
+      if (isUploading && stagedName) {
+        return `Uploading: ${stagedName}`;
       }
-      if (files[0]?.name) {
-        return `Staged: ${files[0].name}`;
+      if (stagedName) {
+        return `Staged: ${stagedName}`;
       }
       if (selected?.name) {
         return `Selected: ${selected.name}`;
@@ -63,31 +82,29 @@ function OverrideTile({
       return "Upload JSON overrides";
     },
     allowedContent: ({
-      files,
       isUploading,
       uploadProgress,
     }: {
-      files: File[];
       isUploading: boolean;
       uploadProgress: number;
     }) => {
       if (isUploading) {
         return `Uploading... (${Math.round(uploadProgress)}%)`;
       }
-      if (files[0]?.name) {
+      if (hasStaged) {
         return "Click upload to start";
       }
       return "JSON only";
     },
     button: ({
-      files,
       isUploading,
     }: {
-      files: File[];
       isUploading: boolean;
     }) => {
       if (isUploading) return "Uploading...";
-      if (files.length > 0) return "Upload file";
+      if (hasStaged) {
+        return stagedCount > 1 ? `Upload ${stagedCount} files` : "Upload file";
+      }
       if (selected?.name) return "Replace file";
       return "Select file";
     },
@@ -111,12 +128,8 @@ function OverrideTile({
         endpoint={endpoint}
         appearance={compactAppearance}
         content={dropzoneContent}
-        onClientUploadComplete={(files) => {
-          const uploaded = files?.[0];
-          if (!uploaded) return;
-          const url = uploaded.ufsUrl ?? uploaded.url;
-          onUpload({ name: uploaded.name, url });
-        }}
+        onChange={setStagedFiles}
+        onClientUploadComplete={handleUploadComplete}
         onUploadError={(err: Error) => {
           const message = err.message || "Upload failed.";
           onError?.(message);
