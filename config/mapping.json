@@ -1,0 +1,26 @@
+{
+  "missing_value": "",
+  "prepared_by_map": {
+    "VB": "Vance Bussard"
+  },
+  "fields": {
+    "prepared_for": {"sheet": "Job Info", "cell": "C1", "format": "text"},
+    "project_name": {"sheet": "Job Info", "cell": "C6", "format": "text"},
+    "city_state_zip": {"sheet": "Job Info", "cell": "C7", "format": "text"},
+    "proposal_date": {"sheet": "Job Info", "cell": "C9", "format": "date_cover"},
+    "plan_set_date": {"sheet": "Job Info", "cell": "C10", "format": "date_plan"},
+    "prepared_by": {"sheet": "Job Info", "cell": "C11", "format": "initials"},
+    "product_price": {"sheet": "Bid Sheet", "cell": "H57", "format": "currency"},
+    "bucking_price": {"sheet": "Bid Sheet", "cell": "H59", "format": "currency"},
+    "waterproofing_price": {"sheet": "Bid Sheet", "cell": "H61", "format": "currency"},
+    "installation_price": {"sheet": "Bid Sheet", "cell": "H63", "format": "currency"},
+    "total_contract_price": {"sheet": "Bid Sheet", "cell": "H65", "format": "currency"},
+    "material_draw_1": {"sheet": "Bid Sheet", "cell": "H72", "format": "currency"},
+    "material_draw_2": {"sheet": "Bid Sheet", "cell": "H74", "format": "currency"},
+    "material_draw_3": {"sheet": "Bid Sheet", "cell": "H76", "format": "currency"},
+    "mobilization_deposit": {"sheet": "Bid Sheet", "cell": "H78", "format": "currency"},
+    "installation_draw_1": {"sheet": "Bid Sheet", "cell": "H80", "format": "currency"},
+    "installation_draw_2": {"sheet": "Bid Sheet", "cell": "H82", "format": "currency"},
+    "final_payment": {"sheet": "Bid Sheet", "cell": "H84", "format": "currency"}
+  }
+}
