@@ -71,6 +71,8 @@ export function UploadCard({
 }: UploadCardProps) {
   const hasLibrary = Boolean(library);
   const label = uploadLabel ?? `Drag & drop or click to upload your ${title}`;
+  const selectedLabel = selected ? `Selected: ${selected.name}` : label;
+  const buttonLabel = selected ? "Replace file" : "Browse files";
 
   return (
     <Card className="relative overflow-hidden border-border/60 bg-card/80 shadow-elevated">
@@ -110,14 +112,15 @@ export function UploadCard({
                 endpoint={endpoint}
                 appearance={baseDropzoneAppearance}
                 content={{
-                  label,
+                  label: selectedLabel,
                   allowedContent: allowedContent ?? "Drag a file or browse",
-                  button: "Browse files",
+                  button: buttonLabel,
                 }}
                 onClientUploadComplete={(files) => {
                   const uploaded = files?.[0];
                   if (!uploaded) return;
-                  onUpload({ name: uploaded.name, url: uploaded.url });
+                  const url = uploaded.ufsUrl ?? uploaded.url;
+                  onUpload({ name: uploaded.name, url });
                 }}
                 onUploadError={(err: Error) => {
                   const message = err.message || "Upload failed.";
@@ -216,14 +219,15 @@ export function UploadCard({
             endpoint={endpoint}
             appearance={baseDropzoneAppearance}
             content={{
-              label,
+              label: selectedLabel,
               allowedContent: allowedContent ?? "Drag a file or browse",
-              button: "Browse files",
+              button: buttonLabel,
             }}
             onClientUploadComplete={(files) => {
               const uploaded = files?.[0];
               if (!uploaded) return;
-              onUpload({ name: uploaded.name, url: uploaded.url });
+              const url = uploaded.ufsUrl ?? uploaded.url;
+              onUpload({ name: uploaded.name, url });
             }}
             onUploadError={(err: Error) => {
               const message = err.message || "Upload failed.";

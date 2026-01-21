@@ -63,7 +63,8 @@ function OverrideTile({
         onClientUploadComplete={(files) => {
           const uploaded = files?.[0];
           if (!uploaded) return;
-          onUpload({ name: uploaded.name, url: uploaded.url });
+          const url = uploaded.ufsUrl ?? uploaded.url;
+          onUpload({ name: uploaded.name, url });
         }}
         onUploadError={(err: Error) => {
           const message = err.message || "Upload failed.";
