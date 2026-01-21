@@ -1,33 +1,22 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { UploadDropzone } from "@/components/uploadthing";
-
-type UploadedFile = {
-  name: string;
-  url: string;
-};
-
-type LibraryItem = {
-  key: string;
-  name: string;
-  uploadedAt: number;
-  url: string;
-};
-
-type LibraryType = "workbook" | "template";
-
-type LibraryState = Record<
-  LibraryType,
-  { items: LibraryItem[]; loading: boolean; error: string | null }
->;
-
-type UploadState = {
-  workbook?: UploadedFile;
-  template?: UploadedFile;
-  mapping?: UploadedFile;
-  coords?: UploadedFile;
-};
+import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { AdvancedOverridesCard } from "@/components/advanced-overrides-card";
+import { BrandMark } from "@/components/brand-mark";
+import { UploadCard } from "@/components/upload-card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import type { LibraryState, LibraryType, UploadState } from "@/lib/types";
+import { cn } from "@/lib/utils";
+import { ArrowDownToLine, FileDown, FileText, Loader2, Sparkles } from "lucide-react";
 
 export default function HomePage() {
   const [uploads, setUploads] = useState<UploadState>({});
@@ -39,6 +28,38 @@ export default function HomePage() {
   });
 
   const canGenerate = Boolean(uploads.workbook && uploads.template);
+
+  const status = useMemo(() => {
+    if (isGenerating) {
+      return {
+        label: "Generating PDF",
+        helper: "Stamping pages and merging overlays.",
+        tone: "loading" as const,
+      };
+    }
+
+    if (canGenerate) {
+      return {
+        label: "Ready to generate",
+        helper: "Workbook and template are ready.",
+        tone: "ready" as const,
+      };
+    }
+
+    return {
+      label: "Awaiting uploads",
+      helper: "Upload the workbook and template to begin.",
+      tone: "idle" as const,
+    };
+  }, [isGenerating, canGenerate]);
+
+  const statusClassName = cn(
+    "border px-4 py-1 text-[10px] tracking-[0.32em]",
+    status.tone === "loading" &&
+      "border-accent/40 bg-accent/20 text-accent-foreground",
+    status.tone === "ready" && "border-white/40 bg-white/10 text-white",
+    status.tone === "idle" && "border-white/20 bg-white/5 text-white/70"
+  );
 
   const handleGenerate = async () => {
     setError(null);
@@ -125,11 +146,12 @@ export default function HomePage() {
     }
   };
 
-  const handleLibrarySelect = (type: LibraryType, item: LibraryItem) => {
+  const handleLibrarySelect = (type: LibraryType, item: { name: string; url: string }) => {
     if (!item.url) {
       setError("Selected item has no URL. Try refreshing the library.");
       return;
     }
+    setError(null);
     setUploads((prev) => ({
       ...prev,
       [type]: { name: item.name, url: item.url },
@@ -137,11 +159,6 @@ export default function HomePage() {
   };
 
   const handleLibraryDeleteAll = async (type: LibraryType) => {
-    const confirmDelete = window.confirm(
-      `Delete all ${type === "workbook" ? "workbooks" : "templates"}? This cannot be undone.`
-    );
-    if (!confirmDelete) return;
-
     setLibrary((prev) => ({
       ...prev,
       [type]: { ...prev[type], loading: true, error: null },
@@ -179,201 +196,237 @@ export default function HomePage() {
     void loadLibrary("template");
   }, []);
 
-  const statusLabel = useMemo(() => {
-    if (isGenerating) return "Generating PDF...";
-    if (canGenerate) return "Ready to generate";
-    return "Waiting for uploads";
-  }, [isGenerating, canGenerate]);
-
   return (
-    <main>
-      <div className="card grid">
-        <div>
-          <h1>Cornerstone Proposal Generator</h1>
-          <p>
-            Upload a workbook and the Cornerstone proposal template, then generate
-            a filled PDF in seconds. Large files are handled via UploadThing.
-          </p>
-          <span className="status-pill">{statusLabel}</span>
-        </div>
+    <main className="relative min-h-screen overflow-hidden">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-24 left-1/2 h-72 w-[520px] -translate-x-1/2 rounded-full bg-accent/20 blur-3xl" />
+        <div className="absolute top-24 right-0 h-72 w-72 rounded-full bg-foreground/10 blur-3xl" />
+      </div>
+      <div className="container relative py-12">
+        <section className="relative overflow-hidden rounded-[32px] border border-border/60 bg-foreground text-white shadow-elevated">
+          <div className="absolute -right-28 -top-24 h-72 w-72 rounded-full bg-accent/20 blur-3xl" />
+          <div className="absolute bottom-0 left-10 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
+          <div className="relative grid gap-8 p-8 lg:grid-cols-[1.1fr_0.9fr]">
+            <div className="space-y-6">
+              <BrandMark tone="dark" />
+              <div className="space-y-4">
+                <Badge variant="outline" className={statusClassName}>
+                  {status.label}
+                </Badge>
+                <div className="space-y-3">
+                  <h1 className="text-4xl font-serif tracking-tight md:text-5xl">
+                    New Construction Proposal Studio
+                  </h1>
+                  <p className="max-w-xl text-base text-white/70">
+                    Convert Excel-driven bids into finished Cornerstone proposals
+                    with calibrated PDF stamping and branded outputs in minutes.
+                  </p>
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Metric
+                  icon={FileText}
+                  label="Inputs"
+                  value="Workbook + Template"
+                />
+                <Metric icon={FileDown} label="Output" value="6-page PDF" />
+                <Metric
+                  icon={Sparkles}
+                  label="Automation"
+                  value="Precise stamping"
+                />
+              </div>
+            </div>
+            <Card className="border-white/10 bg-white/10 text-white shadow-none">
+              <CardHeader>
+                <CardTitle className="text-xl text-white">
+                  Workflow Overview
+                </CardTitle>
+                <CardDescription className="text-white/60">
+                  {status.helper}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {[
+                  "Upload the job workbook (.xlsx)",
+                  "Select the Cornerstone template PDF",
+                  "Generate and download the stamped proposal",
+                ].map((step, index) => (
+                  <div
+                    key={step}
+                    className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3"
+                  >
+                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/20 text-sm font-semibold">
+                      {index + 1}
+                    </div>
+                    <p className="text-sm text-white/70">{step}</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+        </section>
 
-        {error ? <div className="alert">{error}</div> : null}
-
-        <div className="grid grid-2">
-          <UploadSection
+        <section className="mt-12 grid gap-6 lg:grid-cols-2">
+          <UploadCard
             title="Excel Workbook"
-            description="Job info + bid sheet data (.xlsx)"
+            description="Job info + bid sheet values (.xlsx)."
             endpoint="workbook"
+            tag="Required"
             selected={uploads.workbook}
+            allowedContent=".xlsx only"
+            uploadLabel="Drop the workbook here or browse"
             library={library.workbook}
             onUpload={(file) => {
+              setError(null);
               setUploads((prev) => ({ ...prev, workbook: file }));
               void loadLibrary("workbook");
             }}
+            onError={setError}
             onSelectLibrary={(item) => handleLibrarySelect("workbook", item)}
             onRefreshLibrary={() => loadLibrary("workbook")}
             onDeleteLibrary={() => handleLibraryDeleteAll("workbook")}
           />
-          <UploadSection
+          <UploadCard
             title="Template PDF"
-            description="Cornerstone Proposal PDF"
+            description="Cornerstone New Construction Proposal template."
             endpoint="template"
+            tag="Required"
             selected={uploads.template}
+            allowedContent="PDF only"
+            uploadLabel="Drop the template here or browse"
             library={library.template}
             onUpload={(file) => {
+              setError(null);
               setUploads((prev) => ({ ...prev, template: file }));
               void loadLibrary("template");
             }}
+            onError={setError}
             onSelectLibrary={(item) => handleLibrarySelect("template", item)}
             onRefreshLibrary={() => loadLibrary("template")}
             onDeleteLibrary={() => handleLibraryDeleteAll("template")}
           />
-        </div>
+        </section>
 
-        <details className="details">
-          <summary className="field-label">Advanced overrides</summary>
-          <p className="meta">
-            Optional mapping/coordinates JSON for calibration or alternate
-            workbooks.
-          </p>
-          <div className="grid grid-2">
-            <UploadSection
-              title="Mapping JSON"
-              description="Overrides Excel cell mappings"
-              endpoint="mapping"
-              onUpload={(file) =>
-                setUploads((prev) => ({ ...prev, mapping: file }))
-              }
-            />
-            <UploadSection
-              title="Coordinates JSON"
-              description="Overrides PDF coordinates"
-              endpoint="coordinates"
-              onUpload={(file) =>
-                setUploads((prev) => ({ ...prev, coords: file }))
-              }
-            />
-          </div>
-        </details>
+        <section className="mt-10 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
+          <AdvancedOverridesCard
+            mapping={uploads.mapping}
+            coords={uploads.coords}
+            onUploadMapping={(file) => {
+              setError(null);
+              setUploads((prev) => ({ ...prev, mapping: file }));
+            }}
+            onUploadCoords={(file) => {
+              setError(null);
+              setUploads((prev) => ({ ...prev, coords: file }));
+            }}
+            onError={setError}
+          />
+          <Card className="border-border/60 bg-card/80 shadow-elevated">
+            <CardHeader>
+              <CardTitle className="text-2xl font-serif">
+                Generate Proposal
+              </CardTitle>
+              <CardDescription>
+                Combine selected inputs into a branded PDF download.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {error ? (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {error}
+                </div>
+              ) : null}
+              <div className="space-y-3 text-sm">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">Workbook</span>
+                  <span className="text-right font-medium text-foreground">
+                    {uploads.workbook?.name ?? "Not selected"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">Template</span>
+                  <span className="text-right font-medium text-foreground">
+                    {uploads.template?.name ?? "Not selected"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">Mapping</span>
+                  <span className="text-right text-muted-foreground">
+                    {uploads.mapping?.name ?? "Default"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">Coordinates</span>
+                  <span className="text-right text-muted-foreground">
+                    {uploads.coords?.name ?? "Default"}
+                  </span>
+                </div>
+              </div>
+              <Separator />
+              <div className="flex flex-col gap-3">
+                <Button
+                  variant="accent"
+                  size="lg"
+                  onClick={handleGenerate}
+                  disabled={!canGenerate || isGenerating}
+                >
+                  {isGenerating ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <ArrowDownToLine className="h-4 w-4" />
+                  )}
+                  {isGenerating ? "Generating..." : "Generate Proposal PDF"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => setUploads({})}
+                  disabled={isGenerating}
+                >
+                  Clear uploads
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Generated PDFs are produced on demand and downloaded immediately.
+              </p>
+            </CardContent>
+          </Card>
+        </section>
 
-        <div className="grid" style={{ gap: 12 }}>
-          <button
-            className="button"
-            onClick={handleGenerate}
-            disabled={!canGenerate || isGenerating}
-          >
-            {isGenerating ? "Generating..." : "Generate Proposal PDF"}
-          </button>
-          <button
-            className="button secondary"
-            onClick={() => setUploads({})}
-            disabled={isGenerating}
-          >
-            Clear uploads
-          </button>
-        </div>
+        <Separator className="my-12" />
 
-        <footer>
-          UploadThing handles the file storage. Generated PDFs are produced on
-          demand and downloaded immediately.
+        <footer className="flex flex-wrap items-center justify-between gap-4 text-xs text-muted-foreground">
+          <span>
+            UploadThing handles file storage. Files can be re-used from the
+            library tabs in each section.
+          </span>
+          <span>Cornerstone Proposal Generator · v0.1</span>
         </footer>
       </div>
     </main>
   );
 }
 
-function UploadSection({
-  title,
-  description,
-  endpoint,
-  onUpload,
-  selected,
-  library,
-  onSelectLibrary,
-  onRefreshLibrary,
-  onDeleteLibrary,
+function Metric({
+  icon: Icon,
+  label,
+  value,
 }: {
-  title: string;
-  description: string;
-  endpoint: "workbook" | "template" | "mapping" | "coordinates";
-  onUpload: (file: UploadedFile) => void;
-  selected?: UploadedFile;
-  library?: { items: LibraryItem[]; loading: boolean; error: string | null };
-  onSelectLibrary?: (item: LibraryItem) => void;
-  onRefreshLibrary?: () => void;
-  onDeleteLibrary?: () => void;
+  icon: ComponentType<{ className?: string }>;
+  label: string;
+  value: string;
 }) {
   return (
-    <div className="dropzone grid">
-      <div>
-        <div className="field-label">{title}</div>
-        <div className="meta">{description}</div>
-        {selected ? (
-          <div className="meta">Selected: {selected.name}</div>
-        ) : null}
+    <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20">
+        <Icon className="h-5 w-5 text-white" />
       </div>
-      <UploadDropzone
-        endpoint={endpoint}
-        onClientUploadComplete={(files) => {
-          const uploaded = files?.[0];
-          if (!uploaded) return;
-          onUpload({ name: uploaded.name, url: uploaded.url });
-        }}
-        onUploadError={(err: Error) => {
-          console.error(err);
-          alert(err.message);
-        }}
-      />
-      {library ? (
-        <div className="library">
-          <div className="field-label">Library</div>
-          <div className="meta">Recent uploads for this section.</div>
-          {library.error ? (
-            <div className="library-error">{library.error}</div>
-          ) : null}
-          {library.loading ? (
-            <div className="meta">Loading...</div>
-          ) : library.items.length === 0 ? (
-            <div className="meta">No files yet.</div>
-          ) : (
-            <div className="library-list">
-              {library.items.map((item) => (
-                <div key={item.key} className="library-item">
-                  <div>
-                    <div className="library-name">{item.name}</div>
-                    <div className="meta">
-                      {new Date(item.uploadedAt).toLocaleString()}
-                    </div>
-                  </div>
-                  <button
-                    className="button secondary"
-                    onClick={() => onSelectLibrary?.(item)}
-                    disabled={!item.url}
-                  >
-                    Use
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-          <div className="library-actions">
-            <button
-              className="button secondary"
-              onClick={onRefreshLibrary}
-              disabled={library.loading}
-            >
-              Refresh
-            </button>
-            <button
-              className="button secondary"
-              onClick={onDeleteLibrary}
-              disabled={library.loading}
-            >
-              Delete all
-            </button>
-          </div>
-        </div>
-      ) : null}
+      <div>
+        <p className="text-[11px] uppercase tracking-[0.3em] text-white/50">
+          {label}
+        </p>
+        <p className="text-sm font-semibold text-white">{value}</p>
+      </div>
     </div>
   );
 }
