@@ -16,6 +16,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import type { LibraryState, LibraryType, UploadState } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { APP_VERSION } from "@/lib/version";
 import { ArrowDownToLine, FileDown, FileText, Loader2, Sparkles } from "lucide-react";
 
 export default function HomePage() {
@@ -400,7 +401,7 @@ export default function HomePage() {
             UploadThing handles file storage. Files can be re-used from the
             library tabs in each section.
           </span>
-          <span>Cornerstone Proposal Generator · v0.1</span>
+          <span>Cornerstone Proposal Generator · v{APP_VERSION}</span>
         </footer>
       </div>
     </main>

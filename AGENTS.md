@@ -23,3 +23,4 @@
 ## Agent workflow requirement
 - Always commit and push after making changes.
 - If changes are made, run relevant checks (at minimum `npm run build` for TS/Next).
+- Bump the app version in `package.json` after any code change so the UI reflects it (see `lib/version.ts`).
