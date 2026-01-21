@@ -38,6 +38,61 @@ function OverrideTile({
   onUpload,
   onError,
 }: OverrideTileProps) {
+  const dropzoneContent = {
+    label: ({
+      files,
+      isDragActive,
+      isUploading,
+    }: {
+      files: File[];
+      isDragActive: boolean;
+      isUploading: boolean;
+    }) => {
+      if (isDragActive) {
+        return "Drop JSON to upload";
+      }
+      if (isUploading && files[0]?.name) {
+        return `Uploading: ${files[0].name}`;
+      }
+      if (files[0]?.name) {
+        return `Staged: ${files[0].name}`;
+      }
+      if (selected?.name) {
+        return `Selected: ${selected.name}`;
+      }
+      return "Upload JSON overrides";
+    },
+    allowedContent: ({
+      files,
+      isUploading,
+      uploadProgress,
+    }: {
+      files: File[];
+      isUploading: boolean;
+      uploadProgress: number;
+    }) => {
+      if (isUploading) {
+        return `Uploading... (${Math.round(uploadProgress)}%)`;
+      }
+      if (files[0]?.name) {
+        return "Click upload to start";
+      }
+      return "JSON only";
+    },
+    button: ({
+      files,
+      isUploading,
+    }: {
+      files: File[];
+      isUploading: boolean;
+    }) => {
+      if (isUploading) return "Uploading...";
+      if (files.length > 0) return "Upload file";
+      if (selected?.name) return "Replace file";
+      return "Select file";
+    },
+  };
+
   return (
     <div className="space-y-3 rounded-xl border border-border/60 bg-card/70 p-4">
       <div className="flex items-start justify-between gap-3">
@@ -55,11 +110,7 @@ function OverrideTile({
       <UploadDropzone
         endpoint={endpoint}
         appearance={compactAppearance}
-        content={{
-          label: "Upload JSON overrides",
-          allowedContent: "JSON only",
-          button: "Select file",
-        }}
+        content={dropzoneContent}
         onClientUploadComplete={(files) => {
           const uploaded = files?.[0];
           if (!uploaded) return;

@@ -70,9 +70,65 @@ export function UploadCard({
   onDeleteLibrary,
 }: UploadCardProps) {
   const hasLibrary = Boolean(library);
-  const label = uploadLabel ?? `Drag & drop or click to upload your ${title}`;
-  const selectedLabel = selected ? `Selected: ${selected.name}` : label;
-  const buttonLabel = selected ? "Replace file" : "Browse files";
+  const baseLabel = uploadLabel ?? `Drag & drop or click to upload your ${title}`;
+  const dropzoneContent = {
+    label: ({
+      files,
+      isDragActive,
+      isUploading,
+    }: {
+      files: File[];
+      isDragActive: boolean;
+      isUploading: boolean;
+    }) => {
+      if (isDragActive) {
+        return "Drop to upload";
+      }
+      if (isUploading && files[0]?.name) {
+        return `Uploading: ${files[0].name}`;
+      }
+      if (files[0]?.name) {
+        return `Staged: ${files[0].name}`;
+      }
+      if (selected?.name) {
+        return `Selected: ${selected.name}`;
+      }
+      return baseLabel;
+    },
+    allowedContent: ({
+      files,
+      isUploading,
+      uploadProgress,
+    }: {
+      files: File[];
+      isUploading: boolean;
+      uploadProgress: number;
+    }) => {
+      if (isUploading) {
+        const progress = Math.round(uploadProgress);
+        const name = files[0]?.name;
+        return name
+          ? `Uploading ${name} (${progress}%)`
+          : `Uploading... (${progress}%)`;
+      }
+      if (files[0]?.name) {
+        return "Click upload to start";
+      }
+      return allowedContent ?? "Drag a file or browse";
+    },
+    button: ({
+      files,
+      isUploading,
+    }: {
+      files: File[];
+      isUploading: boolean;
+    }) => {
+      if (isUploading) return "Uploading...";
+      if (files.length > 0) return "Upload file";
+      if (selected?.name) return "Replace file";
+      return "Browse files";
+    },
+  };
 
   return (
     <Card className="relative overflow-hidden border-border/60 bg-card/80 shadow-elevated">
@@ -111,11 +167,7 @@ export function UploadCard({
               <UploadDropzone
                 endpoint={endpoint}
                 appearance={baseDropzoneAppearance}
-                content={{
-                  label: selectedLabel,
-                  allowedContent: allowedContent ?? "Drag a file or browse",
-                  button: buttonLabel,
-                }}
+                content={dropzoneContent}
                 onClientUploadComplete={(files) => {
                   const uploaded = files?.[0];
                   if (!uploaded) return;
@@ -218,11 +270,7 @@ export function UploadCard({
           <UploadDropzone
             endpoint={endpoint}
             appearance={baseDropzoneAppearance}
-            content={{
-              label: selectedLabel,
-              allowedContent: allowedContent ?? "Drag a file or browse",
-              button: buttonLabel,
-            }}
+            content={dropzoneContent}
             onClientUploadComplete={(files) => {
               const uploaded = files?.[0];
               if (!uploaded) return;
