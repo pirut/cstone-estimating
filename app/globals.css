@@ -79,6 +79,46 @@ p {
   background: #fbfaf6;
 }
 
+.library {
+  border-top: 1px solid var(--edge);
+  padding-top: 16px;
+}
+
+.library-list {
+  display: grid;
+  gap: 10px;
+  max-height: 220px;
+  overflow: auto;
+  padding-right: 6px;
+}
+
+.library-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: #fff;
+  align-items: center;
+}
+
+.library-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.library-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.library-error {
+  color: var(--danger);
+  font-size: 0.9rem;
+}
+
 .field-label {
   font-weight: 600;
   margin-bottom: 8px;

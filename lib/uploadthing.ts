@@ -1,6 +1,11 @@
-import { createUploadthing, type FileRouter } from "uploadthing/next";
+import { createUploadthing, type FileRouter, UTFiles } from "uploadthing/next";
 
 const f = createUploadthing();
+
+const makeCustomId = (prefix: string, name: string) => {
+  const safeName = name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80);
+  return `${prefix}:${Date.now()}-${safeName}`;
+};
 
 export const uploadRouter = {
   workbook: f({
@@ -8,13 +13,27 @@ export const uploadRouter = {
       maxFileSize: "16MB",
       maxFileCount: 1,
     },
-  }).onUploadComplete(() => {}),
+  })
+    .middleware(({ files }) => ({
+      [UTFiles]: files.map((file) => ({
+        ...file,
+        customId: makeCustomId("workbook", file.name),
+      })),
+    }))
+    .onUploadComplete(() => {}),
   template: f({
     "application/pdf": {
       maxFileSize: "32MB",
       maxFileCount: 1,
     },
-  }).onUploadComplete(() => {}),
+  })
+    .middleware(({ files }) => ({
+      [UTFiles]: files.map((file) => ({
+        ...file,
+        customId: makeCustomId("template", file.name),
+      })),
+    }))
+    .onUploadComplete(() => {}),
   mapping: f({
     "application/json": {
       maxFileSize: "2MB",
