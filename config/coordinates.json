@@ -1,23 +1,26 @@
 {
+  "fonts": {
+    "WorkSans": { "url": "/fonts/WorkSans-Variable.ttf" }
+  },
   "page_1": {
-    "prepared_for": {"x": 108, "y": 522, "font": "Helvetica", "size": 11, "align": "left", "max_width": 280, "min_size": 8},
-    "prepared_by": {"x": 108, "y": 498, "font": "Helvetica", "size": 11, "align": "left", "max_width": 280, "min_size": 8},
-    "project_name": {"x": 108, "y": 474, "font": "Helvetica", "size": 11, "align": "left", "max_width": 280, "min_size": 8},
-    "proposal_date": {"x": 108, "y": 450, "font": "Helvetica", "size": 11, "align": "left"}
+    "prepared_for": {"x": 108, "y": 522, "font": "WorkSans", "size": 11, "align": "left", "max_width": 280, "min_size": 8, "color": "#FFFFFF"},
+    "prepared_by": {"x": 108, "y": 498, "font": "WorkSans", "size": 11, "align": "left", "max_width": 280, "min_size": 8, "color": "#FFFFFF"},
+    "project_name": {"x": 108, "y": 474, "font": "WorkSans", "size": 11, "align": "left", "max_width": 280, "min_size": 8, "color": "#FFFFFF"},
+    "proposal_date": {"x": 108, "y": 450, "font": "WorkSans", "size": 11, "align": "left", "color": "#FFFFFF"}
   },
   "page_6": {
-    "plan_set_date_line": {"x": 72, "y": 560, "font": "Helvetica", "size": 9, "align": "left", "max_width": 420, "min_size": 8},
-    "product_price": {"x": 520, "y": 496, "font": "Helvetica", "size": 10, "align": "right"},
-    "bucking_price": {"x": 520, "y": 478, "font": "Helvetica", "size": 10, "align": "right"},
-    "waterproofing_price": {"x": 520, "y": 460, "font": "Helvetica", "size": 10, "align": "right"},
-    "installation_price": {"x": 520, "y": 442, "font": "Helvetica", "size": 10, "align": "right"},
-    "total_contract_price": {"x": 520, "y": 424, "font": "Helvetica", "size": 10, "align": "right"},
-    "material_draw_1": {"x": 520, "y": 372, "font": "Helvetica", "size": 10, "align": "right"},
-    "material_draw_2": {"x": 520, "y": 354, "font": "Helvetica", "size": 10, "align": "right"},
-    "material_draw_3": {"x": 520, "y": 336, "font": "Helvetica", "size": 10, "align": "right"},
-    "mobilization_deposit": {"x": 520, "y": 318, "font": "Helvetica", "size": 10, "align": "right"},
-    "installation_draw_1": {"x": 520, "y": 300, "font": "Helvetica", "size": 10, "align": "right"},
-    "installation_draw_2": {"x": 520, "y": 282, "font": "Helvetica", "size": 10, "align": "right"},
-    "final_payment": {"x": 520, "y": 264, "font": "Helvetica", "size": 10, "align": "right"}
+    "plan_set_date_line": {"x": 72, "y": 560, "font": "WorkSans", "size": 9, "align": "left", "max_width": 420, "min_size": 8, "color": "#111111"},
+    "product_price": {"x": 520, "y": 496, "font": "WorkSans", "size": 10, "align": "right", "color": "#111111"},
+    "bucking_price": {"x": 520, "y": 478, "font": "WorkSans", "size": 10, "align": "right", "color": "#111111"},
+    "waterproofing_price": {"x": 520, "y": 460, "font": "WorkSans", "size": 10, "align": "right", "color": "#111111"},
+    "installation_price": {"x": 520, "y": 442, "font": "WorkSans", "size": 10, "align": "right", "color": "#111111"},
+    "total_contract_price": {"x": 520, "y": 424, "font": "WorkSans", "size": 10, "align": "right", "color": "#111111"},
+    "material_draw_1": {"x": 520, "y": 372, "font": "WorkSans", "size": 10, "align": "right", "color": "#111111"},
+    "material_draw_2": {"x": 520, "y": 354, "font": "WorkSans", "size": 10, "align": "right", "color": "#111111"},
+    "material_draw_3": {"x": 520, "y": 336, "font": "WorkSans", "size": 10, "align": "right", "color": "#111111"},
+    "mobilization_deposit": {"x": 520, "y": 318, "font": "WorkSans", "size": 10, "align": "right", "color": "#111111"},
+    "installation_draw_1": {"x": 520, "y": 300, "font": "WorkSans", "size": 10, "align": "right", "color": "#111111"},
+    "installation_draw_2": {"x": 520, "y": 282, "font": "WorkSans", "size": 10, "align": "right", "color": "#111111"},
+    "final_payment": {"x": 520, "y": 264, "font": "WorkSans", "size": 10, "align": "right", "color": "#111111"}
   }
 }

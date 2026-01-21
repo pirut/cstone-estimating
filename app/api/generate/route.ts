@@ -63,7 +63,12 @@ export async function POST(request: NextRequest) {
       : coordinatesDefault;
 
     const fieldValues = buildFieldValues(workbookBuffer, mappingConfig);
-    const outputPdf = await stampPdf(templateBuffer, coordsConfig, fieldValues);
+    const outputPdf = await stampPdf(
+      templateBuffer,
+      coordsConfig,
+      fieldValues,
+      request.nextUrl.origin
+    );
 
     return new NextResponse(outputPdf, {
       status: 200,
@@ -256,7 +261,8 @@ function parseDate(value: unknown) {
 async function stampPdf(
   templateBuffer: Buffer,
   coordsConfig: Record<string, any>,
-  fieldValues: Record<string, string>
+  fieldValues: Record<string, string>,
+  baseUrl: string
 ) {
   const pdfDoc = await PDFDocument.load(templateBuffer);
   pdfDoc.registerFontkit(fontkit);
@@ -299,7 +305,8 @@ async function stampPdf(
         fontsConfig,
         standardFontMap,
         fontName,
-        spec.font_url
+        spec.font_url,
+        baseUrl
       );
 
       const fitted = fitText(value, font, size, maxWidth, minSize);
@@ -357,7 +364,8 @@ async function resolveFont(
   fontsConfig: Record<string, { url?: string; base64?: string }>,
   standardFontMap: Record<string, string>,
   fontName: string,
-  fontUrl?: string
+  fontUrl?: string,
+  baseUrl?: string
 ) {
   const cacheKey = fontUrl ? `${fontName}:${fontUrl}` : fontName;
   const cached = cache.get(cacheKey);
@@ -371,7 +379,8 @@ async function resolveFont(
 
   const source = fontUrl ? { url: fontUrl } : fontsConfig[fontName];
   if (source?.url) {
-    const bytes = await downloadBuffer(source.url, `Font ${fontName}`);
+    const resolvedUrl = toAbsoluteUrl(source.url, baseUrl);
+    const bytes = await downloadBuffer(resolvedUrl, `Font ${fontName}`);
     const font = await pdfDoc.embedFont(bytes);
     cache.set(cacheKey, font);
     return font;
@@ -387,6 +396,14 @@ async function resolveFont(
   const fallback = await pdfDoc.embedFont(StandardFonts.Helvetica);
   cache.set(cacheKey, fallback);
   return fallback;
+}
+
+function toAbsoluteUrl(url: string, baseUrl?: string) {
+  if (/^https?:\/\//i.test(url)) return url;
+  if (url.startsWith("/") && baseUrl) {
+    return `${baseUrl}${url}`;
+  }
+  return url;
 }
 
 function decodeBase64(input: string) {
