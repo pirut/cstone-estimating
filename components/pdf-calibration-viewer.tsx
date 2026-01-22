@@ -261,15 +261,15 @@ export function PdfCalibrationViewer({
               type="button"
               onPointerDown={(event) => handlePointerDown(event, marker.name)}
               className={cn(
-                "pointer-events-auto absolute -translate-y-1/2 text-[10px]",
+                "pointer-events-auto absolute -translate-y-full text-[10px]",
                 marker.name === selectedField
                   ? "bg-accent text-accent-foreground shadow-glow"
                   : "bg-foreground text-background"
               )}
               style={{ left: marker.x, top: marker.y }}
             >
-              <span className="relative flex items-center">
-                <span className="absolute left-0 top-1/2 flex h-4 w-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-white text-[12px] font-semibold leading-none">
+              <span className="relative flex items-end">
+                <span className="absolute bottom-0 left-0 flex h-4 w-4 -translate-x-1/2 translate-y-1/2 items-center justify-center rounded-full border border-white text-[12px] font-semibold leading-none">
                   +
                 </span>
                 <span className="ml-2 rounded-full border-2 border-white px-2 py-1">
