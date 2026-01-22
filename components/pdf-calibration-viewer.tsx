@@ -19,6 +19,7 @@ type ViewerProps = {
   gridSize?: number;
   showGrid?: boolean;
   onPageSize?: (size: { width: number; height: number }) => void;
+  labelMap?: Record<string, string>;
   className?: string;
 };
 
@@ -38,6 +39,7 @@ export function PdfCalibrationViewer({
   gridSize = 0,
   showGrid = false,
   onPageSize,
+  labelMap,
   className,
 }: ViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -273,7 +275,7 @@ export function PdfCalibrationViewer({
                   +
                 </span>
                 <span className="ml-2 rounded-full border-2 border-white px-2 py-1">
-                  {marker.name.replace(/_/g, " ")}
+                  {formatMarkerLabel(labelMap?.[marker.name] ?? marker.name)}
                 </span>
               </span>
             </button>
@@ -282,6 +284,12 @@ export function PdfCalibrationViewer({
       ) : null}
     </div>
   );
+}
+
+function formatMarkerLabel(value: string) {
+  const label = value.replace(/_/g, " ");
+  if (label.length <= 40) return label;
+  return `${label.slice(0, 37)}...`;
 }
 
 let pdfWorkerConfigured = false;

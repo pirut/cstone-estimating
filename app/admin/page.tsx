@@ -157,6 +157,12 @@ export default function AdminPage() {
   const [nudgeStep, setNudgeStep] = useState(1);
   const [templateName, setTemplateName] = useState("");
   const [templateDescription, setTemplateDescription] = useState("");
+  const [selectedTemplateKey, setSelectedTemplateKey] = useState("");
+  const [editingTemplateKey, setEditingTemplateKey] = useState<string | null>(
+    null
+  );
+  const [templateLoadError, setTemplateLoadError] = useState<string | null>(null);
+  const [templateLoading, setTemplateLoading] = useState(false);
   const [templateSaveStatus, setTemplateSaveStatus] = useState<string | null>(
     null
   );
@@ -323,6 +329,24 @@ export default function AdminPage() {
     setTemplateName(baseName);
   }, [templateFile?.name, templateName]);
 
+  const previewLabelMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    const preparedByMap = mappingConfig.prepared_by_map ?? {};
+    const fields =
+      (coordsConfig[previewPage] as Record<string, CoordField>) ?? {};
+    Object.keys(fields).forEach((fieldName) => {
+      let raw = cellPreviews[fieldName];
+      let format = mappingConfig.fields?.[fieldName]?.format;
+      if (raw === undefined && fieldName === "plan_set_date_line") {
+        raw = cellPreviews.plan_set_date;
+        format = mappingConfig.fields?.plan_set_date?.format ?? "date_plan";
+      }
+      const formatted = formatPreviewValue(raw, format, preparedByMap);
+      map[fieldName] = formatted ?? formatFieldLabel(fieldName);
+    });
+    return map;
+  }, [coordsConfig, previewPage, cellPreviews, mappingConfig]);
+
   useEffect(() => {
     (Object.keys(LIBRARY_CONFIG) as AdminLibraryType[]).forEach((type) => {
       void loadLibrary(type);
@@ -381,9 +405,10 @@ export default function AdminPage() {
     }
   };
 
-  const handleSaveTemplate = async () => {
+  const handleSaveTemplate = async (options?: { replaceKey?: string }) => {
     setTemplateSaveError(null);
     setTemplateSaveStatus(null);
+    setTemplateLoadError(null);
     if (!templateFile?.url) {
       setTemplateSaveError("Select a template PDF before saving.");
       return;
@@ -411,7 +436,19 @@ export default function AdminPage() {
         const message = data?.error || "Failed to save template.";
         throw new Error(message);
       }
-      setTemplateSaveStatus("Template saved to library.");
+      const data = await response.json();
+      const savedKey = data?.item?.key as string | undefined;
+      const replaceKey = options?.replaceKey;
+      if (replaceKey && replaceKey !== savedKey) {
+        await deleteItem("template_config", replaceKey);
+      }
+      if (savedKey) {
+        setEditingTemplateKey(savedKey);
+        setSelectedTemplateKey(savedKey);
+      }
+      setTemplateSaveStatus(
+        replaceKey ? "Template updated in library." : "Template saved to library."
+      );
       setTemplateDescription("");
       void loadLibrary("template_config");
     } catch (error) {
@@ -419,6 +456,48 @@ export default function AdminPage() {
       setTemplateSaveError(message);
     } finally {
       setTemplateSaving(false);
+    }
+  };
+
+  const handleLoadTemplateConfig = async (item: LibraryItem) => {
+    setTemplateLoadError(null);
+    setTemplateSaveStatus(null);
+    setTemplateLoading(true);
+    try {
+      const response = await fetch(item.url, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error("Failed to load template configuration.");
+      }
+      const data = (await response.json()) as {
+        name?: string;
+        description?: string;
+        templatePdf?: { name?: string; url?: string };
+        coords?: Record<string, any>;
+        mapping?: Record<string, any>;
+      };
+      if (!data?.templatePdf?.url || !data?.coords) {
+        throw new Error("Template configuration is incomplete.");
+      }
+      setTemplateName(data.name ?? "");
+      setTemplateDescription(data.description ?? "");
+      setTemplateFile({
+        name: data.templatePdf.name ?? "template.pdf",
+        url: data.templatePdf.url,
+      });
+      if (data.coords) {
+        setCoordsConfig(data.coords);
+      }
+      if (data.mapping) {
+        setMappingConfig(data.mapping as MappingConfig);
+      }
+      setEditingTemplateKey(item.key);
+      setSelectedTemplateKey(item.key);
+      setTemplateSaveStatus("Template loaded for editing.");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error.";
+      setTemplateLoadError(message);
+    } finally {
+      setTemplateLoading(false);
     }
   };
 
@@ -648,6 +727,51 @@ export default function AdminPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2 md:col-span-2">
+                    <label className="text-xs text-muted-foreground">
+                      Load existing template
+                    </label>
+                    {libraries.template_config.items.length ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <select
+                          className="min-w-[240px] flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm"
+                          value={selectedTemplateKey}
+                          onChange={(event) =>
+                            setSelectedTemplateKey(event.target.value)
+                          }
+                        >
+                          <option value="">Select a saved template</option>
+                          {libraries.template_config.items.map((item) => (
+                            <option key={item.key} value={item.key}>
+                              {item.name}
+                            </option>
+                          ))}
+                        </select>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const selected = libraries.template_config.items.find(
+                              (item) => item.key === selectedTemplateKey
+                            );
+                            if (selected) {
+                              handleLoadTemplateConfig(selected);
+                            }
+                          }}
+                          disabled={!selectedTemplateKey || templateLoading}
+                        >
+                          {templateLoading ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : null}
+                          Load
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-muted-foreground">
+                        No templates yet. Save one to enable editing.
+                      </div>
+                    )}
+                  </div>
                   <div className="space-y-2">
                     <label className="text-xs text-muted-foreground">
                       Template name
@@ -673,6 +797,11 @@ export default function AdminPage() {
                     />
                   </div>
                 </div>
+                {templateLoadError ? (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    {templateLoadError}
+                  </div>
+                ) : null}
                 {templateSaveError ? (
                   <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                     {templateSaveError}
@@ -690,18 +819,31 @@ export default function AdminPage() {
                   <span>•</span>
                   <span>{Object.keys(coordsConfig).length} sections</span>
                 </div>
-                <Button
-                  variant="accent"
-                  onClick={handleSaveTemplate}
-                  disabled={templateSaving}
-                >
-                  {templateSaving ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <FileDown className="h-4 w-4" />
-                  )}
-                  {templateSaving ? "Saving..." : "Save template"}
-                </Button>
+                <div className="flex flex-wrap gap-3">
+                  <Button
+                    variant="accent"
+                    onClick={() => handleSaveTemplate()}
+                    disabled={templateSaving}
+                  >
+                    {templateSaving ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <FileDown className="h-4 w-4" />
+                    )}
+                    {templateSaving ? "Saving..." : "Save new template"}
+                  </Button>
+                  {editingTemplateKey ? (
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        handleSaveTemplate({ replaceKey: editingTemplateKey })
+                      }
+                      disabled={templateSaving}
+                    >
+                      Update existing template
+                    </Button>
+                  ) : null}
+                </div>
               </CardContent>
             </Card>
 
@@ -995,6 +1137,7 @@ export default function AdminPage() {
                     showGrid={showGrid}
                     snapToGrid={snapToGrid}
                     gridSize={gridSize}
+                    labelMap={previewLabelMap}
                     className="min-h-[360px]"
                   />
                 </div>
@@ -1572,4 +1715,66 @@ function isTypingTarget(target: EventTarget | null) {
     tag === "SELECT" ||
     target.isContentEditable
   );
+}
+
+function formatPreviewValue(
+  value: unknown,
+  format: string | undefined,
+  preparedByMap: Record<string, string>
+) {
+  if (value === null || value === undefined) return null;
+  switch (format) {
+    case "currency": {
+      const numberValue = normalizeNumber(value);
+      if (numberValue === null) return null;
+      return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(numberValue);
+    }
+    case "date_cover":
+    case "date_plan": {
+      const dateValue = normalizeDate(value);
+      if (!dateValue) return null;
+      return dateValue.toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+      });
+    }
+    case "initials": {
+      const key = String(value).trim();
+      return preparedByMap[key] ?? key;
+    }
+    default:
+      return String(value);
+  }
+}
+
+function normalizeNumber(value: unknown) {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "string") {
+    const cleaned = value.replace(/[^0-9.-]/g, "");
+    const parsed = Number.parseFloat(cleaned);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeDate(value: unknown) {
+  if (value instanceof Date && !Number.isNaN(value.valueOf())) return value;
+  if (typeof value === "number") {
+    const millis = (value - 25569) * 86400 * 1000;
+    const date = new Date(millis);
+    return Number.isNaN(date.valueOf()) ? null : date;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const date = new Date(value);
+    return Number.isNaN(date.valueOf()) ? null : date;
+  }
+  return null;
 }

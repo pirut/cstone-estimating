@@ -42,7 +42,7 @@ export default function HomePage() {
     template_config: { items: [], loading: false, error: null },
   });
 
-  const canGenerate = Boolean(uploads.workbook && uploads.template);
+  const canGenerate = Boolean(uploads.workbook && templateConfig?.templatePdf?.url);
   const progressSteps = useMemo(
     () => [
       { label: "Downloading workbook", value: 0.2 },
@@ -97,7 +97,7 @@ export default function HomePage() {
 
     return {
       label: "Awaiting uploads",
-      helper: "Upload the workbook and template to begin.",
+      helper: "Upload the workbook and select a template to begin.",
       tone: "idle" as const,
     };
   }, [isGenerating, canGenerate]);
@@ -112,8 +112,12 @@ export default function HomePage() {
 
   const handleGenerate = async () => {
     setError(null);
-    if (!uploads.workbook || !uploads.template) {
-      setError("Upload both the workbook and template PDF.");
+    if (!uploads.workbook) {
+      setError("Upload the workbook to continue.");
+      return;
+    }
+    if (!templateConfig?.templatePdf?.url) {
+      setError("Select a template from the library.");
       return;
     }
 
@@ -133,7 +137,7 @@ export default function HomePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           workbookUrl: uploads.workbook.url,
-          templatePdfUrl: uploads.template.url,
+          templatePdfUrl: templateConfig.templatePdf.url,
           mappingUrl: uploads.mapping?.url,
           coordsUrl: uploads.coords?.url,
           mappingOverride,
@@ -258,7 +262,6 @@ export default function HomePage() {
 
   useEffect(() => {
     void loadLibrary("workbook");
-    void loadLibrary("template");
     void loadLibrary("template_config");
   }, []);
 
@@ -344,7 +347,7 @@ export default function HomePage() {
               <CardContent className="space-y-4">
                 {[
                   "Upload the job workbook (.xlsx)",
-                  "Select the Cornerstone template PDF",
+                  "Select a saved proposal template",
                   "Generate and download the stamped proposal",
                 ].map((step, index) => (
                   <div
@@ -382,29 +385,6 @@ export default function HomePage() {
             onRefreshLibrary={() => loadLibrary("workbook")}
             onDeleteLibrary={() => handleLibraryDeleteAll("workbook")}
           />
-          <UploadCard
-            title="Template PDF"
-            description="Cornerstone New Construction Proposal template."
-            endpoint="template"
-            tag="Required"
-            selected={uploads.template}
-            allowedContent="PDF only"
-            uploadLabel="Drop the template here or browse"
-            library={library.template}
-            onUpload={(file) => {
-              setError(null);
-              setTemplateConfig(null);
-              setUploads((prev) => ({ ...prev, template: file }));
-              void loadLibrary("template");
-            }}
-            onError={setError}
-            onSelectLibrary={(item) => handleLibrarySelect("template", item)}
-            onRefreshLibrary={() => loadLibrary("template")}
-            onDeleteLibrary={() => handleLibraryDeleteAll("template")}
-          />
-        </section>
-
-        <section className="mt-6">
           <Card className="border-border/60 bg-card/80 shadow-elevated">
             <CardHeader>
               <CardTitle className="text-2xl font-serif">
@@ -541,13 +521,7 @@ export default function HomePage() {
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-muted-foreground">Template</span>
                   <span className="text-right font-medium text-foreground">
-                    {uploads.template?.name ?? "Not selected"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-muted-foreground">Template config</span>
-                  <span className="text-right text-muted-foreground">
-                    {templateConfig?.name ?? "None"}
+                    {templateConfig?.name ?? "Not selected"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
@@ -582,7 +556,10 @@ export default function HomePage() {
                 </Button>
                 <Button
                   variant="outline"
-                  onClick={() => setUploads({})}
+                  onClick={() => {
+                    setUploads({});
+                    setTemplateConfig(null);
+                  }}
                   disabled={isGenerating}
                 >
                   Clear uploads
