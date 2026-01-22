@@ -70,7 +70,7 @@ export function PdfCalibrationViewer({
       setPdfState({ loading: true, error: null });
       try {
         const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+        ensurePdfWorker(pdfjsLib);
 
         const response = await fetch(pdfUrl);
         const data = await response.arrayBuffer();
@@ -134,7 +134,7 @@ export function PdfCalibrationViewer({
     const renderScaled = async () => {
       try {
         const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+        ensurePdfWorker(pdfjsLib);
 
         const response = await fetch(pdfUrl);
         const data = await response.arrayBuffer();
@@ -245,4 +245,13 @@ export function PdfCalibrationViewer({
 
 function roundToTenth(value: number) {
   return Math.round(value * 10) / 10;
+}
+
+let pdfWorkerConfigured = false;
+function ensurePdfWorker(pdfjsLib: {
+  GlobalWorkerOptions: { workerSrc: string };
+}) {
+  if (pdfWorkerConfigured) return;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+  pdfWorkerConfigured = true;
 }

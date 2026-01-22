@@ -426,6 +426,8 @@ export default function AdminPage() {
                 selected={workbookFile}
                 onUpload={setWorkbookFile}
                 onLibraryRefresh={() => loadLibrary("workbook")}
+                libraryItems={libraries.workbook.items}
+                onSelectLibraryItem={setWorkbookFile}
               />
               <UploadPickerCard
                 title="Template PDF"
@@ -434,6 +436,8 @@ export default function AdminPage() {
                 selected={templateFile}
                 onUpload={setTemplateFile}
                 onLibraryRefresh={() => loadLibrary("template")}
+                libraryItems={libraries.template.items}
+                onSelectLibraryItem={setTemplateFile}
               />
             </div>
 
@@ -1034,6 +1038,8 @@ function UploadPickerCard({
   selected,
   onUpload,
   onLibraryRefresh,
+  libraryItems,
+  onSelectLibraryItem,
 }: {
   title: string;
   description: string;
@@ -1041,6 +1047,8 @@ function UploadPickerCard({
   selected: UploadedFile | null;
   onUpload: (file: UploadedFile | null) => void;
   onLibraryRefresh: () => void;
+  libraryItems: LibraryItem[];
+  onSelectLibraryItem: (file: UploadedFile) => void;
 }) {
   return (
     <Card className="border-border/60 bg-card/80 shadow-elevated">
@@ -1069,6 +1077,50 @@ function UploadPickerCard({
             console.error(error);
           }}
         />
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Library</span>
+            <button
+              type="button"
+              className="text-foreground underline-offset-4 hover:underline"
+              onClick={onLibraryRefresh}
+            >
+              Refresh
+            </button>
+          </div>
+          {libraryItems.length ? (
+            <ScrollArea className="h-40 rounded-lg border border-border/70 bg-background/70">
+              <div className="divide-y divide-border/60">
+                {libraryItems.map((item) => (
+                  <div
+                    key={item.key}
+                    className="flex items-center justify-between gap-3 px-3 py-2"
+                  >
+                    <div>
+                      <p className="text-xs font-medium text-foreground">
+                        {item.name}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {new Date(item.uploadedAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() =>
+                        onSelectLibraryItem({ name: item.name, url: item.url })
+                      }
+                    >
+                      Use
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </ScrollArea>
+          ) : (
+            <div className="text-xs text-muted-foreground">No files yet.</div>
+          )}
+        </div>
         {selected ? (
           <div className="text-xs text-muted-foreground">
             Using: <span className="text-foreground">{selected.name}</span>
