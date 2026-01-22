@@ -60,7 +60,7 @@
       "y": 595,
       "font": "WorkSans",
       "size": 10,
-      "align": "right",
+      "align": "left",
       "color": "#111111"
     },
     "bucking_price": {
@@ -68,7 +68,7 @@
       "y": 575,
       "font": "WorkSans",
       "size": 10,
-      "align": "right",
+      "align": "left",
       "color": "#111111"
     },
     "waterproofing_price": {
@@ -76,7 +76,7 @@
       "y": 553,
       "font": "WorkSans",
       "size": 10,
-      "align": "right",
+      "align": "left",
       "color": "#111111"
     },
     "installation_price": {
@@ -84,7 +84,7 @@
       "y": 533,
       "font": "WorkSans",
       "size": 10,
-      "align": "right",
+      "align": "left",
       "color": "#111111"
     },
     "total_contract_price": {
@@ -92,7 +92,7 @@
       "y": 512,
       "font": "WorkSans",
       "size": 10,
-      "align": "right",
+      "align": "left",
       "color": "#111111"
     },
     "material_draw_1": {
@@ -100,7 +100,7 @@
       "y": 443,
       "font": "WorkSans",
       "size": 10,
-      "align": "right",
+      "align": "left",
       "color": "#111111"
     },
     "material_draw_2": {
@@ -108,7 +108,7 @@
       "y": 405,
       "font": "WorkSans",
       "size": 10,
-      "align": "right",
+      "align": "left",
       "color": "#111111"
     },
     "material_draw_3": {
@@ -116,7 +116,7 @@
       "y": 365,
       "font": "WorkSans",
       "size": 10,
-      "align": "right",
+      "align": "left",
       "color": "#111111"
     },
     "mobilization_deposit": {
@@ -124,7 +124,7 @@
       "y": 327,
       "font": "WorkSans",
       "size": 10,
-      "align": "right",
+      "align": "left",
       "color": "#111111"
     },
     "installation_draw_1": {
@@ -132,7 +132,7 @@
       "y": 287,
       "font": "WorkSans",
       "size": 10,
-      "align": "right",
+      "align": "left",
       "color": "#111111"
     },
     "installation_draw_2": {
@@ -140,7 +140,7 @@
       "y": 246,
       "font": "WorkSans",
       "size": 10,
-      "align": "right",
+      "align": "left",
       "color": "#111111"
     },
     "final_payment": {
@@ -148,7 +148,7 @@
       "y": 208,
       "font": "WorkSans",
       "size": 10,
-      "align": "right",
+      "align": "left",
       "color": "#111111"
     }
   }
