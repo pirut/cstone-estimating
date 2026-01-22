@@ -356,18 +356,13 @@ export default function AdminPage() {
     }));
   };
 
-  const snapValue = (value: number) => {
-    if (!snapToGrid || gridSize <= 0) return value;
-    return snapToGridValue(value, gridSize);
-  };
-
   const nudgeSelectedField = (dx: number, dy: number) => {
     if (!selectedField) return;
     const fields = coordsConfig[previewPage] as Record<string, CoordField> | undefined;
     const current = fields?.[selectedField];
     if (!current) return;
-    const nextX = snapValue((current.x ?? 0) + dx);
-    const nextY = snapValue((current.y ?? 0) + dy);
+    const nextX = (current.x ?? 0) + dx;
+    const nextY = (current.y ?? 0) + dy;
     updateCoordField(previewPage, selectedField, { x: nextX, y: nextY });
   };
 
@@ -747,8 +742,9 @@ export default function AdminPage() {
                           Snap selection to grid
                         </Button>
                         <p className="text-[11px] text-muted-foreground">
-                          Click or drag to place. Arrow keys nudge when you are
-                          not typing in a field.
+                          Click or drag to place (snaps if enabled). Arrow keys
+                          and nudges always move by the nudge step; use Snap
+                          selection to grid to align.
                         </p>
                       </div>
                     </div>
