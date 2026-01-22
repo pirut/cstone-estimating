@@ -187,8 +187,7 @@ function formatCurrency(value: unknown, missingValue: string) {
   if (numberValue === null) return missingValue;
   const rounded = Math.round(numberValue * 100) / 100;
   return new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
+    style: "decimal",
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(rounded);

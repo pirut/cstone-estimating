@@ -332,6 +332,7 @@ export default function AdminPage() {
   const previewLabelMap = useMemo(() => {
     const map: Record<string, string> = {};
     const preparedByMap = mappingConfig.prepared_by_map ?? {};
+    const missingValue = String(mappingConfig.missing_value ?? "");
     const fields =
       (coordsConfig[previewPage] as Record<string, CoordField>) ?? {};
     Object.keys(fields).forEach((fieldName) => {
@@ -341,8 +342,13 @@ export default function AdminPage() {
         raw = cellPreviews.plan_set_date;
         format = mappingConfig.fields?.plan_set_date?.format ?? "date_plan";
       }
-      const formatted = formatPreviewValue(raw, format, preparedByMap);
-      map[fieldName] = formatted ?? formatFieldLabel(fieldName);
+      const formatted = formatPreviewValue(
+        raw,
+        format,
+        preparedByMap,
+        missingValue
+      );
+      map[fieldName] = formatted ?? missingValue;
     });
     return map;
   }, [coordsConfig, previewPage, cellPreviews, mappingConfig]);
@@ -1720,36 +1726,32 @@ function isTypingTarget(target: EventTarget | null) {
 function formatPreviewValue(
   value: unknown,
   format: string | undefined,
-  preparedByMap: Record<string, string>
+  preparedByMap: Record<string, string>,
+  missingValue: string
 ) {
   if (value === null || value === undefined) return null;
   switch (format) {
     case "currency": {
       const numberValue = normalizeNumber(value);
       if (numberValue === null) return null;
+      const rounded = Math.round(numberValue * 100) / 100;
       return new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: "USD",
+        style: "decimal",
         minimumFractionDigits: 2,
         maximumFractionDigits: 2,
-      }).format(numberValue);
+      }).format(rounded);
     }
     case "date_cover":
-    case "date_plan": {
-      const dateValue = normalizeDate(value);
-      if (!dateValue) return null;
-      return dateValue.toLocaleDateString("en-US", {
-        month: "long",
-        day: "numeric",
-        year: "numeric",
-      });
-    }
+      return formatCoverDate(value);
+    case "date_plan":
+      return formatPlanDate(value);
     case "initials": {
       const key = String(value).trim();
+      if (!key) return missingValue;
       return preparedByMap[key] ?? key;
     }
     default:
-      return String(value);
+      return formatTextValue(value, missingValue);
   }
 }
 
@@ -1777,4 +1779,25 @@ function normalizeDate(value: unknown) {
     return Number.isNaN(date.valueOf()) ? null : date;
   }
   return null;
+}
+
+function formatCoverDate(value: unknown) {
+  const dateValue = normalizeDate(value);
+  if (!dateValue) return null;
+  const month = dateValue.toLocaleString("en-US", { month: "long" }).toUpperCase();
+  const day = String(dateValue.getDate()).padStart(2, "0");
+  return `${month} ${day}, ${dateValue.getFullYear()}`;
+}
+
+function formatPlanDate(value: unknown) {
+  const dateValue = normalizeDate(value);
+  if (!dateValue) return null;
+  const month = dateValue.toLocaleString("en-US", { month: "long" });
+  return `${month} ${dateValue.getDate()}, ${dateValue.getFullYear()}`;
+}
+
+function formatTextValue(value: unknown, missingValue: string) {
+  if (value === null || value === undefined) return missingValue;
+  const text = String(value).trim();
+  return text || missingValue;
 }
