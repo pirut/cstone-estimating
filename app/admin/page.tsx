@@ -137,6 +137,7 @@ export default function AdminPage() {
   const [workbookLoading, setWorkbookLoading] = useState(false);
   const [workbookError, setWorkbookError] = useState<string | null>(null);
   const [workbookLoaded, setWorkbookLoaded] = useState(false);
+  const [workbookWorkerReady, setWorkbookWorkerReady] = useState(false);
   const [previewPage, setPreviewPage] = useState("page_1");
   const [selectedField, setSelectedField] = useState<string | null>(null);
   const [showGrid, setShowGrid] = useState(true);
@@ -196,52 +197,61 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const worker = new Worker(
-      new URL("../../lib/workbook-worker.ts", import.meta.url)
-    );
-    workbookWorkerRef.current = worker;
+    try {
+      const worker = new Worker(
+        new URL("../../lib/workbook-worker.ts", import.meta.url),
+        { type: "module" }
+      );
+      workbookWorkerRef.current = worker;
+      setWorkbookWorkerReady(true);
 
-    worker.onmessage = (event) => {
-      const data = event.data;
-      if (data?.type === "loaded") {
-        setSheetNames(Array.isArray(data.sheetNames) ? data.sheetNames : []);
-        setWorkbookLoaded(true);
-        setWorkbookLoading(false);
-        setWorkbookError(null);
-        return;
-      }
-      if (data?.type === "cells") {
-        const results = Array.isArray(data.results) ? data.results : [];
-        const nextMap: CellPreviewMap = {};
-        results.forEach((result: { key?: string; value?: unknown }) => {
-          if (!result?.key) return;
-          nextMap[result.key] = result.value ?? null;
-        });
-        setCellPreviews(nextMap);
-        return;
-      }
-      if (data?.type === "error") {
-        setWorkbookError(data.error ?? "Failed to parse workbook.");
+      worker.onmessage = (event) => {
+        const data = event.data;
+        if (data?.type === "loaded") {
+          setSheetNames(Array.isArray(data.sheetNames) ? data.sheetNames : []);
+          setWorkbookLoaded(true);
+          setWorkbookLoading(false);
+          setWorkbookError(null);
+          return;
+        }
+        if (data?.type === "cells") {
+          const results = Array.isArray(data.results) ? data.results : [];
+          const nextMap: CellPreviewMap = {};
+          results.forEach((result: { key?: string; value?: unknown }) => {
+            if (!result?.key) return;
+            nextMap[result.key] = result.value ?? null;
+          });
+          setCellPreviews(nextMap);
+          return;
+        }
+        if (data?.type === "error") {
+          setWorkbookError(data.error ?? "Failed to parse workbook.");
+          setWorkbookLoaded(false);
+          setWorkbookLoading(false);
+        }
+      };
+
+      worker.onerror = () => {
+        setWorkbookError("Failed to parse workbook.");
         setWorkbookLoaded(false);
         setWorkbookLoading(false);
-      }
-    };
+      };
 
-    worker.onerror = () => {
-      setWorkbookError("Failed to parse workbook.");
-      setWorkbookLoaded(false);
-      setWorkbookLoading(false);
-    };
-
-    return () => {
-      worker.terminate();
-      workbookWorkerRef.current = null;
-    };
+      return () => {
+        worker.terminate();
+        workbookWorkerRef.current = null;
+        setWorkbookWorkerReady(false);
+      };
+    } catch (error) {
+      console.error(error);
+      setWorkbookError("Workbook reader failed to start.");
+      setWorkbookWorkerReady(false);
+    }
   }, []);
 
   useEffect(() => {
     const controller = new AbortController();
-    if (!workbookFile?.url || !workbookWorkerRef.current) {
+    if (!workbookFile?.url || !workbookWorkerRef.current || !workbookWorkerReady) {
       setSheetNames([]);
       setCellPreviews({});
       setWorkbookLoaded(false);
@@ -275,7 +285,7 @@ export default function AdminPage() {
 
     void loadWorkbook();
     return () => controller.abort();
-  }, [workbookFile?.url]);
+  }, [workbookFile?.url, workbookWorkerReady]);
 
   useEffect(() => {
     if (!workbookWorkerRef.current || !workbookLoaded) return;
@@ -590,6 +600,20 @@ export default function AdminPage() {
                     Download mapping JSON
                   </Button>
                 </div>
+                {workbookError ? (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    {workbookError}
+                  </div>
+                ) : workbookLoading ? (
+                  <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                    Reading workbook...
+                  </div>
+                ) : workbookLoaded ? (
+                  <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                    Workbook loaded with {sheetNames.length} sheet
+                    {sheetNames.length === 1 ? "" : "s"}.
+                  </div>
+                ) : null}
                 <Separator />
                 <div className="space-y-4">
                   {Object.entries(mappingConfig.fields).map(
