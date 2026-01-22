@@ -6,6 +6,7 @@ import * as XLSX from "xlsx";
 import mappingDefault from "@/config/mapping.json";
 import coordinatesDefault from "@/config/coordinates.json";
 import { UploadDropzone } from "@/components/uploadthing";
+import { PdfCalibrationViewer } from "@/components/pdf-calibration-viewer";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -128,6 +129,8 @@ export default function AdminPage() {
   const [workbookFile, setWorkbookFile] = useState<UploadedFile | null>(null);
   const [templateFile, setTemplateFile] = useState<UploadedFile | null>(null);
   const [workbookData, setWorkbookData] = useState<XLSX.WorkBook | null>(null);
+  const [previewPage, setPreviewPage] = useState("page_1");
+  const [selectedField, setSelectedField] = useState<string | null>(null);
   const [mappingConfig, setMappingConfig] = useState<MappingConfig>(() =>
     cloneJson(mappingDefault as MappingConfig)
   );
@@ -351,6 +354,25 @@ export default function AdminPage() {
     [coordsConfig]
   );
 
+  useEffect(() => {
+    if (pageKeys.length === 0) return;
+    if (!pageKeys.includes(previewPage)) {
+      setPreviewPage(pageKeys[0]);
+    }
+  }, [pageKeys, previewPage]);
+
+  useEffect(() => {
+    const fields = coordsConfig[previewPage] as Record<string, CoordField> | undefined;
+    const fieldNames = fields ? Object.keys(fields) : [];
+    if (fieldNames.length === 0) {
+      setSelectedField(null);
+      return;
+    }
+    if (!selectedField || !fieldNames.includes(selectedField)) {
+      setSelectedField(fieldNames[0]);
+    }
+  }, [coordsConfig, previewPage, selectedField]);
+
   return (
     <main className="relative min-h-screen overflow-hidden">
       <div className="container relative py-12">
@@ -540,6 +562,59 @@ export default function AdminPage() {
                   </Button>
                 </div>
                 <Separator />
+                <div className="grid gap-4 lg:grid-cols-[0.6fr_1.4fr]">
+                  <div className="space-y-3 rounded-xl border border-border/60 bg-background/70 p-4">
+                    <div className="space-y-2">
+                      <label className="text-xs text-muted-foreground">
+                        Preview page
+                      </label>
+                      <select
+                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                        value={previewPage}
+                        onChange={(event) => setPreviewPage(event.target.value)}
+                      >
+                        {pageKeys.map((pageKey) => (
+                          <option key={pageKey} value={pageKey}>
+                            {pageKey.replace("_", " ").toUpperCase()}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs text-muted-foreground">
+                        Field to place
+                      </label>
+                      <select
+                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                        value={selectedField ?? ""}
+                        onChange={(event) => setSelectedField(event.target.value)}
+                      >
+                        {(Object.keys(
+                          (coordsConfig[previewPage] as Record<string, CoordField>) ?? {}
+                        ) as string[]).map((fieldName) => (
+                          <option key={fieldName} value={fieldName}>
+                            {formatFieldLabel(fieldName)}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Click on the PDF to place the selected field, or drag an
+                      existing marker.
+                    </p>
+                  </div>
+                  <PdfCalibrationViewer
+                    pdfUrl={templateFile?.url}
+                    pageKey={previewPage}
+                    fields={(coordsConfig[previewPage] as Record<string, CoordField>) ?? {}}
+                    selectedField={selectedField}
+                    onSelectField={setSelectedField}
+                    onChangeCoord={(field, x, y) =>
+                      updateCoordField(previewPage, field, { x, y })
+                    }
+                    className="min-h-[360px]"
+                  />
+                </div>
                 <Tabs defaultValue={pageKeys[0] ?? "page_1"}>
                   <TabsList className="flex flex-wrap">
                     {pageKeys.map((pageKey) => (
