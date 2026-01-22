@@ -6,7 +6,7 @@
   },
   "page_1": {
     "prepared_for": {
-      "x": 55,
+      "x": 57,
       "y": 56,
       "font": "WorkSans",
       "size": 11,
@@ -36,7 +36,7 @@
       "color": "#FFFFFF"
     },
     "proposal_date": {
-      "x": 55,
+      "x": 56,
       "y": 203,
       "font": "WorkSans",
       "size": 11,

@@ -145,9 +145,7 @@ function buildFieldValues(workbookBuffer: Buffer, mappingConfig: any) {
 
   const planSetDate = values.plan_set_date;
   values.plan_set_date_line =
-    planSetDate && planSetDate !== missingValue
-      ? `Estimate based on plan set dated: ${planSetDate}`
-      : missingValue;
+    planSetDate && planSetDate !== missingValue ? planSetDate : missingValue;
 
   return values;
 }
