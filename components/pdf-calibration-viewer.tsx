@@ -15,6 +15,10 @@ type ViewerProps = {
   selectedField?: string | null;
   onSelectField: (field: string) => void;
   onChangeCoord: (field: string, x: number, y: number) => void;
+  snapToGrid?: boolean;
+  gridSize?: number;
+  showGrid?: boolean;
+  onPageSize?: (size: { width: number; height: number }) => void;
   className?: string;
 };
 
@@ -30,6 +34,10 @@ export function PdfCalibrationViewer({
   selectedField,
   onSelectField,
   onChangeCoord,
+  snapToGrid = false,
+  gridSize = 0,
+  showGrid = false,
+  onPageSize,
   className,
 }: ViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -42,6 +50,10 @@ export function PdfCalibrationViewer({
   const [pageSize, setPageSize] = useState<{ width: number; height: number } | null>(null);
   const [scale, setScale] = useState(1);
   const [isDragging, setIsDragging] = useState<string | null>(null);
+  const gridPixelSize = useMemo(() => {
+    if (!gridSize || gridSize <= 0) return null;
+    return gridSize * scale;
+  }, [gridSize, scale]);
 
   const pageIndex = useMemo(() => {
     const number = Number(pageKey.replace("page_", "")) - 1;
@@ -84,6 +96,7 @@ export function PdfCalibrationViewer({
 
         const baseViewport = page.getViewport({ scale: 1, rotation: page.rotate });
         setPageSize({ width: baseViewport.width, height: baseViewport.height });
+        onPageSize?.({ width: baseViewport.width, height: baseViewport.height });
 
         const containerWidth = containerRef.current?.clientWidth ?? baseViewport.width;
         const nextScale = containerWidth / baseViewport.width;
@@ -165,13 +178,18 @@ export function PdfCalibrationViewer({
     void renderScaled();
   }, [pdfUrl, pageIndex, scale, pageSize]);
 
+  const snapValue = (value: number) => {
+    if (!snapToGrid || !gridSize || gridSize <= 0) return value;
+    return Math.round(value / gridSize) * gridSize;
+  };
+
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
     if (!selectedField || !viewportRef.current) return;
     const bounds = event.currentTarget.getBoundingClientRect();
     const x = event.clientX - bounds.left;
     const y = event.clientY - bounds.top;
     const [pdfX, pdfY] = viewportRef.current.convertToPdfPoint(x, y);
-    onChangeCoord(selectedField, pdfX, pdfY);
+    onChangeCoord(selectedField, snapValue(pdfX), snapValue(pdfY));
   };
 
   const handlePointerDown = (
@@ -190,7 +208,7 @@ export function PdfCalibrationViewer({
     const x = event.clientX - bounds.left;
     const y = event.clientY - bounds.top;
     const [pdfX, pdfY] = viewportRef.current.convertToPdfPoint(x, y);
-    onChangeCoord(isDragging, pdfX, pdfY);
+    onChangeCoord(isDragging, snapValue(pdfX), snapValue(pdfY));
   };
 
   const handlePointerUp = () => {
@@ -227,6 +245,16 @@ export function PdfCalibrationViewer({
       <canvas ref={canvasRef} className={cn(pdfUrl ? "block" : "hidden")} />
       {pdfUrl && pageSize ? (
         <div className="pointer-events-none absolute inset-0">
+          {showGrid && gridPixelSize ? (
+            <div
+              className="absolute inset-0"
+              style={{
+                backgroundImage:
+                  "linear-gradient(to right, rgba(148, 163, 184, 0.25) 1px, transparent 1px), linear-gradient(to bottom, rgba(148, 163, 184, 0.25) 1px, transparent 1px)",
+                backgroundSize: `${gridPixelSize}px ${gridPixelSize}px`,
+              }}
+            />
+          ) : null}
           {markers.map((marker) => (
             <button
               key={marker.name}

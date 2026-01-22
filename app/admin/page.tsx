@@ -33,8 +33,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { UploadedFile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
+  ArrowDown,
   ArrowDownToLine,
   ArrowLeft,
+  ArrowRight,
+  ArrowUp,
   FileDown,
   Loader2,
   RefreshCw,
@@ -131,6 +134,10 @@ export default function AdminPage() {
   const [workbookData, setWorkbookData] = useState<XLSX.WorkBook | null>(null);
   const [previewPage, setPreviewPage] = useState("page_1");
   const [selectedField, setSelectedField] = useState<string | null>(null);
+  const [showGrid, setShowGrid] = useState(true);
+  const [snapToGrid, setSnapToGrid] = useState(true);
+  const [gridSize, setGridSize] = useState(10);
+  const [nudgeStep, setNudgeStep] = useState(1);
   const [mappingConfig, setMappingConfig] = useState<MappingConfig>(() =>
     cloneJson(mappingDefault as MappingConfig)
   );
@@ -349,6 +356,31 @@ export default function AdminPage() {
     }));
   };
 
+  const snapValue = (value: number) => {
+    if (!snapToGrid || gridSize <= 0) return value;
+    return snapToGridValue(value, gridSize);
+  };
+
+  const nudgeSelectedField = (dx: number, dy: number) => {
+    if (!selectedField) return;
+    const fields = coordsConfig[previewPage] as Record<string, CoordField> | undefined;
+    const current = fields?.[selectedField];
+    if (!current) return;
+    const nextX = snapValue((current.x ?? 0) + dx);
+    const nextY = snapValue((current.y ?? 0) + dy);
+    updateCoordField(previewPage, selectedField, { x: nextX, y: nextY });
+  };
+
+  const snapSelectedField = () => {
+    if (!selectedField || gridSize <= 0) return;
+    const fields = coordsConfig[previewPage] as Record<string, CoordField> | undefined;
+    const current = fields?.[selectedField];
+    if (!current) return;
+    const nextX = snapToGridValue(current.x ?? 0, gridSize);
+    const nextY = snapToGridValue(current.y ?? 0, gridSize);
+    updateCoordField(previewPage, selectedField, { x: nextX, y: nextY });
+  };
+
   const pageKeys = useMemo(
     () => Object.keys(coordsConfig).filter((key) => key.startsWith("page_")),
     [coordsConfig]
@@ -372,6 +404,28 @@ export default function AdminPage() {
       setSelectedField(fieldNames[0]);
     }
   }, [coordsConfig, previewPage, selectedField]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!selectedField || isTypingTarget(event.target)) return;
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        nudgeSelectedField(0, nudgeStep);
+      } else if (event.key === "ArrowDown") {
+        event.preventDefault();
+        nudgeSelectedField(0, -nudgeStep);
+      } else if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        nudgeSelectedField(-nudgeStep, 0);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        nudgeSelectedField(nudgeStep, 0);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selectedField, nudgeStep, previewPage, coordsConfig, snapToGrid, gridSize]);
 
   return (
     <main className="relative min-h-screen overflow-hidden">
@@ -602,10 +656,102 @@ export default function AdminPage() {
                         ))}
                       </select>
                     </div>
-                    <p className="text-xs text-muted-foreground">
-                      Click on the PDF to place the selected field, or drag an
-                      existing marker.
-                    </p>
+                    <Separator />
+                    <div className="space-y-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                        Placement tools
+                      </p>
+                      <div className="grid gap-2 text-xs text-muted-foreground">
+                        <label className="flex items-center gap-2 text-foreground">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border border-border accent-accent"
+                            checked={showGrid}
+                            onChange={(event) => setShowGrid(event.target.checked)}
+                          />
+                          Show grid
+                        </label>
+                        <label className="flex items-center gap-2 text-foreground">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 rounded border border-border accent-accent"
+                            checked={snapToGrid}
+                            onChange={(event) => setSnapToGrid(event.target.checked)}
+                          />
+                          Snap to grid
+                        </label>
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <NumberField
+                          label="Grid size (pt)"
+                          value={gridSize}
+                          onChange={(value) =>
+                            setGridSize(Number.isFinite(value) ? Math.max(value, 0) : 0)
+                          }
+                        />
+                        <NumberField
+                          label="Nudge (pt)"
+                          value={nudgeStep}
+                          onChange={(value) =>
+                            setNudgeStep(Number.isFinite(value) ? Math.max(value, 0) : 0)
+                          }
+                        />
+                      </div>
+                      <div className="flex flex-col items-center gap-2">
+                        <div className="grid grid-cols-3 gap-2">
+                          <span />
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => nudgeSelectedField(0, nudgeStep)}
+                            disabled={!selectedField}
+                            aria-label="Nudge up"
+                          >
+                            <ArrowUp className="h-4 w-4" />
+                          </Button>
+                          <span />
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => nudgeSelectedField(-nudgeStep, 0)}
+                            disabled={!selectedField}
+                            aria-label="Nudge left"
+                          >
+                            <ArrowLeft className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => nudgeSelectedField(0, -nudgeStep)}
+                            disabled={!selectedField}
+                            aria-label="Nudge down"
+                          >
+                            <ArrowDown className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="icon"
+                            onClick={() => nudgeSelectedField(nudgeStep, 0)}
+                            disabled={!selectedField}
+                            aria-label="Nudge right"
+                          >
+                            <ArrowRight className="h-4 w-4" />
+                          </Button>
+                        </div>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={snapSelectedField}
+                          disabled={!selectedField || gridSize <= 0}
+                        >
+                          Snap selection to grid
+                        </Button>
+                        <p className="text-[11px] text-muted-foreground">
+                          Click or drag to place. Arrow keys nudge when you are
+                          not typing in a field.
+                        </p>
+                      </div>
+                    </div>
                   </div>
                   <PdfCalibrationViewer
                     pdfUrl={templateFile?.url}
@@ -616,6 +762,9 @@ export default function AdminPage() {
                     onChangeCoord={(field, x, y) =>
                       updateCoordField(previewPage, field, { x, y })
                     }
+                    showGrid={showGrid}
+                    snapToGrid={snapToGrid}
+                    gridSize={gridSize}
                     className="min-h-[360px]"
                   />
                 </div>
@@ -1176,4 +1325,20 @@ function getCellPreview(
 
 function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
+}
+
+function snapToGridValue(value: number, gridSize: number) {
+  if (!gridSize || gridSize <= 0) return value;
+  return Math.round(value / gridSize) * gridSize;
+}
+
+function isTypingTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  return (
+    tag === "INPUT" ||
+    tag === "TEXTAREA" ||
+    tag === "SELECT" ||
+    target.isContentEditable
+  );
 }
