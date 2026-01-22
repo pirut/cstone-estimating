@@ -14,8 +14,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import type { LibraryState, LibraryType, UploadState } from "@/lib/types";
+import type {
+  LibraryItem,
+  LibraryState,
+  LibraryType,
+  TemplateConfig,
+  UploadState,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { APP_VERSION } from "@/lib/version";
 import { ArrowDownToLine, FileDown, FileText, Loader2, Sparkles } from "lucide-react";
@@ -23,12 +30,16 @@ import { ArrowDownToLine, FileDown, FileText, Loader2, Sparkles } from "lucide-r
 export default function HomePage() {
   const [uploads, setUploads] = useState<UploadState>({});
   const [error, setError] = useState<string | null>(null);
+  const [templateConfig, setTemplateConfig] = useState<TemplateConfig | null>(null);
+  const [templateConfigError, setTemplateConfigError] = useState<string | null>(null);
+  const [templateConfigLoading, setTemplateConfigLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [library, setLibrary] = useState<LibraryState>({
     workbook: { items: [], loading: false, error: null },
     template: { items: [], loading: false, error: null },
+    template_config: { items: [], loading: false, error: null },
   });
 
   const canGenerate = Boolean(uploads.workbook && uploads.template);
@@ -106,6 +117,13 @@ export default function HomePage() {
       return;
     }
 
+    const mappingOverride =
+      templateConfig?.mapping && !uploads.mapping
+        ? templateConfig.mapping
+        : undefined;
+    const coordsOverride =
+      templateConfig?.coords && !uploads.coords ? templateConfig.coords : undefined;
+
     setIsGenerating(true);
     setProgress(0.1);
     setProgressLabel("Starting generation");
@@ -118,6 +136,8 @@ export default function HomePage() {
           templatePdfUrl: uploads.template.url,
           mappingUrl: uploads.mapping?.url,
           coordsUrl: uploads.coords?.url,
+          mappingOverride,
+          coordsOverride,
         }),
       });
 
@@ -198,6 +218,9 @@ export default function HomePage() {
       ...prev,
       [type]: { name: item.name, url: item.url },
     }));
+    if (type === "template") {
+      setTemplateConfig(null);
+    }
   };
 
   const handleLibraryDeleteAll = async (type: LibraryType) => {
@@ -236,7 +259,37 @@ export default function HomePage() {
   useEffect(() => {
     void loadLibrary("workbook");
     void loadLibrary("template");
+    void loadLibrary("template_config");
   }, []);
+
+  const handleSelectTemplateConfig = async (item: LibraryItem) => {
+    if (!item.url) {
+      setTemplateConfigError("Selected template has no URL.");
+      return;
+    }
+    setTemplateConfigError(null);
+    setTemplateConfigLoading(true);
+    try {
+      const response = await fetch(item.url, { cache: "no-store" });
+      if (!response.ok) {
+        throw new Error("Failed to load template configuration.");
+      }
+      const data = (await response.json()) as TemplateConfig;
+      if (!data?.templatePdf?.url) {
+        throw new Error("Template configuration is missing a PDF.");
+      }
+      setTemplateConfig(data);
+      setUploads((prev) => ({
+        ...prev,
+        template: { name: data.templatePdf.name, url: data.templatePdf.url },
+      }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setTemplateConfigError(message);
+    } finally {
+      setTemplateConfigLoading(false);
+    }
+  };
 
   return (
     <main className="relative min-h-screen overflow-hidden">
@@ -340,6 +393,7 @@ export default function HomePage() {
             library={library.template}
             onUpload={(file) => {
               setError(null);
+              setTemplateConfig(null);
               setUploads((prev) => ({ ...prev, template: file }));
               void loadLibrary("template");
             }}
@@ -348,6 +402,91 @@ export default function HomePage() {
             onRefreshLibrary={() => loadLibrary("template")}
             onDeleteLibrary={() => handleLibraryDeleteAll("template")}
           />
+        </section>
+
+        <section className="mt-6">
+          <Card className="border-border/60 bg-card/80 shadow-elevated">
+            <CardHeader>
+              <CardTitle className="text-2xl font-serif">
+                Template Library
+              </CardTitle>
+              <CardDescription>
+                Apply a saved PDF template with its calibrated coordinates.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {templateConfigError ? (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {templateConfigError}
+                </div>
+              ) : null}
+              {templateConfigLoading ? (
+                <div className="text-sm text-muted-foreground">
+                  Loading template configuration...
+                </div>
+              ) : null}
+              {library.template_config.loading ? (
+                <div className="text-sm text-muted-foreground">
+                  Loading template library...
+                </div>
+              ) : library.template_config.items.length ? (
+                <ScrollArea className="h-56 rounded-lg border border-border/70 bg-background/70">
+                  <div className="divide-y divide-border/60">
+                    {library.template_config.items.map((item) => (
+                      <div
+                        key={item.key}
+                        className="flex items-center justify-between gap-4 px-4 py-3"
+                      >
+                        <div>
+                          <p className="text-sm font-medium text-foreground">
+                            {item.name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {new Date(item.uploadedAt).toLocaleString()}
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleSelectTemplateConfig(item)}
+                        >
+                          Use template
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              ) : (
+                <div className="text-sm text-muted-foreground">
+                  No templates yet. Create one in the admin portal.
+                </div>
+              )}
+              <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+                <span>
+                  Selected template:{" "}
+                  <span className="text-foreground">
+                    {templateConfig?.name ?? "None"}
+                  </span>
+                </span>
+                {templateConfig ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setTemplateConfig(null)}
+                  >
+                    Clear selection
+                  </Button>
+                ) : null}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => loadLibrary("template_config")}
+                >
+                  Refresh
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         </section>
 
         <section className="mt-10 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
@@ -406,15 +545,23 @@ export default function HomePage() {
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">Template config</span>
+                  <span className="text-right text-muted-foreground">
+                    {templateConfig?.name ?? "None"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
                   <span className="text-muted-foreground">Mapping</span>
                   <span className="text-right text-muted-foreground">
-                    {uploads.mapping?.name ?? "Default"}
+                    {uploads.mapping?.name ??
+                      (templateConfig?.mapping ? "Template config" : "Default")}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-muted-foreground">Coordinates</span>
                   <span className="text-right text-muted-foreground">
-                    {uploads.coords?.name ?? "Default"}
+                    {uploads.coords?.name ??
+                      (templateConfig?.coords ? "Template config" : "Default")}
                   </span>
                 </div>
               </div>

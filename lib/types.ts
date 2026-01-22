@@ -10,7 +10,7 @@ export type LibraryItem = {
   url: string;
 };
 
-export type LibraryType = "workbook" | "template";
+export type LibraryType = "workbook" | "template" | "template_config";
 
 export type LibraryState = Record<
   LibraryType,
@@ -28,4 +28,16 @@ export type UploadEndpoint =
   | "workbook"
   | "template"
   | "mapping"
-  | "coordinates";
+  | "coordinates"
+  | "template_config";
+
+export type TemplateConfig = {
+  version: number;
+  id: string;
+  name: string;
+  description?: string;
+  templatePdf: { name: string; url: string };
+  coords: Record<string, any>;
+  mapping?: Record<string, any>;
+  createdAt: string;
+};

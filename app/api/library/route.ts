@@ -13,6 +13,7 @@ const TYPE_PREFIX: Record<string, string> = {
   template: "template:",
   mapping: "mapping:",
   coordinates: "coordinates:",
+  template_config: "template-config:",
 };
 
 type LibraryItem = {
@@ -30,7 +31,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Invalid type. Use 'workbook', 'template', 'mapping', or 'coordinates'.",
+            "Invalid type. Use 'workbook', 'template', 'mapping', 'coordinates', or 'template_config'.",
         },
         { status: 400 }
       );
@@ -65,7 +66,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json(
         {
           error:
-            "Invalid type. Use 'workbook', 'template', 'mapping', or 'coordinates'.",
+            "Invalid type. Use 'workbook', 'template', 'mapping', 'coordinates', or 'template_config'.",
         },
         { status: 400 }
       );

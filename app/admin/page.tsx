@@ -43,7 +43,12 @@ import {
   Trash2,
 } from "lucide-react";
 
-type AdminLibraryType = "workbook" | "template" | "mapping" | "coordinates";
+type AdminLibraryType =
+  | "workbook"
+  | "template"
+  | "mapping"
+  | "coordinates"
+  | "template_config";
 
 type LibraryItem = {
   key: string;
@@ -108,6 +113,11 @@ const LIBRARY_CONFIG: Record<
     description: "PDF coordinates overrides.",
     endpoint: "coordinates",
   },
+  template_config: {
+    label: "Template Library",
+    description: "Saved proposal templates with PDF + coordinates.",
+    endpoint: "template_config",
+  },
 };
 
 const adminDropzoneAppearance = {
@@ -129,6 +139,7 @@ export default function AdminPage() {
     template: { items: [], loading: false, error: null },
     mapping: { items: [], loading: false, error: null },
     coordinates: { items: [], loading: false, error: null },
+    template_config: { items: [], loading: false, error: null },
   });
   const [workbookFile, setWorkbookFile] = useState<UploadedFile | null>(null);
   const [templateFile, setTemplateFile] = useState<UploadedFile | null>(null);
@@ -144,6 +155,13 @@ export default function AdminPage() {
   const [snapToGrid, setSnapToGrid] = useState(true);
   const [gridSize, setGridSize] = useState(10);
   const [nudgeStep, setNudgeStep] = useState(1);
+  const [templateName, setTemplateName] = useState("");
+  const [templateDescription, setTemplateDescription] = useState("");
+  const [templateSaveStatus, setTemplateSaveStatus] = useState<string | null>(
+    null
+  );
+  const [templateSaveError, setTemplateSaveError] = useState<string | null>(null);
+  const [templateSaving, setTemplateSaving] = useState(false);
   const [mappingConfig, setMappingConfig] = useState<MappingConfig>(() =>
     cloneJson(mappingDefault as MappingConfig)
   );
@@ -300,6 +318,12 @@ export default function AdminPage() {
   }, [mappingConfig, workbookLoaded]);
 
   useEffect(() => {
+    if (!templateFile?.name || templateName.trim()) return;
+    const baseName = templateFile.name.replace(/\.[^.]+$/, "");
+    setTemplateName(baseName);
+  }, [templateFile?.name, templateName]);
+
+  useEffect(() => {
     (Object.keys(LIBRARY_CONFIG) as AdminLibraryType[]).forEach((type) => {
       void loadLibrary(type);
     });
@@ -354,6 +378,47 @@ export default function AdminPage() {
       setCalibrationError(message);
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleSaveTemplate = async () => {
+    setTemplateSaveError(null);
+    setTemplateSaveStatus(null);
+    if (!templateFile?.url) {
+      setTemplateSaveError("Select a template PDF before saving.");
+      return;
+    }
+    if (!templateName.trim()) {
+      setTemplateSaveError("Template name is required.");
+      return;
+    }
+
+    setTemplateSaving(true);
+    try {
+      const response = await fetch("/api/template-config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: templateName.trim(),
+          description: templateDescription.trim() || undefined,
+          templatePdf: templateFile,
+          coords: coordsConfig,
+          mapping: mappingConfig,
+        }),
+      });
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        const message = data?.error || "Failed to save template.";
+        throw new Error(message);
+      }
+      setTemplateSaveStatus("Template saved to library.");
+      setTemplateDescription("");
+      void loadLibrary("template_config");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error.";
+      setTemplateSaveError(message);
+    } finally {
+      setTemplateSaving(false);
     }
   };
 
@@ -570,6 +635,75 @@ export default function AdminPage() {
                 onSelectLibraryItem={setTemplateFile}
               />
             </div>
+
+            <Card className="border-border/60 bg-card/80 shadow-elevated">
+              <CardHeader>
+                <CardTitle className="text-2xl font-serif">
+                  Template Builder
+                </CardTitle>
+                <CardDescription>
+                  Save the selected PDF with the current coordinates and mapping
+                  as a reusable template.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-xs text-muted-foreground">
+                      Template name
+                    </label>
+                    <input
+                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                      value={templateName}
+                      onChange={(event) => setTemplateName(event.target.value)}
+                      placeholder="Cornerstone Proposal"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs text-muted-foreground">
+                      Description
+                    </label>
+                    <input
+                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                      value={templateDescription}
+                      onChange={(event) =>
+                        setTemplateDescription(event.target.value)
+                      }
+                      placeholder="Optional internal note"
+                    />
+                  </div>
+                </div>
+                {templateSaveError ? (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    {templateSaveError}
+                  </div>
+                ) : null}
+                {templateSaveStatus ? (
+                  <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                    {templateSaveStatus}
+                  </div>
+                ) : null}
+                <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+                  <span>
+                    Uses: {templateFile?.name ?? "no PDF selected"}
+                  </span>
+                  <span>•</span>
+                  <span>{Object.keys(coordsConfig).length} sections</span>
+                </div>
+                <Button
+                  variant="accent"
+                  onClick={handleSaveTemplate}
+                  disabled={templateSaving}
+                >
+                  {templateSaving ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileDown className="h-4 w-4" />
+                  )}
+                  {templateSaving ? "Saving..." : "Save template"}
+                </Button>
+              </CardContent>
+            </Card>
 
             <Card className="border-border/60 bg-card/80 shadow-elevated">
               <CardHeader>

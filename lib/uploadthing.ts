@@ -60,6 +60,19 @@ export const uploadRouter = {
       })),
     }))
     .onUploadComplete(() => {}),
+  template_config: f({
+    "application/json": {
+      maxFileSize: "4MB",
+      maxFileCount: 1,
+    },
+  })
+    .middleware(({ files }) => ({
+      [UTFiles]: files.map((file) => ({
+        ...file,
+        customId: makeCustomId("template-config", file.name),
+      })),
+    }))
+    .onUploadComplete(() => {}),
 } satisfies FileRouter;
 
 export type UploadRouter = typeof uploadRouter;
