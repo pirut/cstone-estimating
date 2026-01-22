@@ -34,6 +34,7 @@ export function PdfCalibrationViewer({
 }: ViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const viewportRef = useRef<any>(null);
   const [pdfState, setPdfState] = useState<PdfState>({
     loading: false,
     error: null,
@@ -48,16 +49,18 @@ export function PdfCalibrationViewer({
   }, [pageKey]);
 
   const markers = useMemo(() => {
-    if (!pageSize) return [];
+    if (!viewportRef.current) return [];
     return Object.entries(fields)
       .map(([name, spec]) => {
         if (spec?.x === undefined || spec?.y === undefined) return null;
-        const x = spec.x * scale;
-        const y = (pageSize.height - spec.y) * scale;
+        const [x, y] = viewportRef.current.convertToViewportPoint(
+          spec.x,
+          spec.y
+        );
         return { name, x, y };
       })
       .filter(Boolean) as { name: string; x: number; y: number }[];
-  }, [fields, pageSize, scale]);
+  }, [fields, scale]);
 
   useEffect(() => {
     if (!pdfUrl || !canvasRef.current) {
@@ -79,14 +82,18 @@ export function PdfCalibrationViewer({
 
         if (cancelled) return;
 
-        const viewport = page.getViewport({ scale: 1 });
-        setPageSize({ width: viewport.width, height: viewport.height });
+        const baseViewport = page.getViewport({ scale: 1, rotation: page.rotate });
+        setPageSize({ width: baseViewport.width, height: baseViewport.height });
 
-        const containerWidth = containerRef.current?.clientWidth ?? viewport.width;
-        const nextScale = containerWidth / viewport.width;
+        const containerWidth = containerRef.current?.clientWidth ?? baseViewport.width;
+        const nextScale = containerWidth / baseViewport.width;
         setScale(nextScale);
 
-        const scaledViewport = page.getViewport({ scale: nextScale });
+        const scaledViewport = page.getViewport({
+          scale: nextScale,
+          rotation: page.rotate,
+        });
+        viewportRef.current = scaledViewport;
         const canvas = canvasRef.current;
         if (!canvas) return;
         canvas.width = scaledViewport.width;
@@ -141,7 +148,8 @@ export function PdfCalibrationViewer({
         const pdfDoc = await pdfjsLib.getDocument({ data }).promise;
         const page = await pdfDoc.getPage(pageIndex + 1);
 
-        const viewport = page.getViewport({ scale });
+        const viewport = page.getViewport({ scale, rotation: page.rotate });
+        viewportRef.current = viewport;
         const canvas = canvasRef.current;
         if (!canvas) return;
         canvas.width = viewport.width;
@@ -158,12 +166,11 @@ export function PdfCalibrationViewer({
   }, [pdfUrl, pageIndex, scale, pageSize]);
 
   const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!selectedField || !pageSize) return;
+    if (!selectedField || !viewportRef.current) return;
     const bounds = event.currentTarget.getBoundingClientRect();
     const x = event.clientX - bounds.left;
     const y = event.clientY - bounds.top;
-    const pdfX = roundToTenth(x / scale);
-    const pdfY = roundToTenth(pageSize.height - y / scale);
+    const [pdfX, pdfY] = viewportRef.current.convertToPdfPoint(x, y);
     onChangeCoord(selectedField, pdfX, pdfY);
   };
 
@@ -178,12 +185,11 @@ export function PdfCalibrationViewer({
   };
 
   const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (!isDragging || !pageSize) return;
+    if (!isDragging || !viewportRef.current) return;
     const bounds = event.currentTarget.getBoundingClientRect();
     const x = event.clientX - bounds.left;
     const y = event.clientY - bounds.top;
-    const pdfX = roundToTenth(x / scale);
-    const pdfY = roundToTenth(pageSize.height - y / scale);
+    const [pdfX, pdfY] = viewportRef.current.convertToPdfPoint(x, y);
     onChangeCoord(isDragging, pdfX, pdfY);
   };
 
@@ -241,10 +247,6 @@ export function PdfCalibrationViewer({
       ) : null}
     </div>
   );
-}
-
-function roundToTenth(value: number) {
-  return Math.round(value * 10) / 10;
 }
 
 let pdfWorkerConfigured = false;
