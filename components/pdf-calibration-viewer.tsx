@@ -1,11 +1,24 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from "react";
 import { cn } from "@/lib/utils";
 
 type CoordField = {
   x?: number;
   y?: number;
+  size?: number;
+  align?: string;
+  max_width?: number;
+  min_size?: number;
+  font?: string;
+  color?: string;
+  opacity?: number;
 };
 
 type ViewerProps = {
@@ -45,6 +58,7 @@ export function PdfCalibrationViewer({
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewportRef = useRef<any>(null);
+  const measureCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const [pdfState, setPdfState] = useState<PdfState>({
     loading: false,
     error: null,
@@ -62,7 +76,7 @@ export function PdfCalibrationViewer({
     return Number.isNaN(number) ? 0 : Math.max(number, 0);
   }, [pageKey]);
 
-  const markers = useMemo(() => {
+  const textOverlays = useMemo(() => {
     if (!viewportRef.current) return [];
     return Object.entries(fields)
       .map(([name, spec]) => {
@@ -71,10 +85,47 @@ export function PdfCalibrationViewer({
           spec.x,
           spec.y
         );
-        return { name, x, y };
+        const fontFamily = resolveCssFont(spec.font);
+        const size = Number(spec.size ?? 10);
+        const maxWidth = spec.max_width ? Number(spec.max_width) : undefined;
+        const minSize = spec.min_size ? Number(spec.min_size) : 8;
+        const rawText = labelMap?.[name] ?? name;
+        const fitted = fitPreviewText(
+          rawText,
+          fontFamily,
+          size,
+          maxWidth,
+          minSize,
+          scale,
+          measureCanvasRef
+        );
+        const align = String(spec.align ?? "left");
+        const textAnchor =
+          align === "right" ? "end" : align === "center" ? "middle" : "start";
+        return {
+          name,
+          x,
+          y,
+          text: fitted.text,
+          fontFamily,
+          fontSize: fitted.size * scale,
+          color: String(spec.color ?? "#111111"),
+          opacity: spec.opacity ? Number(spec.opacity) : undefined,
+          textAnchor,
+        };
       })
-      .filter(Boolean) as { name: string; x: number; y: number }[];
-  }, [fields, scale]);
+      .filter(Boolean) as {
+      name: string;
+      x: number;
+      y: number;
+      text: string;
+      fontFamily: string;
+      fontSize: number;
+      color: string;
+      opacity?: number;
+      textAnchor: "start" | "middle" | "end";
+    }[];
+  }, [fields, labelMap, scale]);
 
   useEffect(() => {
     if (!pdfUrl || !canvasRef.current) {
@@ -195,7 +246,7 @@ export function PdfCalibrationViewer({
   };
 
   const handlePointerDown = (
-    event: React.PointerEvent<HTMLButtonElement>,
+    event: React.PointerEvent<SVGTextElement>,
     fieldName: string
   ) => {
     event.stopPropagation();
@@ -257,39 +308,39 @@ export function PdfCalibrationViewer({
               }}
             />
           ) : null}
-          {markers.map((marker) => (
-            <button
-              key={marker.name}
-              type="button"
-              onPointerDown={(event) => handlePointerDown(event, marker.name)}
-              className={cn(
-                "pointer-events-auto absolute -translate-y-full text-[10px]",
-                marker.name === selectedField
-                  ? "bg-accent text-accent-foreground shadow-glow"
-                  : "bg-foreground text-background"
-              )}
-              style={{ left: marker.x, top: marker.y }}
-            >
-              <span className="relative flex items-end">
-                <span className="absolute bottom-0 left-0 flex h-4 w-4 -translate-x-1/2 translate-y-1/2 items-center justify-center rounded-full border border-white text-[12px] font-semibold leading-none">
-                  +
-                </span>
-                <span className="ml-2 rounded-full border-2 border-white px-2 py-1">
-                  {formatMarkerLabel(labelMap?.[marker.name] ?? marker.name)}
-                </span>
-              </span>
-            </button>
-          ))}
+          <svg
+            className="absolute inset-0"
+            viewBox={`0 0 ${pageSize.width * scale} ${pageSize.height * scale}`}
+            preserveAspectRatio="none"
+          >
+            {textOverlays.map((overlay) => (
+              <text
+                key={overlay.name}
+                x={overlay.x}
+                y={overlay.y}
+                fill={overlay.color}
+                opacity={overlay.opacity}
+                fontFamily={overlay.fontFamily}
+                fontSize={overlay.fontSize}
+                textAnchor={overlay.textAnchor}
+                dominantBaseline="alphabetic"
+                style={{ cursor: "grab" }}
+                className={cn(
+                  "pointer-events-auto select-none",
+                  overlay.name === selectedField && "drop-shadow-sm"
+                )}
+                onPointerDown={(event) =>
+                  handlePointerDown(event, overlay.name)
+                }
+              >
+                {overlay.text}
+              </text>
+            ))}
+          </svg>
         </div>
       ) : null}
     </div>
   );
-}
-
-function formatMarkerLabel(value: string) {
-  const label = value.replace(/_/g, " ");
-  if (label.length <= 40) return label;
-  return `${label.slice(0, 37)}...`;
 }
 
 let pdfWorkerConfigured = false;
@@ -299,4 +350,78 @@ function ensurePdfWorker(pdfjsLib: {
   if (pdfWorkerConfigured) return;
   pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
   pdfWorkerConfigured = true;
+}
+
+function resolveCssFont(fontName?: string) {
+  if (!fontName) return '"Work Sans", sans-serif';
+  if (fontName === "WorkSans") return '"Work Sans", sans-serif';
+  if (fontName.startsWith("Helvetica")) {
+    return "Helvetica, Arial, sans-serif";
+  }
+  if (fontName.startsWith("Times")) {
+    return '"Times New Roman", serif';
+  }
+  if (fontName.startsWith("Courier")) {
+    return '"Courier New", monospace';
+  }
+  return `"${fontName}", sans-serif`;
+}
+
+function fitPreviewText(
+  text: string,
+  fontFamily: string,
+  size: number,
+  maxWidth: number | undefined,
+  minSize: number,
+  scale: number,
+  canvasRef: MutableRefObject<HTMLCanvasElement | null>
+) {
+  if (!maxWidth) return { text, size };
+  const ctx = getMeasureContext(canvasRef);
+  if (!ctx) return { text, size };
+  let currentSize = size;
+  while (currentSize >= minSize) {
+    const width = measureTextWidth(ctx, text, fontFamily, currentSize * scale);
+    if (width <= maxWidth * scale) return { text, size: currentSize };
+    currentSize -= 0.5;
+  }
+
+  const ellipsis = "...";
+  if (
+    measureTextWidth(ctx, ellipsis, fontFamily, minSize * scale) >
+    maxWidth * scale
+  ) {
+    return { text: ellipsis, size: minSize };
+  }
+
+  for (let i = text.length; i > 0; i -= 1) {
+    const candidate = `${text.slice(0, i).trim()}${ellipsis}`;
+    if (
+      measureTextWidth(ctx, candidate, fontFamily, minSize * scale) <=
+      maxWidth * scale
+    ) {
+      return { text: candidate, size: minSize };
+    }
+  }
+
+  return { text: ellipsis, size: minSize };
+}
+
+function getMeasureContext(
+  canvasRef: MutableRefObject<HTMLCanvasElement | null>
+) {
+  if (!canvasRef.current && typeof document !== "undefined") {
+    canvasRef.current = document.createElement("canvas");
+  }
+  return canvasRef.current?.getContext("2d") ?? null;
+}
+
+function measureTextWidth(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  fontFamily: string,
+  fontSize: number
+) {
+  ctx.font = `${fontSize}px ${fontFamily}`;
+  return ctx.measureText(text).width;
 }
