@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import * as XLSX from "xlsx";
 import mappingDefault from "@/config/mapping.json";
 import coordinatesDefault from "@/config/coordinates.json";
 import { UploadDropzone } from "@/components/uploadthing";
@@ -83,6 +82,7 @@ type CoordField = {
 };
 
 type CoordsConfig = Record<string, any>;
+type CellPreviewMap = Record<string, unknown>;
 
 const LIBRARY_CONFIG: Record<
   AdminLibraryType,
@@ -121,6 +121,7 @@ const adminDropzoneAppearance = {
 };
 
 export default function AdminPage() {
+  const workbookWorkerRef = useRef<Worker | null>(null);
   const [libraries, setLibraries] = useState<
     Record<AdminLibraryType, LibraryState>
   >({
@@ -131,7 +132,11 @@ export default function AdminPage() {
   });
   const [workbookFile, setWorkbookFile] = useState<UploadedFile | null>(null);
   const [templateFile, setTemplateFile] = useState<UploadedFile | null>(null);
-  const [workbookData, setWorkbookData] = useState<XLSX.WorkBook | null>(null);
+  const [sheetNames, setSheetNames] = useState<string[]>([]);
+  const [cellPreviews, setCellPreviews] = useState<CellPreviewMap>({});
+  const [workbookLoading, setWorkbookLoading] = useState(false);
+  const [workbookError, setWorkbookError] = useState<string | null>(null);
+  const [workbookLoaded, setWorkbookLoaded] = useState(false);
   const [previewPage, setPreviewPage] = useState("page_1");
   const [selectedField, setSelectedField] = useState<string | null>(null);
   const [showGrid, setShowGrid] = useState(true);
@@ -184,39 +189,105 @@ export default function AdminPage() {
     return () => window.clearInterval(interval);
   }, [isGenerating, progressSteps]);
 
-  const sheetNames = workbookData?.SheetNames ?? [];
   const fontOptions = useMemo(() => {
     const customFonts = Object.keys(coordsConfig.fonts ?? {});
     return [...new Set(["WorkSans", "Helvetica", ...customFonts])];
   }, [coordsConfig.fonts]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    const worker = new Worker(
+      new URL("../../lib/workbook-worker.ts", import.meta.url)
+    );
+    workbookWorkerRef.current = worker;
+
+    worker.onmessage = (event) => {
+      const data = event.data;
+      if (data?.type === "loaded") {
+        setSheetNames(Array.isArray(data.sheetNames) ? data.sheetNames : []);
+        setWorkbookLoaded(true);
+        setWorkbookLoading(false);
+        setWorkbookError(null);
+        return;
+      }
+      if (data?.type === "cells") {
+        const results = Array.isArray(data.results) ? data.results : [];
+        const nextMap: CellPreviewMap = {};
+        results.forEach((result: { key?: string; value?: unknown }) => {
+          if (!result?.key) return;
+          nextMap[result.key] = result.value ?? null;
+        });
+        setCellPreviews(nextMap);
+        return;
+      }
+      if (data?.type === "error") {
+        setWorkbookError(data.error ?? "Failed to parse workbook.");
+        setWorkbookLoaded(false);
+        setWorkbookLoading(false);
+      }
+    };
+
+    worker.onerror = () => {
+      setWorkbookError("Failed to parse workbook.");
+      setWorkbookLoaded(false);
+      setWorkbookLoading(false);
+    };
+
+    return () => {
+      worker.terminate();
+      workbookWorkerRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
     const controller = new AbortController();
-    if (!workbookFile?.url) {
-      setWorkbookData(null);
+    if (!workbookFile?.url || !workbookWorkerRef.current) {
+      setSheetNames([]);
+      setCellPreviews({});
+      setWorkbookLoaded(false);
+      setWorkbookLoading(false);
+      setWorkbookError(null);
+      workbookWorkerRef.current?.postMessage({ type: "clear" });
       return () => controller.abort();
     }
 
     const loadWorkbook = async () => {
+      setWorkbookLoading(true);
+      setWorkbookError(null);
+      setWorkbookLoaded(false);
+      setSheetNames([]);
+      setCellPreviews({});
       try {
         const response = await fetch(workbookFile.url, {
           signal: controller.signal,
         });
         const buffer = await response.arrayBuffer();
-        const workbook = XLSX.read(buffer, {
-          type: "array",
-          cellDates: true,
-        });
-        setWorkbookData(workbook);
+        workbookWorkerRef.current?.postMessage(
+          { type: "load", data: buffer },
+          [buffer]
+        );
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
-        setWorkbookData(null);
+        setWorkbookError("Failed to download workbook.");
+        setWorkbookLoading(false);
       }
     };
 
     void loadWorkbook();
     return () => controller.abort();
   }, [workbookFile?.url]);
+
+  useEffect(() => {
+    if (!workbookWorkerRef.current || !workbookLoaded) return;
+    const requests = Object.entries(mappingConfig.fields).map(
+      ([fieldName, field]) => ({
+        key: fieldName,
+        sheet: field.sheet,
+        cell: field.cell,
+      })
+    );
+    workbookWorkerRef.current.postMessage({ type: "getCells", requests });
+  }, [mappingConfig, workbookLoaded]);
 
   useEffect(() => {
     (Object.keys(LIBRARY_CONFIG) as AdminLibraryType[]).forEach((type) => {
@@ -571,7 +642,12 @@ export default function AdminPage() {
                             placeholder="C1"
                           />
                           <p className="text-xs text-muted-foreground">
-                            {getCellPreview(workbookData, field.sheet, field.cell)}
+                            {getCellPreview(
+                              cellPreviews,
+                              fieldName,
+                              workbookLoading,
+                              workbookError
+                            )}
                           </p>
                         </div>
                       </div>
@@ -927,7 +1003,6 @@ export default function AdminPage() {
                     onClick={() => {
                       setWorkbookFile(null);
                       setTemplateFile(null);
-                      setWorkbookData(null);
                     }}
                     disabled={isGenerating}
                   >
@@ -1306,15 +1381,17 @@ function formatFieldLabel(fieldName: string) {
 }
 
 function getCellPreview(
-  workbook: XLSX.WorkBook | null,
-  sheetName?: string,
-  cell?: string
+  previews: CellPreviewMap,
+  fieldName: string,
+  isLoading: boolean,
+  error: string | null
 ) {
-  if (!workbook || !sheetName || !cell) return "No preview available";
-  const sheet = workbook.Sheets[sheetName];
-  if (!sheet) return "No preview available";
-  const value = sheet[cell]?.v;
-  if (value === undefined || value === null) return "No value";
+  if (error) return error;
+  if (isLoading) return "Loading workbook...";
+  if (!fieldName) return "No preview available";
+  const value = previews[fieldName];
+  if (value === undefined) return "No preview available";
+  if (value === null) return "No value";
   if (value instanceof Date) return value.toLocaleDateString();
   return String(value);
 }
