@@ -159,7 +159,8 @@ function getCellValue(
   const sheet = workbook.Sheets[sheetName];
   if (!sheet) return null;
   const cellData = sheet[cell];
-  return cellData?.v ?? null;
+  if (!cellData) return null;
+  return cellData.v ?? cellData.w ?? null;
 }
 
 function formatValue(

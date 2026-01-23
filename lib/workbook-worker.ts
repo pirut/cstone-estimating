@@ -40,7 +40,8 @@ ctx.onmessage = (event) => {
         return { key: request.key, value: null };
       }
       const sheet = workbook.Sheets[request.sheet];
-      const value = sheet?.[request.cell]?.v ?? null;
+      const cell = sheet?.[request.cell];
+      const value = cell?.v ?? cell?.w ?? null;
       return { key: request.key, value };
     });
     ctx.postMessage({ type: "cells", results });
