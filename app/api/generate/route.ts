@@ -160,7 +160,7 @@ function getCellValue(
   if (!sheet) return null;
   const cellData = sheet[cell];
   if (!cellData) return null;
-  return cellData.v ?? cellData.w ?? null;
+  return cellData.v ?? null;
 }
 
 function formatValue(

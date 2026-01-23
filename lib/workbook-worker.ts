@@ -41,7 +41,7 @@ ctx.onmessage = (event) => {
       }
       const sheet = workbook.Sheets[request.sheet];
       const cell = sheet?.[request.cell];
-      const value = cell?.v ?? cell?.w ?? null;
+      const value = cell?.v ?? null;
       return { key: request.key, value };
     });
     ctx.postMessage({ type: "cells", results });
