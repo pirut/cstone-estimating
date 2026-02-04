@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ComponentType } from "react";
 import Link from "next/link";
 import { AdvancedOverridesCard } from "@/components/advanced-overrides-card";
 import { BrandMark } from "@/components/brand-mark";
+import { EstimateBuilderCard } from "@/components/estimate-builder-card";
 import { UploadCard } from "@/components/upload-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -16,11 +17,13 @@ import {
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
   LibraryItem,
   LibraryState,
   LibraryType,
   TemplateConfig,
+  UploadedFile,
   UploadState,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -36,22 +39,55 @@ export default function HomePage() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
+  const [estimateMode, setEstimateMode] = useState<"workbook" | "estimate">(
+    "workbook"
+  );
+  const [estimateValues, setEstimateValues] = useState<Record<string, string>>(
+    {}
+  );
+  const [estimateName, setEstimateName] = useState("");
+  const [selectedEstimate, setSelectedEstimate] = useState<UploadedFile | null>(
+    null
+  );
   const [library, setLibrary] = useState<LibraryState>({
     workbook: { items: [], loading: false, error: null },
     template: { items: [], loading: false, error: null },
     template_config: { items: [], loading: false, error: null },
+    estimate: { items: [], loading: false, error: null },
   });
 
-  const canGenerate = Boolean(uploads.workbook && templateConfig?.templatePdf?.url);
+  const hasEstimateValues = useMemo(
+    () =>
+      Object.values(estimateValues).some((value) =>
+        String(value ?? "").trim()
+      ),
+    [estimateValues]
+  );
+  const canGenerate = Boolean(
+    templateConfig?.templatePdf?.url &&
+      (estimateMode === "workbook" ? uploads.workbook : hasEstimateValues)
+  );
   const progressSteps = useMemo(
     () => [
-      { label: "Downloading workbook", value: 0.2 },
+      {
+        label:
+          estimateMode === "estimate"
+            ? "Loading estimate values"
+            : "Downloading workbook",
+        value: 0.2,
+      },
       { label: "Downloading template", value: 0.4 },
-      { label: "Reading Excel data", value: 0.58 },
+      {
+        label:
+          estimateMode === "estimate"
+            ? "Formatting estimate data"
+            : "Reading Excel data",
+        value: 0.58,
+      },
       { label: "Stamping PDF pages", value: 0.78 },
       { label: "Finalizing download", value: 0.9 },
     ],
-    []
+    [estimateMode]
   );
 
   useEffect(() => {
@@ -88,19 +124,23 @@ export default function HomePage() {
     }
 
     if (canGenerate) {
+      const inputLabel = estimateMode === "estimate" ? "Estimate" : "Workbook";
       return {
         label: "Ready to generate",
-        helper: "Workbook and template are ready.",
+        helper: `${inputLabel} and template are ready.`,
         tone: "ready" as const,
       };
     }
 
     return {
-      label: "Awaiting uploads",
-      helper: "Upload the workbook and select a template to begin.",
+      label: estimateMode === "estimate" ? "Awaiting estimate" : "Awaiting uploads",
+      helper:
+        estimateMode === "estimate"
+          ? "Enter estimate values and select a template to begin."
+          : "Upload the workbook and select a template to begin.",
       tone: "idle" as const,
     };
-  }, [isGenerating, canGenerate]);
+  }, [isGenerating, canGenerate, estimateMode]);
 
   const statusClassName = cn(
     "border px-4 py-1 text-[10px] tracking-[0.32em]",
@@ -112,12 +152,16 @@ export default function HomePage() {
 
   const handleGenerate = async () => {
     setError(null);
-    if (!uploads.workbook) {
+    if (!templateConfig?.templatePdf?.url) {
+      setError("Select a template from the library.");
+      return;
+    }
+    if (estimateMode === "workbook" && !uploads.workbook) {
       setError("Upload the workbook to continue.");
       return;
     }
-    if (!templateConfig?.templatePdf?.url) {
-      setError("Select a template from the library.");
+    if (estimateMode === "estimate" && !hasEstimateValues) {
+      setError("Enter at least one estimate value or load a saved estimate.");
       return;
     }
 
@@ -136,12 +180,20 @@ export default function HomePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          workbookUrl: uploads.workbook.url,
+          workbookUrl:
+            estimateMode === "workbook" ? uploads.workbook?.url : undefined,
           templatePdfUrl: templateConfig.templatePdf.url,
           mappingUrl: uploads.mapping?.url,
           coordsUrl: uploads.coords?.url,
           mappingOverride,
           coordsOverride,
+          estimate:
+            estimateMode === "estimate"
+              ? {
+                  name: estimateName.trim(),
+                  values: estimateValues,
+                }
+              : undefined,
         }),
       });
 
@@ -325,7 +377,7 @@ export default function HomePage() {
                 <Metric
                   icon={FileText}
                   label="Inputs"
-                  value="Workbook + Template"
+                  value="Workbook or Estimate"
                 />
                 <Metric icon={FileDown} label="Output" value="6-page PDF" />
                 <Metric
@@ -346,7 +398,7 @@ export default function HomePage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 {[
-                  "Upload the job workbook (.xlsx)",
+                  "Enter estimate values or upload the job workbook",
                   "Select a saved proposal template",
                   "Generate and download the stamped proposal",
                 ].map((step, index) => (
@@ -366,25 +418,57 @@ export default function HomePage() {
         </section>
 
         <section className="mt-12 grid gap-6 lg:grid-cols-2">
-          <UploadCard
-            title="Excel Workbook"
-            description="Job info + bid sheet values (.xlsx)."
-            endpoint="workbook"
-            tag="Required"
-            selected={uploads.workbook}
-            allowedContent=".xlsx only"
-            uploadLabel="Drop the workbook here or browse"
-            library={library.workbook}
-            onUpload={(file) => {
-              setError(null);
-              setUploads((prev) => ({ ...prev, workbook: file }));
-              void loadLibrary("workbook");
-            }}
-            onError={setError}
-            onSelectLibrary={(item) => handleLibrarySelect("workbook", item)}
-            onRefreshLibrary={() => loadLibrary("workbook")}
-            onDeleteLibrary={() => handleLibraryDeleteAll("workbook")}
-          />
+          <Tabs
+            value={estimateMode}
+            onValueChange={(value) =>
+              setEstimateMode(value as "workbook" | "estimate")
+            }
+            className="space-y-4"
+          >
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="workbook">Excel Workbook</TabsTrigger>
+              <TabsTrigger value="estimate">Manual Estimate</TabsTrigger>
+            </TabsList>
+            <TabsContent value="workbook">
+              <UploadCard
+                title="Excel Workbook"
+                description="Job info + bid sheet values (.xlsx)."
+                endpoint="workbook"
+                tag="Required"
+                selected={uploads.workbook}
+                allowedContent=".xlsx only"
+                uploadLabel="Drop the workbook here or browse"
+                library={library.workbook}
+                onUpload={(file) => {
+                  setError(null);
+                  setUploads((prev) => ({ ...prev, workbook: file }));
+                  setEstimateMode("workbook");
+                  void loadLibrary("workbook");
+                }}
+                onError={setError}
+                onSelectLibrary={(item) => {
+                  handleLibrarySelect("workbook", item);
+                  setEstimateMode("workbook");
+                }}
+                onRefreshLibrary={() => loadLibrary("workbook")}
+                onDeleteLibrary={() => handleLibraryDeleteAll("workbook")}
+              />
+            </TabsContent>
+            <TabsContent value="estimate">
+              <EstimateBuilderCard
+                values={estimateValues}
+                onValuesChange={setEstimateValues}
+                name={estimateName}
+                onNameChange={setEstimateName}
+                selectedEstimate={selectedEstimate}
+                onSelectEstimate={setSelectedEstimate}
+                onActivate={() => {
+                  setEstimateMode("estimate");
+                  setError(null);
+                }}
+              />
+            </TabsContent>
+          </Tabs>
           <Card className="border-border/60 bg-card/80 shadow-elevated">
             <CardHeader>
               <CardTitle className="text-2xl font-serif">
@@ -513,11 +597,28 @@ export default function HomePage() {
               ) : null}
               <div className="space-y-3 text-sm">
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-muted-foreground">Workbook</span>
+                  <span className="text-muted-foreground">Input source</span>
                   <span className="text-right font-medium text-foreground">
-                    {uploads.workbook?.name ?? "Not selected"}
+                    {estimateMode === "estimate" ? "Manual estimate" : "Workbook"}
                   </span>
                 </div>
+                {estimateMode === "estimate" ? (
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-muted-foreground">Estimate</span>
+                    <span className="text-right font-medium text-foreground">
+                      {estimateName.trim() ||
+                        selectedEstimate?.name ||
+                        (hasEstimateValues ? "Manual entry" : "Not started")}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-muted-foreground">Workbook</span>
+                    <span className="text-right font-medium text-foreground">
+                      {uploads.workbook?.name ?? "Not selected"}
+                    </span>
+                  </div>
+                )}
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-muted-foreground">Template</span>
                   <span className="text-right font-medium text-foreground">
@@ -559,10 +660,13 @@ export default function HomePage() {
                   onClick={() => {
                     setUploads({});
                     setTemplateConfig(null);
+                    setEstimateValues({});
+                    setEstimateName("");
+                    setSelectedEstimate(null);
                   }}
                   disabled={isGenerating}
                 >
-                  Clear uploads
+                  Clear inputs
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">

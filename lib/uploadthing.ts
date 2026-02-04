@@ -73,6 +73,19 @@ export const uploadRouter = {
       })),
     }))
     .onUploadComplete(() => {}),
+  estimate: f({
+    "application/json": {
+      maxFileSize: "1MB",
+      maxFileCount: 1,
+    },
+  })
+    .middleware(({ files }) => ({
+      [UTFiles]: files.map((file) => ({
+        ...file,
+        customId: makeCustomId("estimate", file.name),
+      })),
+    }))
+    .onUploadComplete(() => {}),
 } satisfies FileRouter;
 
 export type UploadRouter = typeof uploadRouter;

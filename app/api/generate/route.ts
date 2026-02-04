@@ -43,6 +43,9 @@ export async function POST(request: NextRequest) {
     const templatePdfUrl = String(body.templatePdfUrl || "").trim();
     const mappingUrl = String(body.mappingUrl || "").trim();
     const coordsUrl = String(body.coordsUrl || "").trim();
+    const estimateUrl = String(body.estimateUrl || "").trim();
+    const estimatePayload =
+      body.estimate && typeof body.estimate === "object" ? body.estimate : null;
     const mappingOverride =
       body.mappingOverride && typeof body.mappingOverride === "object"
         ? body.mappingOverride
@@ -52,23 +55,27 @@ export async function POST(request: NextRequest) {
         ? body.coordsOverride
         : null;
 
-    if (!workbookUrl || !templatePdfUrl) {
+    if (
+      !templatePdfUrl ||
+      (!workbookUrl && !estimateUrl && !estimatePayload)
+    ) {
       return NextResponse.json(
-        { error: "workbookUrl and templatePdfUrl are required." },
+        {
+          error:
+            "templatePdfUrl and either workbookUrl or estimate data are required.",
+        },
         { status: 400 }
       );
     }
 
-    const [workbookBuffer, templateBuffer] = await Promise.all([
-      downloadBuffer(workbookUrl, "Workbook", {
+    const templateBuffer = await downloadBuffer(
+      templatePdfUrl,
+      "Template PDF",
+      {
         baseUrl: request.nextUrl.origin,
         timeoutMs: DOWNLOAD_TIMEOUT_MS,
-      }),
-      downloadBuffer(templatePdfUrl, "Template PDF", {
-        baseUrl: request.nextUrl.origin,
-        timeoutMs: DOWNLOAD_TIMEOUT_MS,
-      }),
-    ]);
+      }
+    );
 
     const mappingConfig = mappingOverride
       ? mappingOverride
@@ -87,7 +94,22 @@ export async function POST(request: NextRequest) {
           })
         : coordinatesDefault;
 
-    const fieldValues = buildFieldValues(workbookBuffer, mappingConfig);
+    let fieldValues: Record<string, string> = {};
+    if (estimatePayload || estimateUrl) {
+      const estimateData = estimatePayload
+        ? estimatePayload
+        : await downloadJson(estimateUrl, "Estimate JSON", {
+            baseUrl: request.nextUrl.origin,
+            timeoutMs: DOWNLOAD_TIMEOUT_MS,
+          });
+      fieldValues = buildFieldValuesFromEstimate(estimateData, mappingConfig);
+    } else {
+      const workbookBuffer = await downloadBuffer(workbookUrl, "Workbook", {
+        baseUrl: request.nextUrl.origin,
+        timeoutMs: DOWNLOAD_TIMEOUT_MS,
+      });
+      fieldValues = buildFieldValues(workbookBuffer, mappingConfig);
+    }
     const outputPdf = await stampPdf(
       templateBuffer,
       coordsConfig,
@@ -140,6 +162,42 @@ function buildFieldValues(workbookBuffer: Buffer, mappingConfig: any) {
     planSetDate && planSetDate !== missingValue ? planSetDate : missingValue;
 
   return values;
+}
+
+function buildFieldValuesFromEstimate(estimateData: any, mappingConfig: any) {
+  const missingValue = mappingConfig.missing_value ?? "";
+  const preparedByMap = mappingConfig.prepared_by_map ?? {};
+  const fieldSpecs = (mappingConfig.fields ?? {}) as Record<
+    string,
+    { sheet?: string; cell?: string; format?: string }
+  >;
+
+  const sourceValues = extractEstimateValues(estimateData);
+  const values: Record<string, string> = {};
+
+  for (const [fieldName, spec] of Object.entries(fieldSpecs)) {
+    const format = String(spec.format || "text");
+    const raw = sourceValues[fieldName];
+    values[fieldName] = formatValue(raw, format, preparedByMap, missingValue);
+  }
+
+  const planSetDate = values.plan_set_date;
+  values.plan_set_date_line =
+    planSetDate && planSetDate !== missingValue ? planSetDate : missingValue;
+
+  return values;
+}
+
+function extractEstimateValues(estimateData: any) {
+  if (!estimateData || typeof estimateData !== "object") return {};
+  if (
+    "values" in estimateData &&
+    estimateData.values &&
+    typeof estimateData.values === "object"
+  ) {
+    return estimateData.values as Record<string, unknown>;
+  }
+  return estimateData as Record<string, unknown>;
 }
 
 function getCellValue(

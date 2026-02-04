@@ -1,0 +1,133 @@
+{
+  "groups": [
+    {
+      "id": "job_info",
+      "label": "Job Information",
+      "description": "Customer, project, and dates used on the proposal cover.",
+      "fields": [
+        {
+          "key": "prepared_for",
+          "label": "Prepared For",
+          "type": "text",
+          "placeholder": "Client name"
+        },
+        {
+          "key": "project_name",
+          "label": "Project Name",
+          "type": "text",
+          "placeholder": "Project name"
+        },
+        {
+          "key": "city_state_zip",
+          "label": "City, State, ZIP",
+          "type": "text",
+          "placeholder": "City, ST ZIP"
+        },
+        {
+          "key": "proposal_date",
+          "label": "Proposal Date",
+          "type": "date",
+          "placeholder": "YYYY-MM-DD"
+        },
+        {
+          "key": "plan_set_date",
+          "label": "Plan Set Date",
+          "type": "date",
+          "placeholder": "YYYY-MM-DD"
+        },
+        {
+          "key": "prepared_by",
+          "label": "Prepared By (Initials)",
+          "type": "text",
+          "placeholder": "VB"
+        }
+      ]
+    },
+    {
+      "id": "pricing",
+      "label": "Pricing",
+      "description": "Bid sheet values for the proposal summary.",
+      "fields": [
+        {
+          "key": "product_price",
+          "label": "Product Price",
+          "type": "currency",
+          "placeholder": "0.00"
+        },
+        {
+          "key": "bucking_price",
+          "label": "Bucking Price",
+          "type": "currency",
+          "placeholder": "0.00"
+        },
+        {
+          "key": "waterproofing_price",
+          "label": "Waterproofing Price",
+          "type": "currency",
+          "placeholder": "0.00"
+        },
+        {
+          "key": "installation_price",
+          "label": "Installation Price",
+          "type": "currency",
+          "placeholder": "0.00"
+        },
+        {
+          "key": "total_contract_price",
+          "label": "Total Contract Price",
+          "type": "currency",
+          "placeholder": "0.00"
+        }
+      ]
+    },
+    {
+      "id": "schedule",
+      "label": "Payment Schedule",
+      "description": "Payment milestone amounts included in the proposal.",
+      "fields": [
+        {
+          "key": "material_draw_1",
+          "label": "Material Draw 1",
+          "type": "currency",
+          "placeholder": "0.00"
+        },
+        {
+          "key": "material_draw_2",
+          "label": "Material Draw 2",
+          "type": "currency",
+          "placeholder": "0.00"
+        },
+        {
+          "key": "material_draw_3",
+          "label": "Material Draw 3",
+          "type": "currency",
+          "placeholder": "0.00"
+        },
+        {
+          "key": "mobilization_deposit",
+          "label": "Mobilization Deposit",
+          "type": "currency",
+          "placeholder": "0.00"
+        },
+        {
+          "key": "installation_draw_1",
+          "label": "Installation Draw 1",
+          "type": "currency",
+          "placeholder": "0.00"
+        },
+        {
+          "key": "installation_draw_2",
+          "label": "Installation Draw 2",
+          "type": "currency",
+          "placeholder": "0.00"
+        },
+        {
+          "key": "final_payment",
+          "label": "Final Payment",
+          "type": "currency",
+          "placeholder": "0.00"
+        }
+      ]
+    }
+  ]
+}
