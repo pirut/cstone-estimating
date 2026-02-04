@@ -6,6 +6,7 @@ import mappingDefault from "@/config/mapping.json";
 import coordinatesDefault from "@/config/coordinates.json";
 import { downloadBuffer, downloadJson } from "@/lib/server/download";
 import { formatValue } from "@/lib/formatting";
+import { computeEstimate, DEFAULT_DRAFT } from "@/lib/estimate-calculator";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -190,13 +191,34 @@ function buildFieldValuesFromEstimate(estimateData: any, mappingConfig: any) {
 
 function extractEstimateValues(estimateData: any) {
   if (!estimateData || typeof estimateData !== "object") return {};
-  if (
-    "values" in estimateData &&
-    estimateData.values &&
-    typeof estimateData.values === "object"
-  ) {
+  if (estimateData.values && typeof estimateData.values === "object") {
     return estimateData.values as Record<string, unknown>;
   }
+
+  if (
+    estimateData.info ||
+    estimateData.products ||
+    estimateData.bucking ||
+    estimateData.calculator
+  ) {
+    const computed = computeEstimate({
+      info: estimateData.info ?? {},
+      products:
+        Array.isArray(estimateData.products) && estimateData.products.length
+          ? estimateData.products
+          : DEFAULT_DRAFT.products,
+      bucking:
+        Array.isArray(estimateData.bucking) && estimateData.bucking.length
+          ? estimateData.bucking
+          : DEFAULT_DRAFT.bucking,
+      calculator: {
+        ...DEFAULT_DRAFT.calculator,
+        ...(estimateData.calculator ?? {}),
+      },
+    });
+    return computed.pdfValues as Record<string, unknown>;
+  }
+
   return estimateData as Record<string, unknown>;
 }
 

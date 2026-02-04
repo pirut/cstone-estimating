@@ -42,8 +42,11 @@ export default function HomePage() {
   const [estimateMode, setEstimateMode] = useState<"workbook" | "estimate">(
     "workbook"
   );
-  const [estimateValues, setEstimateValues] = useState<Record<string, string>>(
-    {}
+  const [estimateValues, setEstimateValues] = useState<
+    Record<string, string | number>
+  >({});
+  const [estimatePayload, setEstimatePayload] = useState<Record<string, any> | null>(
+    null
   );
   const [estimateName, setEstimateName] = useState("");
   const [selectedEstimate, setSelectedEstimate] = useState<UploadedFile | null>(
@@ -56,13 +59,16 @@ export default function HomePage() {
     estimate: { items: [], loading: false, error: null },
   });
 
-  const hasEstimateValues = useMemo(
-    () =>
-      Object.values(estimateValues).some((value) =>
+  const hasEstimateValues = useMemo(() => {
+    if (estimatePayload?.values) {
+      return Object.values(estimatePayload.values).some((value) =>
         String(value ?? "").trim()
-      ),
-    [estimateValues]
-  );
+      );
+    }
+    return Object.values(estimateValues).some((value) =>
+      String(value ?? "").trim()
+    );
+  }, [estimatePayload, estimateValues]);
   const canGenerate = Boolean(
     templateConfig?.templatePdf?.url &&
       (estimateMode === "workbook" ? uploads.workbook : hasEstimateValues)
@@ -190,8 +196,11 @@ export default function HomePage() {
           estimate:
             estimateMode === "estimate"
               ? {
+                  ...(estimatePayload ?? {}),
                   name: estimateName.trim(),
-                  values: estimateValues,
+                  values:
+                    estimatePayload?.values ??
+                    (Object.keys(estimateValues).length ? estimateValues : undefined),
                 }
               : undefined,
         }),
@@ -462,6 +471,7 @@ export default function HomePage() {
                 onNameChange={setEstimateName}
                 selectedEstimate={selectedEstimate}
                 onSelectEstimate={setSelectedEstimate}
+                onEstimatePayloadChange={setEstimatePayload}
                 onActivate={() => {
                   setEstimateMode("estimate");
                   setError(null);
@@ -663,6 +673,7 @@ export default function HomePage() {
                     setEstimateValues({});
                     setEstimateName("");
                     setSelectedEstimate(null);
+                    setEstimatePayload(null);
                   }}
                   disabled={isGenerating}
                 >
