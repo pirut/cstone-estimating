@@ -45,6 +45,7 @@ type EstimateBuilderCardProps = {
   selectedEstimate?: UploadedFile | null;
   onSelectEstimate?: (estimate: UploadedFile | null) => void;
   onEstimatePayloadChange?: (payload: Record<string, any> | null) => void;
+  loadPayload?: Record<string, any> | null;
   onActivate?: () => void;
 };
 
@@ -74,6 +75,7 @@ export function EstimateBuilderCard({
   selectedEstimate,
   onSelectEstimate,
   onEstimatePayloadChange,
+  loadPayload,
   onActivate,
 }: EstimateBuilderCardProps) {
   const [library, setLibrary] = useState<EstimateLibraryState>({
@@ -109,8 +111,40 @@ export function EstimateBuilderCard({
       products: draft.products,
       bucking: draft.bucking,
       calculator: draft.calculator,
+      totals: computed.totals,
+      schedule: computed.schedule,
+      breakdown: computed.breakdown,
     });
   }, [computed, draft, legacyValues, name, onEstimatePayloadChange, onValuesChange]);
+
+  useEffect(() => {
+    if (!loadPayload) return;
+
+    if (loadPayload.values && !loadPayload.calculator) {
+      setLegacyValues(loadPayload.values as Record<string, string | number>);
+      setDraft(DEFAULT_DRAFT);
+      return;
+    }
+
+    const nextDraft: EstimateDraft = {
+      info: loadPayload.info ?? DEFAULT_DRAFT.info,
+      products:
+        Array.isArray(loadPayload.products) && loadPayload.products.length
+          ? loadPayload.products
+          : DEFAULT_DRAFT.products,
+      bucking:
+        Array.isArray(loadPayload.bucking) && loadPayload.bucking.length
+          ? loadPayload.bucking
+          : DEFAULT_DRAFT.bucking,
+      calculator: {
+        ...DEFAULT_DRAFT.calculator,
+        ...(loadPayload.calculator ?? {}),
+      },
+    };
+
+    setLegacyValues(null);
+    setDraft(nextDraft);
+  }, [loadPayload]);
 
   const loadLibrary = async () => {
     setLibrary((prev) => ({ ...prev, loading: true, error: null }));

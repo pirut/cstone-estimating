@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { OptionalClerkProvider } from "@/lib/clerk";
 import { Playfair_Display, Work_Sans } from "next/font/google";
 import "./globals.css";
 
@@ -27,7 +28,7 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${playfair.variable} ${workSans.variable}`}>
       <body className="min-h-screen bg-background font-sans text-foreground antialiased">
-        {children}
+        <OptionalClerkProvider>{children}</OptionalClerkProvider>
       </body>
     </html>
   );

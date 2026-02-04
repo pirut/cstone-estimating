@@ -26,11 +26,25 @@ import type {
   UploadedFile,
   UploadState,
 } from "@/lib/types";
+import { db, instantAppId } from "@/lib/instant";
+import { InstantAuthSync } from "@/components/instant-auth-sync";
 import { cn } from "@/lib/utils";
 import { APP_VERSION } from "@/lib/version";
 import { ArrowDownToLine, FileDown, FileText, Loader2, Sparkles } from "lucide-react";
+import {
+  SignInButton,
+  SignOutButton,
+  clerkEnabled,
+  useOptionalAuth,
+  useOptionalUser,
+} from "@/lib/clerk";
+import { id } from "@instantdb/react";
 
 export default function HomePage() {
+  const { isLoaded: authLoaded, isSignedIn } = useOptionalAuth();
+  const { user } = useOptionalUser();
+  const { isLoading: instantLoading, user: instantUser, error: instantAuthError } =
+    db.useAuth();
   const [uploads, setUploads] = useState<UploadState>({});
   const [error, setError] = useState<string | null>(null);
   const [templateConfig, setTemplateConfig] = useState<TemplateConfig | null>(null);
@@ -52,12 +66,50 @@ export default function HomePage() {
   const [selectedEstimate, setSelectedEstimate] = useState<UploadedFile | null>(
     null
   );
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [teamName, setTeamName] = useState("");
+  const [teamError, setTeamError] = useState<string | null>(null);
+  const [teamSaving, setTeamSaving] = useState(false);
+  const [editingEstimateId, setEditingEstimateId] = useState<string | null>(null);
+  const [loadedEstimatePayload, setLoadedEstimatePayload] = useState<Record<
+    string,
+    any
+  > | null>(null);
   const [library, setLibrary] = useState<LibraryState>({
     workbook: { items: [], loading: false, error: null },
     template: { items: [], loading: false, error: null },
     template_config: { items: [], loading: false, error: null },
     estimate: { items: [], loading: false, error: null },
   });
+
+  const emailAddress = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? "";
+  const emailDomain = emailAddress.split("@")[1] ?? "";
+  const allowedDomain = process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN?.toLowerCase();
+  const teamDomain = (allowedDomain || emailDomain || "").trim();
+  const teamLookupDomain = teamDomain || "__none__";
+
+  const teamQuery = instantAppId
+    ? {
+        teams: {
+          $: { where: { domain: teamLookupDomain } },
+          memberships: { user: {} },
+          estimates: { owner: {} },
+        },
+      }
+    : { teams: { $: { where: { domain: "__none__" } } } };
+
+  const { data: teamData } = db.useQuery(teamQuery);
+
+  const currentTeam = teamData?.teams?.[0] ?? null;
+  const teamMembership = currentTeam?.memberships?.find(
+    (membership) => membership.user?.id === instantUser?.id
+  );
+  const teamEstimates = useMemo(() => {
+    const list = currentTeam?.estimates ?? [];
+    return [...list].sort(
+      (a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)
+    );
+  }, [currentTeam?.estimates]);
 
   const hasEstimateValues = useMemo(() => {
     if (estimatePayload?.values) {
@@ -95,6 +147,19 @@ export default function HomePage() {
     ],
     [estimateMode]
   );
+
+  useEffect(() => {
+    if (!teamName && teamDomain) {
+      const base = teamDomain.split(".")[0] || "Cornerstone";
+      setTeamName(`${base.charAt(0).toUpperCase()}${base.slice(1)} Team`);
+    }
+  }, [teamDomain, teamName]);
+
+  useEffect(() => {
+    if (!estimatePayload) {
+      setEditingEstimateId(null);
+    }
+  }, [estimatePayload]);
 
   useEffect(() => {
     if (!isGenerating) {
@@ -234,6 +299,136 @@ export default function HomePage() {
     } finally {
       setIsGenerating(false);
     }
+  };
+
+  const handleSaveEstimateToDb = async () => {
+    setError(null);
+    if (!instantAppId) {
+      setError("InstantDB is not configured yet.");
+      return;
+    }
+    if (!instantUser) {
+      setError("Sign in to save estimates.");
+      return;
+    }
+    if (!currentTeam || !teamMembership) {
+      setError("Create or join a team to save estimates.");
+      return;
+    }
+    if (!estimatePayload && !Object.keys(estimateValues).length) {
+      setError("Enter estimate values before saving.");
+      return;
+    }
+
+    const now = Date.now();
+    const payload = estimatePayload ?? { values: estimateValues };
+    const title = estimateName.trim() || "Untitled Estimate";
+    const totals = payload?.totals ?? null;
+
+    if (editingEstimateId) {
+      await db.transact(
+        db.tx.estimates[editingEstimateId]
+          .update({
+            title,
+            status: "draft",
+            updatedAt: now,
+            templateName: templateConfig?.name,
+            templateUrl: templateConfig?.templatePdf?.url,
+            payload,
+            totals,
+          })
+          .link({ team: currentTeam.id, owner: instantUser.id })
+      );
+      return;
+    }
+
+    const estimateId = id();
+    await db.transact(
+      db.tx.estimates[estimateId]
+        .create({
+          title,
+          status: "draft",
+          createdAt: now,
+          updatedAt: now,
+          templateName: templateConfig?.name,
+          templateUrl: templateConfig?.templatePdf?.url,
+          payload,
+          totals,
+        })
+        .link({ team: currentTeam.id, owner: instantUser.id })
+    );
+    setEditingEstimateId(estimateId);
+  };
+
+  const handleCreateTeam = async () => {
+    setTeamError(null);
+    if (!instantAppId) {
+      setTeamError("InstantDB is not configured yet.");
+      return;
+    }
+    if (!instantUser) {
+      setTeamError("Sign in to create a team workspace.");
+      return;
+    }
+    if (!teamDomain) {
+      setTeamError("Missing an allowed email domain.");
+      return;
+    }
+    const now = Date.now();
+    const teamId = id();
+    const membershipId = id();
+    const trimmedName = teamName.trim() || `${teamDomain} Team`;
+
+    setTeamSaving(true);
+    try {
+      await db.transact([
+        db.tx.teams[teamId].create({
+          name: trimmedName,
+          domain: teamDomain,
+          createdAt: now,
+        }),
+        db.tx.memberships[membershipId]
+          .create({ role: "owner", createdAt: now })
+          .link({ team: teamId, user: instantUser.id }),
+      ]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setTeamError(message);
+    } finally {
+      setTeamSaving(false);
+    }
+  };
+
+  const handleJoinTeam = async () => {
+    setTeamError(null);
+    if (!instantAppId) {
+      setTeamError("InstantDB is not configured yet.");
+      return;
+    }
+    if (!instantUser || !currentTeam) return;
+    const now = Date.now();
+    const membershipId = id();
+    setTeamSaving(true);
+    try {
+      await db.transact(
+        db.tx.memberships[membershipId]
+          .create({ role: "member", createdAt: now })
+          .link({ team: currentTeam.id, user: instantUser.id })
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setTeamError(message);
+    } finally {
+      setTeamSaving(false);
+    }
+  };
+
+  const handleLoadTeamEstimate = (estimate: any) => {
+    setEstimateMode("estimate");
+    setError(null);
+    setEstimateName(estimate?.title ?? "");
+    setLoadedEstimatePayload(estimate?.payload ?? null);
+    setEditingEstimateId(estimate?.id ?? null);
   };
 
   const loadLibrary = async (type: LibraryType) => {
@@ -440,11 +635,57 @@ export default function HomePage() {
 
   return (
     <main className="relative min-h-screen overflow-hidden">
+      <InstantAuthSync onDomainError={setAuthError} />
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-24 left-1/2 h-72 w-[520px] -translate-x-1/2 rounded-full bg-accent/20 blur-3xl" />
         <div className="absolute top-24 right-0 h-72 w-72 rounded-full bg-foreground/10 blur-3xl" />
       </div>
       <div className="container relative py-12">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div className="text-xs text-muted-foreground">
+            {!clerkEnabled ? (
+              <span>Clerk auth is not configured yet.</span>
+            ) : authLoaded ? (
+              isSignedIn ? (
+                <span>Signed in as {user?.primaryEmailAddress?.emailAddress}</span>
+              ) : (
+                <span>Sign in to save and share estimates.</span>
+              )
+            ) : (
+              <span>Loading account...</span>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {clerkEnabled && isSignedIn ? (
+              <SignOutButton>
+                <Button variant="outline" size="sm">
+                  Sign out
+                </Button>
+              </SignOutButton>
+            ) : clerkEnabled ? (
+              <SignInButton mode="modal">
+                <Button variant="accent" size="sm">
+                  Sign in
+                </Button>
+              </SignInButton>
+            ) : (
+              <Button variant="outline" size="sm" disabled>
+                Sign in
+              </Button>
+            )}
+          </div>
+        </div>
+        {authError ? (
+          <div className="mb-6 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {authError}
+          </div>
+        ) : null}
+        {!instantAppId ? (
+          <div className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
+            InstantDB is not configured. Add `NEXT_PUBLIC_INSTANTDB_APP_ID` to
+            enable team estimates.
+          </div>
+        ) : null}
         <section className="relative overflow-hidden rounded-[32px] border border-border/60 bg-foreground text-white shadow-elevated">
           <div className="absolute -right-28 -top-24 h-72 w-72 rounded-full bg-accent/20 blur-3xl" />
           <div className="absolute bottom-0 left-10 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
@@ -509,6 +750,142 @@ export default function HomePage() {
           </div>
         </section>
 
+        {authLoaded && isSignedIn ? (
+          <section className="mt-10 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+            <Card className="border-border/60 bg-card/80 shadow-elevated">
+              <CardHeader>
+                <CardTitle className="text-2xl font-serif">Team Workspace</CardTitle>
+                <CardDescription>
+                  InstantDB keeps shared estimates synced for your domain.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {instantAuthError ? (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {instantAuthError.message}
+                  </div>
+                ) : null}
+                {teamError ? (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {teamError}
+                  </div>
+                ) : null}
+                {instantLoading ? (
+                  <div className="text-sm text-muted-foreground">
+                    Connecting to InstantDB...
+                  </div>
+                ) : null}
+
+                {currentTeam ? (
+                  <div className="space-y-3">
+                    <div className="space-y-1">
+                      <p className="text-sm text-muted-foreground">Team name</p>
+                      <p className="text-lg font-semibold text-foreground">
+                        {currentTeam.name}
+                      </p>
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Domain: {currentTeam.domain}
+                    </div>
+                    {teamMembership ? (
+                      <Badge variant="outline" className="bg-background/80">
+                        Member
+                      </Badge>
+                    ) : (
+                      <Button
+                        variant="accent"
+                        onClick={() => void handleJoinTeam()}
+                        disabled={teamSaving || !instantUser}
+                      >
+                        {teamSaving ? "Joining..." : "Join team"}
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="space-y-2">
+                      <label className="text-xs text-muted-foreground">
+                        Team name
+                      </label>
+                      <input
+                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                        value={teamName}
+                        onChange={(event) => setTeamName(event.target.value)}
+                        placeholder="Cornerstone Estimators"
+                      />
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      Domain: {teamDomain || "Unknown"}
+                    </div>
+                    <Button
+                      variant="accent"
+                      onClick={() => void handleCreateTeam()}
+                      disabled={teamSaving || !instantUser}
+                    >
+                      {teamSaving ? "Creating..." : "Create team workspace"}
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            <Card className="border-border/60 bg-card/80 shadow-elevated">
+              <CardHeader>
+                <CardTitle className="text-2xl font-serif">
+                  Team Estimates
+                </CardTitle>
+                <CardDescription>
+                  Shared estimates for {currentTeam?.name ?? "your team"}.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {!currentTeam || !teamMembership ? (
+                  <div className="text-sm text-muted-foreground">
+                    Create or join a team to access shared estimates.
+                  </div>
+                ) : teamEstimates.length ? (
+                  <ScrollArea className="h-56 rounded-lg border border-border/70 bg-background/70">
+                    <div className="divide-y divide-border/60">
+                      {teamEstimates.map((estimate) => (
+                        <div
+                          key={estimate.id}
+                          className="flex items-center justify-between gap-4 px-4 py-3"
+                        >
+                          <div>
+                            <p className="text-sm font-medium text-foreground">
+                              {estimate.title ?? "Untitled"}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {estimate.updatedAt
+                                ? new Date(estimate.updatedAt).toLocaleString()
+                                : "No timestamp"}
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleLoadTeamEstimate(estimate)}
+                          >
+                            Load
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                ) : (
+                  <div className="text-sm text-muted-foreground">
+                    No shared estimates yet.
+                  </div>
+                )}
+                {editingEstimateId ? (
+                  <div className="text-xs text-muted-foreground">
+                    Editing a shared estimate. Use “Save to team” to update it.
+                  </div>
+                ) : null}
+              </CardContent>
+            </Card>
+          </section>
+        ) : null}
+
         <section
           className={cn(
             "mt-12 grid gap-6",
@@ -561,11 +938,45 @@ export default function HomePage() {
                   selectedEstimate={selectedEstimate}
                   onSelectEstimate={setSelectedEstimate}
                   onEstimatePayloadChange={setEstimatePayload}
+                  loadPayload={loadedEstimatePayload}
                   onActivate={() => {
                     setEstimateMode("estimate");
                     setError(null);
                   }}
                 />
+                <div className="mt-4 flex flex-wrap gap-3">
+                  <Button
+                    variant="secondary"
+                    onClick={() => void handleSaveEstimateToDb()}
+                    disabled={!isSignedIn || !teamMembership}
+                  >
+                    {editingEstimateId ? "Update team estimate" : "Save to team"}
+                  </Button>
+                  {editingEstimateId ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setLoadedEstimatePayload(null);
+                        setEditingEstimateId(null);
+                        setEstimateName("");
+                        setEstimateValues({});
+                        setEstimatePayload(null);
+                      }}
+                    >
+                      New estimate
+                    </Button>
+                  ) : null}
+                  {!clerkEnabled ? (
+                    <span className="text-xs text-muted-foreground">
+                      Configure Clerk + InstantDB to enable team saving.
+                    </span>
+                  ) : !isSignedIn || !teamMembership ? (
+                    <span className="text-xs text-muted-foreground">
+                      Sign in with Microsoft and join a team to save estimates.
+                    </span>
+                  ) : null}
+                </div>
               </TabsContent>
             </Tabs>
             {estimateMode === "estimate" ? templateCard : null}
@@ -684,6 +1095,8 @@ export default function HomePage() {
                     setEstimateName("");
                     setSelectedEstimate(null);
                     setEstimatePayload(null);
+                    setLoadedEstimatePayload(null);
+                    setEditingEstimateId(null);
                   }}
                   disabled={isGenerating}
                 >

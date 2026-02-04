@@ -1,6 +1,6 @@
 {
   "name": "cstone-estimating",
-  "version": "0.1.30",
+  "version": "0.1.31",
   "private": true,
   "scripts": {
     "dev": "next dev",
@@ -10,6 +10,8 @@
     "calibrate": "node scripts/calibrate.js"
   },
   "dependencies": {
+    "@clerk/nextjs": "^6.37.2",
+    "@instantdb/react": "^0.22.121",
     "@pdf-lib/fontkit": "^1.1.1",
     "@radix-ui/react-alert-dialog": "1.0.5",
     "@radix-ui/react-scroll-area": "1.0.5",
