@@ -27,8 +27,8 @@ CLERK_SECRET_KEY=...
 # InstantDB ↔ Clerk client name (from Instant auth settings)
 NEXT_PUBLIC_CLERK_CLIENT_NAME=...
 
-# Allowed email domain (e.g. cornerstone.com)
-NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN=cornerstone.com
+# Allowed email domain (e.g. cornerstonecompaniesfl.com)
+NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN=cornerstonecompaniesfl.com
 ```
 
 In Clerk, enable Microsoft as the only social provider and restrict sign-ins to

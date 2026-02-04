@@ -84,7 +84,11 @@ export default function HomePage() {
 
   const emailAddress = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? "";
   const emailDomain = emailAddress.split("@")[1] ?? "";
-  const allowedDomain = process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN?.toLowerCase();
+  const allowedDomain = (
+    process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN ?? "cornerstonecompaniesfl.com"
+  )
+    .trim()
+    .toLowerCase();
   const teamDomain = (allowedDomain || emailDomain || "").trim();
   const teamLookupDomain = teamDomain || "__none__";
 

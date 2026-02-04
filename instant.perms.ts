@@ -1,26 +1,41 @@
+const allowedDomain = "cornerstonecompaniesfl.com";
+const isDomainUser = `auth.email != null && auth.email.endsWith('@${allowedDomain}')`;
+
 const perms = {
   teams: {
+    bind: {
+      isDomainUser,
+      isMember: "auth.id in data.ref('memberships.user.id')",
+    },
     allow: {
-      view: "auth.id != null",
-      create: "auth.id != null",
-      update: "auth.id in data.ref('memberships.user.id')",
-      delete: "auth.id in data.ref('memberships.user.id')",
+      view: "isDomainUser || isMember",
+      create: "isDomainUser",
+      update: "isMember",
+      delete: "isMember",
     },
   },
   memberships: {
+    bind: {
+      isDomainUser,
+      isSelf: "auth.id in data.ref('user.id')",
+      isTeamMember: "auth.id in data.ref('team.memberships.user.id')",
+    },
     allow: {
-      view: "auth.id in data.ref('team.memberships.user.id')",
-      create: "auth.id != null",
-      update: "auth.id in data.ref('team.memberships.user.id')",
-      delete: "auth.id in data.ref('team.memberships.user.id')",
+      view: "isDomainUser && isTeamMember",
+      create: "isDomainUser && isSelf",
+      update: "isDomainUser && isTeamMember",
+      delete: "isDomainUser && isTeamMember",
     },
   },
   estimates: {
+    bind: {
+      isTeamMember: "auth.id in data.ref('team.memberships.user.id')",
+    },
     allow: {
-      view: "auth.id in data.ref('team.memberships.user.id')",
-      create: "auth.id in data.ref('team.memberships.user.id')",
-      update: "auth.id in data.ref('team.memberships.user.id')",
-      delete: "auth.id in data.ref('team.memberships.user.id')",
+      view: "isTeamMember",
+      create: "isTeamMember",
+      update: "isTeamMember",
+      delete: "isTeamMember",
     },
   },
 };

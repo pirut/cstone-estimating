@@ -5,9 +5,12 @@ import { clerkEnabled, useOptionalAuth, useOptionalUser } from "@/lib/clerk";
 import { db, instantAppId } from "@/lib/instant";
 
 const clerkClientName = process.env.NEXT_PUBLIC_CLERK_CLIENT_NAME;
-const allowedDomain = process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN
-  ? process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN.toLowerCase()
-  : null;
+const allowedDomain = (
+  process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN ?? "cornerstonecompaniesfl.com"
+)
+  .trim()
+  .toLowerCase();
+const hasAllowedDomain = allowedDomain.length > 0;
 
 type InstantAuthSyncProps = {
   onDomainError?: (message: string) => void;
@@ -29,7 +32,7 @@ export function InstantAuthSync({ onDomainError }: InstantAuthSyncProps) {
       }
 
       const email = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? "";
-      if (allowedDomain && email && !email.endsWith(`@${allowedDomain}`)) {
+      if (hasAllowedDomain && email && !email.endsWith(`@${allowedDomain}`)) {
         onDomainError?.(
           `Only ${allowedDomain} accounts can access this workspace.`
         );
