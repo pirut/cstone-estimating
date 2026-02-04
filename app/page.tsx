@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ComponentType } from "react";
+import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import Link from "next/link";
 import { AdvancedOverridesCard } from "@/components/advanced-overrides-card";
 import { BrandMark } from "@/components/brand-mark";
@@ -70,6 +70,9 @@ export default function HomePage() {
   const [teamName, setTeamName] = useState("");
   const [teamError, setTeamError] = useState<string | null>(null);
   const [teamSaving, setTeamSaving] = useState(false);
+  const [teamSetupAction, setTeamSetupAction] = useState<
+    "idle" | "creating" | "joining"
+  >("idle");
   const [editingEstimateId, setEditingEstimateId] = useState<string | null>(null);
   const [loadedEstimatePayload, setLoadedEstimatePayload] = useState<Record<
     string,
@@ -108,6 +111,9 @@ export default function HomePage() {
   const teamMembership = currentTeam?.memberships?.find(
     (membership) => membership.user?.id === instantUser?.id
   );
+  const teamReady = Boolean(currentTeam && teamMembership);
+  const appLocked = clerkEnabled && (!authLoaded || !isSignedIn);
+  const autoProvisionRef = useRef(false);
   const teamEstimates = useMemo(() => {
     const list = currentTeam?.estimates ?? [];
     return [...list].sort(
@@ -164,6 +170,51 @@ export default function HomePage() {
       setEditingEstimateId(null);
     }
   }, [estimatePayload]);
+
+  useEffect(() => {
+    if (!instantAppId) return;
+    if (!authLoaded || !isSignedIn) return;
+    if (!instantUser) return;
+    if (instantLoading) return;
+    if (teamReady) return;
+    if (teamSaving || teamSetupAction !== "idle") return;
+    if (autoProvisionRef.current) return;
+    if (!teamDomain) {
+      setTeamError("Missing an allowed email domain.");
+      return;
+    }
+
+    autoProvisionRef.current = true;
+    setTeamError(null);
+
+    if (!currentTeam) {
+      void handleCreateTeam().finally(() => {
+        autoProvisionRef.current = false;
+      });
+      return;
+    }
+
+    if (!teamMembership) {
+      void handleJoinTeam().finally(() => {
+        autoProvisionRef.current = false;
+      });
+      return;
+    }
+
+    autoProvisionRef.current = false;
+  }, [
+    authLoaded,
+    currentTeam,
+    instantAppId,
+    instantLoading,
+    instantUser,
+    isSignedIn,
+    teamDomain,
+    teamMembership,
+    teamReady,
+    teamSaving,
+    teamSetupAction,
+  ]);
 
   useEffect(() => {
     if (!isGenerating) {
@@ -384,6 +435,7 @@ export default function HomePage() {
     const trimmedName = teamName.trim() || `${teamDomain} Team`;
 
     setTeamSaving(true);
+    setTeamSetupAction("creating");
     try {
       await db.transact([
         db.tx.teams[teamId].create({
@@ -400,6 +452,7 @@ export default function HomePage() {
       setTeamError(message);
     } finally {
       setTeamSaving(false);
+      setTeamSetupAction("idle");
     }
   };
 
@@ -413,6 +466,7 @@ export default function HomePage() {
     const now = Date.now();
     const membershipId = id();
     setTeamSaving(true);
+    setTeamSetupAction("joining");
     try {
       await db.transact(
         db.tx.memberships[membershipId]
@@ -424,6 +478,17 @@ export default function HomePage() {
       setTeamError(message);
     } finally {
       setTeamSaving(false);
+      setTeamSetupAction("idle");
+    }
+  };
+
+  const handleRetryTeamSetup = () => {
+    if (!currentTeam) {
+      void handleCreateTeam();
+      return;
+    }
+    if (!teamMembership) {
+      void handleJoinTeam();
     }
   };
 
@@ -653,7 +718,7 @@ export default function HomePage() {
               isSignedIn ? (
                 <span>Signed in as {user?.primaryEmailAddress?.emailAddress}</span>
               ) : (
-                <span>Sign in to save and share estimates.</span>
+                <span>Sign in to access the proposal studio.</span>
               )
             ) : (
               <span>Loading account...</span>
@@ -754,6 +819,51 @@ export default function HomePage() {
           </div>
         </section>
 
+        {appLocked ? (
+          <section className="mt-10">
+            <Card className="border-border/60 bg-card/80 shadow-elevated">
+              <CardHeader>
+                <CardTitle className="text-2xl font-serif">
+                  Sign in required
+                </CardTitle>
+                <CardDescription>
+                  Access to proposals and team estimates is restricted to your
+                  organization.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {authLoaded ? (
+                  <div className="text-sm text-muted-foreground">
+                    Use your Microsoft account to continue.
+                  </div>
+                ) : (
+                  <div className="text-sm text-muted-foreground">
+                    Checking your account status...
+                  </div>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  {clerkEnabled ? (
+                    <SignInButton mode="modal">
+                      <Button variant="accent" size="sm">
+                        Sign in with Microsoft
+                      </Button>
+                    </SignInButton>
+                  ) : (
+                    <Button variant="accent" size="sm" disabled>
+                      Sign in with Microsoft
+                    </Button>
+                  )}
+                  {!clerkEnabled ? (
+                    <Button variant="outline" size="sm" disabled>
+                      Clerk not configured
+                    </Button>
+                  ) : null}
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+        ) : (
+          <>
         {authLoaded && isSignedIn ? (
           <section className="mt-10 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
             <Card className="border-border/60 bg-card/80 shadow-elevated">
@@ -780,54 +890,42 @@ export default function HomePage() {
                   </div>
                 ) : null}
 
-                {currentTeam ? (
+                {teamReady ? (
                   <div className="space-y-3">
                     <div className="space-y-1">
                       <p className="text-sm text-muted-foreground">Team name</p>
                       <p className="text-lg font-semibold text-foreground">
-                        {currentTeam.name}
+                        {currentTeam?.name}
                       </p>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      Domain: {currentTeam.domain}
+                      Domain: {currentTeam?.domain}
                     </div>
-                    {teamMembership ? (
-                      <Badge variant="outline" className="bg-background/80">
-                        Member
-                      </Badge>
-                    ) : (
-                      <Button
-                        variant="accent"
-                        onClick={() => void handleJoinTeam()}
-                        disabled={teamSaving || !instantUser}
-                      >
-                        {teamSaving ? "Joining..." : "Join team"}
-                      </Button>
-                    )}
+                    <Badge variant="outline" className="bg-background/80">
+                      {teamMembership?.role === "owner" ? "Owner" : "Member"}
+                    </Badge>
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    <div className="space-y-2">
-                      <label className="text-xs text-muted-foreground">
-                        Team name
-                      </label>
-                      <input
-                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                        value={teamName}
-                        onChange={(event) => setTeamName(event.target.value)}
-                        placeholder="Cornerstone Estimators"
-                      />
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      {currentTeam
+                        ? "Joining team workspace..."
+                        : "Creating team workspace..."}
                     </div>
                     <div className="text-xs text-muted-foreground">
                       Domain: {teamDomain || "Unknown"}
                     </div>
-                    <Button
-                      variant="accent"
-                      onClick={() => void handleCreateTeam()}
-                      disabled={teamSaving || !instantUser}
-                    >
-                      {teamSaving ? "Creating..." : "Create team workspace"}
-                    </Button>
+                    {teamError ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRetryTeamSetup}
+                        disabled={teamSaving}
+                      >
+                        Retry setup
+                      </Button>
+                    ) : null}
                   </div>
                 )}
               </CardContent>
@@ -842,9 +940,9 @@ export default function HomePage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {!currentTeam || !teamMembership ? (
+                {!teamReady ? (
                   <div className="text-sm text-muted-foreground">
-                    Create or join a team to access shared estimates.
+                    Preparing your team workspace...
                   </div>
                 ) : teamEstimates.length ? (
                   <ScrollArea className="h-56 rounded-lg border border-border/70 bg-background/70">
@@ -952,7 +1050,7 @@ export default function HomePage() {
                   <Button
                     variant="secondary"
                     onClick={() => void handleSaveEstimateToDb()}
-                    disabled={!isSignedIn || !teamMembership}
+                    disabled={!isSignedIn || !teamReady}
                   >
                     {editingEstimateId ? "Update team estimate" : "Save to team"}
                   </Button>
@@ -975,9 +1073,9 @@ export default function HomePage() {
                     <span className="text-xs text-muted-foreground">
                       Configure Clerk + InstantDB to enable team saving.
                     </span>
-                  ) : !isSignedIn || !teamMembership ? (
+                  ) : !teamReady ? (
                     <span className="text-xs text-muted-foreground">
-                      Sign in with Microsoft and join a team to save estimates.
+                      Setting up your team workspace...
                     </span>
                   ) : null}
                 </div>
@@ -1113,6 +1211,9 @@ export default function HomePage() {
             </CardContent>
           </Card>
         </section>
+
+          </>
+        )}
 
         <Separator className="my-12" />
 
