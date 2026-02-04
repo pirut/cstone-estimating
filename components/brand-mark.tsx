@@ -14,21 +14,14 @@ export function BrandMark({ tone = "light", className }: BrandMarkProps) {
     <div className={cn("flex items-center gap-3", className)}>
       <div
         className={cn(
-          "relative h-12 w-12 rounded-2xl shadow-glow",
-          isDark ? "bg-white" : "bg-foreground"
+          "flex h-12 w-12 items-center justify-center rounded-2xl border shadow-glow",
+          isDark ? "border-white/40 bg-white" : "border-border bg-background"
         )}
       >
-        <div
-          className={cn(
-            "absolute inset-2 rounded-xl border-2",
-            isDark ? "border-foreground/60" : "border-white/80"
-          )}
-        />
-        <div
-          className={cn(
-            "absolute bottom-2 right-2 h-3.5 w-3.5 rounded-sm",
-            isDark ? "bg-accent" : "bg-accent"
-          )}
+        <img
+          src="/brand/cornerstone-logo.png"
+          alt="Cornerstone"
+          className="h-8 w-8 object-contain"
         />
       </div>
       <div>
