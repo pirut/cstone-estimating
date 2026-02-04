@@ -31,6 +31,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { UploadedFile } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { formatPreviewValue } from "@/lib/formatting";
 import {
   ArrowDown,
   ArrowDownToLine,
@@ -1723,81 +1724,4 @@ function isTypingTarget(target: EventTarget | null) {
   );
 }
 
-function formatPreviewValue(
-  value: unknown,
-  format: string | undefined,
-  preparedByMap: Record<string, string>,
-  missingValue: string
-) {
-  if (value === null || value === undefined) return null;
-  switch (format) {
-    case "currency": {
-      const numberValue = normalizeNumber(value);
-      if (numberValue === null) return null;
-      const rounded = Math.round(numberValue * 100) / 100;
-      return new Intl.NumberFormat("en-US", {
-        style: "decimal",
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-      }).format(rounded);
-    }
-    case "date_cover":
-      return formatCoverDate(value);
-    case "date_plan":
-      return formatPlanDate(value);
-    case "initials": {
-      const key = String(value).trim();
-      if (!key) return missingValue;
-      return preparedByMap[key] ?? key;
-    }
-    default:
-      return formatTextValue(value, missingValue);
-  }
-}
-
-function normalizeNumber(value: unknown) {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : null;
-  }
-  if (typeof value === "string") {
-    const cleaned = value.replace(/[^0-9.-]/g, "");
-    const parsed = Number.parseFloat(cleaned);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
-function normalizeDate(value: unknown) {
-  if (value instanceof Date && !Number.isNaN(value.valueOf())) return value;
-  if (typeof value === "number") {
-    const millis = (value - 25569) * 86400 * 1000;
-    const date = new Date(millis);
-    return Number.isNaN(date.valueOf()) ? null : date;
-  }
-  if (typeof value === "string" && value.trim()) {
-    const date = new Date(value);
-    return Number.isNaN(date.valueOf()) ? null : date;
-  }
-  return null;
-}
-
-function formatCoverDate(value: unknown) {
-  const dateValue = normalizeDate(value);
-  if (!dateValue) return null;
-  const month = dateValue.toLocaleString("en-US", { month: "long" }).toUpperCase();
-  const day = String(dateValue.getDate()).padStart(2, "0");
-  return `${month} ${day}, ${dateValue.getFullYear()}`;
-}
-
-function formatPlanDate(value: unknown) {
-  const dateValue = normalizeDate(value);
-  if (!dateValue) return null;
-  const month = dateValue.toLocaleString("en-US", { month: "long" });
-  return `${month} ${dateValue.getDate()}, ${dateValue.getFullYear()}`;
-}
-
-function formatTextValue(value: unknown, missingValue: string) {
-  if (value === null || value === undefined) return missingValue;
-  const text = String(value).trim();
-  return text || missingValue;
-}
+// formatting helpers moved to lib/formatting

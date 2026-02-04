@@ -14,10 +14,18 @@ Create `.env.local` with your UploadThing token:
 UPLOADTHING_TOKEN=...
 ```
 
-Optional limits:
+Optional limits and security:
 
 ```
 MAX_DOWNLOAD_MB=50
+DOWNLOAD_TIMEOUT_MS=15000
+DOWNLOAD_ALLOWLIST=uploadthing.com,utfs.io
+DOWNLOAD_ALLOWLIST_SUFFIXES=uploadthing.com,utfs.io
+ALLOW_PRIVATE_DOWNLOADS=false
+ADMIN_TOKEN=your-secret
+
+# For /admin, use Basic auth: any username + ADMIN_TOKEN as the password.
+# For API calls, you can also send Authorization: Bearer $ADMIN_TOKEN.
 ```
 
 ## Run locally

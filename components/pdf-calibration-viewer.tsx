@@ -41,6 +41,12 @@ type PdfState = {
   error: string | null;
 };
 
+type PdfCache = {
+  url: string;
+  data: ArrayBuffer;
+  pdfDoc: any;
+};
+
 export function PdfCalibrationViewer({
   pdfUrl,
   pageKey,
@@ -59,6 +65,7 @@ export function PdfCalibrationViewer({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const viewportRef = useRef<any>(null);
   const measureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const pdfCacheRef = useRef<PdfCache | null>(null);
   const [pdfState, setPdfState] = useState<PdfState>({
     loading: false,
     error: null,
@@ -66,6 +73,7 @@ export function PdfCalibrationViewer({
   const [pageSize, setPageSize] = useState<{ width: number; height: number } | null>(null);
   const [scale, setScale] = useState(1);
   const [isDragging, setIsDragging] = useState<string | null>(null);
+  const renderTokenRef = useRef(0);
   const gridPixelSize = useMemo(() => {
     if (!gridSize || gridSize <= 0) return null;
     return gridSize * scale;
@@ -133,19 +141,29 @@ export function PdfCalibrationViewer({
       return;
     }
 
-    let cancelled = false;
+    const renderToken = ++renderTokenRef.current;
     const renderPage = async () => {
       setPdfState({ loading: true, error: null });
       try {
         const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
         ensurePdfWorker(pdfjsLib);
 
-        const response = await fetch(pdfUrl);
-        const data = await response.arrayBuffer();
-        const pdfDoc = await pdfjsLib.getDocument({ data }).promise;
-        const page = await pdfDoc.getPage(pageIndex + 1);
+        let cached = pdfCacheRef.current;
+        if (!cached || cached.url !== pdfUrl) {
+          const response = await fetch(pdfUrl);
+          if (!response.ok) {
+            throw new Error("Failed to download PDF.");
+          }
+          const data = await response.arrayBuffer();
+          if (renderToken !== renderTokenRef.current) return;
+          const pdfDoc = await pdfjsLib.getDocument({ data }).promise;
+          cached = { url: pdfUrl, data, pdfDoc };
+          pdfCacheRef.current = cached;
+        }
 
-        if (cancelled) return;
+        const page = await cached.pdfDoc.getPage(pageIndex + 1);
+
+        if (renderToken !== renderTokenRef.current) return;
 
         const baseViewport = page.getViewport({ scale: 1, rotation: page.rotate });
         setPageSize({ width: baseViewport.width, height: baseViewport.height });
@@ -171,11 +189,11 @@ export function PdfCalibrationViewer({
         await page.render({ canvasContext: context, viewport: scaledViewport })
           .promise;
 
-        if (!cancelled) {
+        if (renderToken === renderTokenRef.current) {
           setPdfState({ loading: false, error: null });
         }
       } catch (error) {
-        if (!cancelled) {
+        if (renderToken === renderTokenRef.current) {
           const message =
             error instanceof Error ? error.message : "Failed to render PDF.";
           setPdfState({ loading: false, error: message });
@@ -185,9 +203,13 @@ export function PdfCalibrationViewer({
 
     void renderPage();
     return () => {
-      cancelled = true;
+      renderTokenRef.current += 1;
     };
   }, [pdfUrl, pageIndex]);
+
+  useEffect(() => {
+    pdfCacheRef.current = null;
+  }, [pdfUrl]);
 
   useEffect(() => {
     if (!containerRef.current || !pageSize || !canvasRef.current || !pdfUrl) return;
@@ -205,15 +227,18 @@ export function PdfCalibrationViewer({
     if (!pdfUrl || !pageSize || !canvasRef.current) return;
 
     const renderScaled = async () => {
+      const token = renderTokenRef.current;
       try {
         const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
         ensurePdfWorker(pdfjsLib);
 
-        const response = await fetch(pdfUrl);
-        const data = await response.arrayBuffer();
-        const pdfDoc = await pdfjsLib.getDocument({ data }).promise;
-        const page = await pdfDoc.getPage(pageIndex + 1);
+        if (token !== renderTokenRef.current) return;
+        const cached = pdfCacheRef.current;
+        if (!cached || cached.url !== pdfUrl) return;
 
+        const page = await cached.pdfDoc.getPage(pageIndex + 1);
+
+        if (token !== renderTokenRef.current) return;
         const viewport = page.getViewport({ scale, rotation: page.rotate });
         viewportRef.current = viewport;
         const canvas = canvasRef.current;

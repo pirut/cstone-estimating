@@ -1,13 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import coordinatesDefault from "@/config/coordinates.json";
+import { downloadBuffer } from "@/lib/server/download";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const DEFAULT_GRID = 50;
-const MAX_DOWNLOAD_MB = Number(process.env.MAX_DOWNLOAD_MB ?? "50");
-const MAX_DOWNLOAD_BYTES = MAX_DOWNLOAD_MB * 1024 * 1024;
+const DOWNLOAD_TIMEOUT_MS = 20000;
 
 export async function POST(request: NextRequest) {
   try {
@@ -28,7 +28,10 @@ export async function POST(request: NextRequest) {
     const showGrid = body.showGrid !== false;
     const showLabels = body.showLabels !== false;
 
-    const templateBuffer = await downloadBuffer(templatePdfUrl, "Template PDF");
+    const templateBuffer = await downloadBuffer(templatePdfUrl, "Template PDF", {
+      baseUrl: request.nextUrl.origin,
+      timeoutMs: DOWNLOAD_TIMEOUT_MS,
+    });
     const coordsConfig = coordsOverride ?? coordinatesDefault;
 
     const outputPdf = await createCalibrationPdf(
@@ -137,20 +140,4 @@ async function createCalibrationPdf(
   return pdfDoc.save();
 }
 
-async function downloadBuffer(url: string, label: string) {
-  const response = await fetch(url, {
-    headers: { "User-Agent": "cstone-estimating/1.0" },
-  });
-  if (!response.ok) {
-    throw new Error(`${label} download failed (${response.status}).`);
-  }
-  const length = response.headers.get("content-length");
-  if (length && Number(length) > MAX_DOWNLOAD_BYTES) {
-    throw new Error(`${label} exceeds ${MAX_DOWNLOAD_MB} MB limit.`);
-  }
-  const arrayBuffer = await response.arrayBuffer();
-  if (arrayBuffer.byteLength > MAX_DOWNLOAD_BYTES) {
-    throw new Error(`${label} exceeds ${MAX_DOWNLOAD_MB} MB limit.`);
-  }
-  return Buffer.from(arrayBuffer);
-}
+// downloadBuffer moved to lib/server/download

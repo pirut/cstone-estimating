@@ -4,12 +4,13 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import * as XLSX from "xlsx";
 import mappingDefault from "@/config/mapping.json";
 import coordinatesDefault from "@/config/coordinates.json";
+import { downloadBuffer, downloadJson } from "@/lib/server/download";
+import { formatValue } from "@/lib/formatting";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const MAX_DOWNLOAD_MB = Number(process.env.MAX_DOWNLOAD_MB ?? "50");
-const MAX_DOWNLOAD_BYTES = MAX_DOWNLOAD_MB * 1024 * 1024;
+const DOWNLOAD_TIMEOUT_MS = 20000;
 
 type CoordSpec = {
   x?: number;
@@ -37,19 +38,19 @@ type CoordSpec = {
 
 export async function POST(request: NextRequest) {
   try {
-  const body = await request.json();
-  const workbookUrl = String(body.workbookUrl || "").trim();
-  const templatePdfUrl = String(body.templatePdfUrl || "").trim();
-  const mappingUrl = String(body.mappingUrl || "").trim();
-  const coordsUrl = String(body.coordsUrl || "").trim();
-  const mappingOverride =
-    body.mappingOverride && typeof body.mappingOverride === "object"
-      ? body.mappingOverride
-      : null;
-  const coordsOverride =
-    body.coordsOverride && typeof body.coordsOverride === "object"
-      ? body.coordsOverride
-      : null;
+    const body = await request.json();
+    const workbookUrl = String(body.workbookUrl || "").trim();
+    const templatePdfUrl = String(body.templatePdfUrl || "").trim();
+    const mappingUrl = String(body.mappingUrl || "").trim();
+    const coordsUrl = String(body.coordsUrl || "").trim();
+    const mappingOverride =
+      body.mappingOverride && typeof body.mappingOverride === "object"
+        ? body.mappingOverride
+        : null;
+    const coordsOverride =
+      body.coordsOverride && typeof body.coordsOverride === "object"
+        ? body.coordsOverride
+        : null;
 
     if (!workbookUrl || !templatePdfUrl) {
       return NextResponse.json(
@@ -59,19 +60,31 @@ export async function POST(request: NextRequest) {
     }
 
     const [workbookBuffer, templateBuffer] = await Promise.all([
-      downloadBuffer(workbookUrl, "Workbook"),
-      downloadBuffer(templatePdfUrl, "Template PDF"),
+      downloadBuffer(workbookUrl, "Workbook", {
+        baseUrl: request.nextUrl.origin,
+        timeoutMs: DOWNLOAD_TIMEOUT_MS,
+      }),
+      downloadBuffer(templatePdfUrl, "Template PDF", {
+        baseUrl: request.nextUrl.origin,
+        timeoutMs: DOWNLOAD_TIMEOUT_MS,
+      }),
     ]);
 
     const mappingConfig = mappingOverride
       ? mappingOverride
       : mappingUrl
-        ? await downloadJson(mappingUrl, "Mapping JSON")
+        ? await downloadJson(mappingUrl, "Mapping JSON", {
+            baseUrl: request.nextUrl.origin,
+            timeoutMs: DOWNLOAD_TIMEOUT_MS,
+          })
         : mappingDefault;
     const coordsConfig = coordsOverride
       ? coordsOverride
       : coordsUrl
-        ? await downloadJson(coordsUrl, "Coordinates JSON")
+        ? await downloadJson(coordsUrl, "Coordinates JSON", {
+            baseUrl: request.nextUrl.origin,
+            timeoutMs: DOWNLOAD_TIMEOUT_MS,
+          })
         : coordinatesDefault;
 
     const fieldValues = buildFieldValues(workbookBuffer, mappingConfig);
@@ -97,28 +110,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function downloadJson(url: string, label: string) {
-  const buffer = await downloadBuffer(url, label);
-  return JSON.parse(buffer.toString("utf-8"));
-}
-
-async function downloadBuffer(url: string, label: string) {
-  const response = await fetch(url, {
-    headers: { "User-Agent": "cstone-estimating/1.0" },
-  });
-  if (!response.ok) {
-    throw new Error(`${label} download failed (${response.status}).`);
-  }
-  const length = response.headers.get("content-length");
-  if (length && Number(length) > MAX_DOWNLOAD_BYTES) {
-    throw new Error(`${label} exceeds ${MAX_DOWNLOAD_MB} MB limit.`);
-  }
-  const arrayBuffer = await response.arrayBuffer();
-  if (arrayBuffer.byteLength > MAX_DOWNLOAD_BYTES) {
-    throw new Error(`${label} exceeds ${MAX_DOWNLOAD_MB} MB limit.`);
-  }
-  return Buffer.from(arrayBuffer);
-}
+// downloadBuffer/downloadJson moved to lib/server/download
 
 function buildFieldValues(workbookBuffer: Buffer, mappingConfig: any) {
   const workbook = XLSX.read(workbookBuffer, {
@@ -163,110 +155,7 @@ function getCellValue(
   return cellData.v ?? null;
 }
 
-function formatValue(
-  value: unknown,
-  format: string,
-  preparedByMap: Record<string, string>,
-  missingValue: string
-) {
-  switch (format) {
-    case "currency":
-      return formatCurrency(value, missingValue);
-    case "date_cover":
-      return formatDateCover(value, missingValue);
-    case "date_plan":
-      return formatDatePlan(value, missingValue);
-    case "initials":
-      return formatInitials(value, preparedByMap, missingValue);
-    default:
-      return formatText(value, missingValue);
-  }
-}
-
-function formatCurrency(value: unknown, missingValue: string) {
-  const numberValue = normalizeNumber(value);
-  if (numberValue === null) return missingValue;
-  const rounded = Math.round(numberValue * 100) / 100;
-  return new Intl.NumberFormat("en-US", {
-    style: "decimal",
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(rounded);
-}
-
-function formatDateCover(value: unknown, missingValue: string) {
-  const parsed = parseDate(value);
-  if (!parsed) return missingValue;
-  const month = parsed
-    .toLocaleString("en-US", { month: "long" })
-    .toUpperCase();
-  const day = String(parsed.getDate()).padStart(2, "0");
-  return `${month} ${day}, ${parsed.getFullYear()}`;
-}
-
-function formatDatePlan(value: unknown, missingValue: string) {
-  const parsed = parseDate(value);
-  if (!parsed) return missingValue;
-  const month = parsed.toLocaleString("en-US", { month: "long" });
-  return `${month} ${parsed.getDate()}, ${parsed.getFullYear()}`;
-}
-
-function formatInitials(
-  value: unknown,
-  preparedByMap: Record<string, string>,
-  missingValue: string
-) {
-  if (value === null || value === undefined) return missingValue;
-  const initials = String(value).trim();
-  if (!initials) return missingValue;
-  return preparedByMap[initials] ?? initials;
-}
-
-function formatText(value: unknown, missingValue: string) {
-  if (value === null || value === undefined) return missingValue;
-  const text = String(value).trim();
-  return text || missingValue;
-}
-
-function normalizeNumber(value: unknown) {
-  if (value === null || value === undefined) return null;
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string") {
-    const cleaned = value.replace(/[$,]/g, "").trim();
-    if (!cleaned) return null;
-    const parsed = Number(cleaned);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
-function parseDate(value: unknown) {
-  if (!value) return null;
-  if (value instanceof Date && !Number.isNaN(value.valueOf())) return value;
-  if (typeof value === "number") {
-    const parsed = XLSX.SSF.parse_date_code(value);
-    if (!parsed) return null;
-    return new Date(parsed.y, parsed.m - 1, parsed.d);
-  }
-  if (typeof value === "string") {
-    const cleaned = value.trim();
-    if (!cleaned) return null;
-
-    const isoMatch = cleaned.match(/^(\d{4})-(\d{2})-(\d{2})$/);
-    if (isoMatch) {
-      const [, year, month, day] = isoMatch;
-      return new Date(Number(year), Number(month) - 1, Number(day));
-    }
-
-    const mdyMatch = cleaned.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
-    if (mdyMatch) {
-      const [, month, day, yearRaw] = mdyMatch;
-      const year = yearRaw.length === 2 ? Number(`20${yearRaw}`) : Number(yearRaw);
-      return new Date(year, Number(month) - 1, Number(day));
-    }
-  }
-  return null;
-}
+// formatting helpers moved to lib/formatting
 
 async function stampPdf(
   templateBuffer: Buffer,
@@ -390,7 +279,10 @@ async function resolveFont(
   const source = fontUrl ? { url: fontUrl } : fontsConfig[fontName];
   if (source?.url) {
     const resolvedUrl = toAbsoluteUrl(source.url, baseUrl);
-    const bytes = await downloadBuffer(resolvedUrl, `Font ${fontName}`);
+    const bytes = await downloadBuffer(resolvedUrl, `Font ${fontName}`, {
+      baseUrl,
+      timeoutMs: DOWNLOAD_TIMEOUT_MS,
+    });
     const font = await pdfDoc.embedFont(bytes);
     cache.set(cacheKey, font);
     return font;
