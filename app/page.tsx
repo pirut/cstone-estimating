@@ -355,6 +355,89 @@ export default function HomePage() {
     }
   };
 
+  const templateCard = (
+    <Card className="border-border/60 bg-card/80 shadow-elevated">
+      <CardHeader>
+        <CardTitle className="text-2xl font-serif">Template Library</CardTitle>
+        <CardDescription>
+          Apply a saved PDF template with its calibrated coordinates.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {templateConfigError ? (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {templateConfigError}
+          </div>
+        ) : null}
+        {templateConfigLoading ? (
+          <div className="text-sm text-muted-foreground">
+            Loading template configuration...
+          </div>
+        ) : null}
+        {library.template_config.loading ? (
+          <div className="text-sm text-muted-foreground">
+            Loading template library...
+          </div>
+        ) : library.template_config.items.length ? (
+          <ScrollArea className="h-56 rounded-lg border border-border/70 bg-background/70">
+            <div className="divide-y divide-border/60">
+              {library.template_config.items.map((item) => (
+                <div
+                  key={item.key}
+                  className="flex items-center justify-between gap-4 px-4 py-3"
+                >
+                  <div>
+                    <p className="text-sm font-medium text-foreground">
+                      {item.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {new Date(item.uploadedAt).toLocaleString()}
+                    </p>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleSelectTemplateConfig(item)}
+                  >
+                    Use template
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        ) : (
+          <div className="text-sm text-muted-foreground">
+            No templates yet. Create one in the admin portal.
+          </div>
+        )}
+        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
+          <span>
+            Selected template:{" "}
+            <span className="text-foreground">
+              {templateConfig?.name ?? "None"}
+            </span>
+          </span>
+          {templateConfig ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setTemplateConfig(null)}
+            >
+              Clear selection
+            </Button>
+          ) : null}
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => loadLibrary("template_config")}
+          >
+            Refresh
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+
   return (
     <main className="relative min-h-screen overflow-hidden">
       <div className="pointer-events-none absolute inset-0">
@@ -426,141 +509,68 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="mt-12 grid gap-6 lg:grid-cols-2">
-          <Tabs
-            value={estimateMode}
-            onValueChange={(value) =>
-              setEstimateMode(value as "workbook" | "estimate")
-            }
-            className="space-y-4"
-          >
-            <TabsList className="grid w-full grid-cols-2">
-              <TabsTrigger value="workbook">Excel Workbook</TabsTrigger>
-              <TabsTrigger value="estimate">Manual Estimate</TabsTrigger>
-            </TabsList>
-            <TabsContent value="workbook">
-              <UploadCard
-                title="Excel Workbook"
-                description="Job info + bid sheet values (.xlsx)."
-                endpoint="workbook"
-                tag="Required"
-                selected={uploads.workbook}
-                allowedContent=".xlsx only"
-                uploadLabel="Drop the workbook here or browse"
-                library={library.workbook}
-                onUpload={(file) => {
-                  setError(null);
-                  setUploads((prev) => ({ ...prev, workbook: file }));
-                  setEstimateMode("workbook");
-                  void loadLibrary("workbook");
-                }}
-                onError={setError}
-                onSelectLibrary={(item) => {
-                  handleLibrarySelect("workbook", item);
-                  setEstimateMode("workbook");
-                }}
-                onRefreshLibrary={() => loadLibrary("workbook")}
-                onDeleteLibrary={() => handleLibraryDeleteAll("workbook")}
-              />
-            </TabsContent>
-            <TabsContent value="estimate">
-              <EstimateBuilderCard
-                values={estimateValues}
-                onValuesChange={setEstimateValues}
-                name={estimateName}
-                onNameChange={setEstimateName}
-                selectedEstimate={selectedEstimate}
-                onSelectEstimate={setSelectedEstimate}
-                onEstimatePayloadChange={setEstimatePayload}
-                onActivate={() => {
-                  setEstimateMode("estimate");
-                  setError(null);
-                }}
-              />
-            </TabsContent>
-          </Tabs>
-          <Card className="border-border/60 bg-card/80 shadow-elevated">
-            <CardHeader>
-              <CardTitle className="text-2xl font-serif">
-                Template Library
-              </CardTitle>
-              <CardDescription>
-                Apply a saved PDF template with its calibrated coordinates.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {templateConfigError ? (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  {templateConfigError}
-                </div>
-              ) : null}
-              {templateConfigLoading ? (
-                <div className="text-sm text-muted-foreground">
-                  Loading template configuration...
-                </div>
-              ) : null}
-              {library.template_config.loading ? (
-                <div className="text-sm text-muted-foreground">
-                  Loading template library...
-                </div>
-              ) : library.template_config.items.length ? (
-                <ScrollArea className="h-56 rounded-lg border border-border/70 bg-background/70">
-                  <div className="divide-y divide-border/60">
-                    {library.template_config.items.map((item) => (
-                      <div
-                        key={item.key}
-                        className="flex items-center justify-between gap-4 px-4 py-3"
-                      >
-                        <div>
-                          <p className="text-sm font-medium text-foreground">
-                            {item.name}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {new Date(item.uploadedAt).toLocaleString()}
-                          </p>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleSelectTemplateConfig(item)}
-                        >
-                          Use template
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                </ScrollArea>
-              ) : (
-                <div className="text-sm text-muted-foreground">
-                  No templates yet. Create one in the admin portal.
-                </div>
-              )}
-              <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-                <span>
-                  Selected template:{" "}
-                  <span className="text-foreground">
-                    {templateConfig?.name ?? "None"}
-                  </span>
-                </span>
-                {templateConfig ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setTemplateConfig(null)}
-                  >
-                    Clear selection
-                  </Button>
-                ) : null}
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => loadLibrary("template_config")}
-                >
-                  Refresh
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+        <section
+          className={cn(
+            "mt-12 grid gap-6",
+            estimateMode === "estimate" ? "" : "lg:grid-cols-2"
+          )}
+        >
+          <div className="space-y-6">
+            <Tabs
+              value={estimateMode}
+              onValueChange={(value) =>
+                setEstimateMode(value as "workbook" | "estimate")
+              }
+              className="space-y-4"
+            >
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="workbook">Excel Workbook</TabsTrigger>
+                <TabsTrigger value="estimate">Manual Estimate</TabsTrigger>
+              </TabsList>
+              <TabsContent value="workbook">
+                <UploadCard
+                  title="Excel Workbook"
+                  description="Job info + bid sheet values (.xlsx)."
+                  endpoint="workbook"
+                  tag="Required"
+                  selected={uploads.workbook}
+                  allowedContent=".xlsx only"
+                  uploadLabel="Drop the workbook here or browse"
+                  library={library.workbook}
+                  onUpload={(file) => {
+                    setError(null);
+                    setUploads((prev) => ({ ...prev, workbook: file }));
+                    setEstimateMode("workbook");
+                    void loadLibrary("workbook");
+                  }}
+                  onError={setError}
+                  onSelectLibrary={(item) => {
+                    handleLibrarySelect("workbook", item);
+                    setEstimateMode("workbook");
+                  }}
+                  onRefreshLibrary={() => loadLibrary("workbook")}
+                  onDeleteLibrary={() => handleLibraryDeleteAll("workbook")}
+                />
+              </TabsContent>
+              <TabsContent value="estimate">
+                <EstimateBuilderCard
+                  values={estimateValues}
+                  onValuesChange={setEstimateValues}
+                  name={estimateName}
+                  onNameChange={setEstimateName}
+                  selectedEstimate={selectedEstimate}
+                  onSelectEstimate={setSelectedEstimate}
+                  onEstimatePayloadChange={setEstimatePayload}
+                  onActivate={() => {
+                    setEstimateMode("estimate");
+                    setError(null);
+                  }}
+                />
+              </TabsContent>
+            </Tabs>
+            {estimateMode === "estimate" ? templateCard : null}
+          </div>
+          {estimateMode === "estimate" ? null : templateCard}
         </section>
 
         <section className="mt-10 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
