@@ -40,6 +40,16 @@ export default function TeamAdminPage() {
 
   const emailAddress = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? "";
   const emailDomain = emailAddress.split("@")[1] ?? "";
+  const clerkName =
+    user?.fullName ||
+    [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
+    user?.username ||
+    emailAddress;
+  const clerkImageUrl =
+    user?.imageUrl ||
+    (user && "profileImageUrl" in user && typeof user.profileImageUrl === "string"
+      ? user.profileImageUrl
+      : "");
   const allowedDomain = (
     process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN ?? "cornerstonecompaniesfl.com"
   )
@@ -100,9 +110,15 @@ export default function TeamAdminPage() {
     );
   });
 
-  const getMemberLabel = (member: (typeof orgMembers)[number] | undefined) => {
-    const fallback = member?.user?.email ?? member?.user?.id ?? "User";
-    return member?.user?.name || fallback;
+  const getMemberProfile = (member?: (typeof orgMembers)[number]) => {
+    const memberId = member?.user?.id ?? "";
+    const isCurrent = memberId && memberId === instantUser?.id;
+    const name = isCurrent
+      ? clerkName
+      : member?.user?.name || member?.user?.email || member?.user?.id || "User";
+    const email = isCurrent ? emailAddress : member?.user?.email;
+    const imageUrl = isCurrent ? clerkImageUrl : member?.user?.imageUrl;
+    return { name, email, imageUrl, memberId };
   };
 
   const getInitials = (label: string) =>
@@ -126,6 +142,17 @@ export default function TeamAdminPage() {
   useEffect(() => {
     setSelectedMemberId(null);
   }, [selectedTeamId]);
+
+  const [teamNameDraft, setTeamNameDraft] = useState("");
+  const [teamNameError, setTeamNameError] = useState<string | null>(null);
+  const [teamNameSaving, setTeamNameSaving] = useState(false);
+  const [teamDeleteError, setTeamDeleteError] = useState<string | null>(null);
+  const [teamDeleteLoading, setTeamDeleteLoading] = useState(false);
+
+  useEffect(() => {
+    setTeamNameDraft(selectedTeam?.name ?? "");
+    setTeamNameError(null);
+  }, [selectedTeam?.id, selectedTeam?.name]);
 
   const handleCreateSubTeam = async () => {
     setTeamError(null);
@@ -166,6 +193,47 @@ export default function TeamAdminPage() {
       setTeamError(message);
     } finally {
       setTeamSaving(false);
+    }
+  };
+
+  const handleRenameTeam = async () => {
+    setTeamNameError(null);
+    if (!selectedTeam) return;
+    const trimmed = teamNameDraft.trim();
+    if (!trimmed) {
+      setTeamNameError("Team name cannot be empty.");
+      return;
+    }
+    if (trimmed === selectedTeam.name) return;
+    setTeamNameSaving(true);
+    try {
+      await db.transact(db.tx.teams[selectedTeam.id].update({ name: trimmed }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setTeamNameError(message);
+    } finally {
+      setTeamNameSaving(false);
+    }
+  };
+
+  const handleDeleteTeam = async () => {
+    setTeamDeleteError(null);
+    if (!selectedTeam) return;
+    if (selectedTeam.isPrimary) {
+      setTeamDeleteError("You cannot delete the org workspace.");
+      return;
+    }
+    if (!window.confirm(`Delete ${selectedTeam.name}? This cannot be undone.`)) {
+      return;
+    }
+    setTeamDeleteLoading(true);
+    try {
+      await db.transact(db.tx.teams[selectedTeam.id].delete());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setTeamDeleteError(message);
+    } finally {
+      setTeamDeleteLoading(false);
     }
   };
 
@@ -465,7 +533,7 @@ export default function TeamAdminPage() {
                       <option value="">Select member</option>
                       {availableOrgMembers.map((member) => (
                         <option key={member.id} value={member.user?.id ?? ""}>
-                          {getMemberLabel(member)}
+                          {getMemberProfile(member).name}
                         </option>
                       ))}
                     </select>
@@ -505,86 +573,144 @@ export default function TeamAdminPage() {
                     {memberActionError}
                   </div>
                 ) : null}
+                {teamNameError ? (
+                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
+                    {teamNameError}
+                  </div>
+                ) : null}
+                {teamDeleteError ? (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {teamDeleteError}
+                  </div>
+                ) : null}
                 {!selectedTeam ? (
                   <div className="text-sm text-muted-foreground">
                     Select a team to see members.
                   </div>
-                ) : selectedTeamMembers.length ? (
-                  <div className="space-y-3">
-                    {selectedTeamMembers.map((membership) => {
-                      const memberId = membership.user?.id;
-                      const isOwner = memberId === selectedTeam.ownerId;
-                      const memberLabel = getMemberLabel(membership);
-                      const initials = getInitials(memberLabel);
-                      const imageUrl = membership.user?.imageUrl ?? "";
-                      return (
-                        <div
-                          key={membership.id}
-                          className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border/60 bg-background/70 px-4 py-3"
-                        >
-                          <div className="flex items-center gap-3">
-                            {imageUrl ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={imageUrl}
-                                alt={memberLabel}
-                                className="h-10 w-10 rounded-full object-cover"
-                                referrerPolicy="no-referrer"
-                              />
-                            ) : (
-                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/15 text-xs font-semibold text-accent-foreground">
-                                {initials}
-                              </div>
-                            )}
-                            <div>
-                              <p className="text-sm font-semibold text-foreground">
-                                {memberLabel}
-                              </p>
-                              <p className="text-xs text-muted-foreground">
-                                {membership.user?.email ?? memberId ?? "Unknown user"}
-                              </p>
-                            </div>
-                          </div>
-                          <div className="flex flex-wrap items-center gap-2">
-                            {isOwner ? (
-                              <Badge variant="outline" className="bg-background/80">
-                                Owner
-                              </Badge>
-                            ) : (
-                              <Badge variant="outline" className="bg-background/80">
-                                Member
-                              </Badge>
-                            )}
-                            {!isOwner ? (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() =>
-                                  handleMakeOwner(membership.id, memberId)
-                                }
-                                disabled={memberActionLoading}
-                              >
-                                Make owner
-                              </Button>
-                            ) : null}
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() =>
-                                handleRemoveMember(membership.id, memberId)
-                              }
-                              disabled={memberActionLoading || isOwner}
-                            >
-                              Remove
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
                 ) : (
-                  <div className="text-sm text-muted-foreground">
-                    No members yet.
+                  <div className="space-y-4">
+                    <div className="rounded-lg border border-border/60 bg-background/70 px-4 py-3">
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Team settings
+                      </p>
+                      <div className="mt-3 flex flex-wrap items-center gap-3">
+                        <input
+                          className="min-w-[220px] flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm"
+                          value={teamNameDraft}
+                          onChange={(event) => setTeamNameDraft(event.target.value)}
+                          disabled={!isOrgOwner}
+                        />
+                        <Button
+                          variant="outline"
+                          onClick={handleRenameTeam}
+                          disabled={
+                            !isOrgOwner ||
+                            teamNameSaving ||
+                            !teamNameDraft.trim() ||
+                            teamNameDraft.trim() === selectedTeam.name
+                          }
+                        >
+                          {teamNameSaving ? "Saving..." : "Save name"}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          onClick={handleDeleteTeam}
+                          disabled={
+                            !isOrgOwner || teamDeleteLoading || selectedTeam.isPrimary
+                          }
+                        >
+                          {teamDeleteLoading ? "Deleting..." : "Delete team"}
+                        </Button>
+                      </div>
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        Only org owners can rename or delete teams.
+                      </p>
+                    </div>
+
+                    {selectedTeamMembers.length ? (
+                      <div className="space-y-3">
+                        {selectedTeamMembers.map((membership) => {
+                          const memberId = membership.user?.id;
+                          const isOwner = memberId === selectedTeam.ownerId;
+                          const profile = getMemberProfile(membership);
+                          const initials = getInitials(profile.name);
+                          const imageUrl = profile.imageUrl ?? "";
+                          return (
+                            <div
+                              key={membership.id}
+                              className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border/60 bg-background/70 px-4 py-3"
+                            >
+                              <div className="flex items-center gap-3">
+                                {imageUrl ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={imageUrl}
+                                    alt={profile.name}
+                                    className="h-10 w-10 rounded-full object-cover"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                ) : (
+                                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/15 text-xs font-semibold text-accent-foreground">
+                                    {initials}
+                                  </div>
+                                )}
+                                <div>
+                                  <p className="text-sm font-semibold text-foreground">
+                                    {profile.name}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {profile.email ?? profile.memberId ?? "Unknown user"}
+                                  </p>
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2">
+                                {isOwner ? (
+                                  <Badge
+                                    variant="outline"
+                                    className="bg-background/80"
+                                  >
+                                    Owner
+                                  </Badge>
+                                ) : (
+                                  <Badge
+                                    variant="outline"
+                                    className="bg-background/80"
+                                  >
+                                    Member
+                                  </Badge>
+                                )}
+                                {!isOwner ? (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleMakeOwner(membership.id, memberId)
+                                    }
+                                    disabled={memberActionLoading || !isOrgOwner}
+                                  >
+                                    Make owner
+                                  </Button>
+                                ) : null}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() =>
+                                    handleRemoveMember(membership.id, memberId)
+                                  }
+                                  disabled={memberActionLoading || isOwner || !isOrgOwner}
+                                >
+                                  Remove
+                                </Button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">
+                        No members yet.
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>
