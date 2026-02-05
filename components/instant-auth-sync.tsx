@@ -128,13 +128,12 @@ export function InstantAuthSync({
       user.username ||
       email;
 
-    const payload: { email?: string; name?: string; imageUrl?: string } = {};
-    if (email) payload.email = email;
+    const payload: { name?: string; imageUrl?: string } = {};
     if (name) payload.name = name;
     if (imageUrl) payload.imageUrl = imageUrl;
 
-    if (!payload.email && !payload.name) return;
-    const signature = `${instantUser.id}:${payload.email ?? ""}:${payload.name ?? ""}:${payload.imageUrl ?? ""}`;
+    if (!payload.name && !payload.imageUrl) return;
+    const signature = `${instantUser.id}:${payload.name ?? ""}:${payload.imageUrl ?? ""}`;
     if (lastProfileSyncRef.current === signature) return;
     lastProfileSyncRef.current = signature;
 

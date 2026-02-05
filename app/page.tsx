@@ -300,13 +300,6 @@ export default function HomePage() {
     setTeamError(null);
 
     if (!teams.length) {
-      if (!isPrimaryOwner) {
-        setTeamError(
-          `Waiting for ${primaryOwnerEmail} to create the org workspace.`
-        );
-        autoProvisionRef.current = false;
-        return;
-      }
       if (knownOrgTeamId && knownOrgTeamDomain === teamDomain) {
         setTeamError(
           "We couldn't load your existing org workspace. Refresh and try again."
@@ -577,12 +570,6 @@ export default function HomePage() {
       setTeamError("Sign in to create a team workspace.");
       return;
     }
-    if (!isPrimaryOwner) {
-      setTeamError(
-        `Only ${primaryOwnerEmail} can create the main org workspace.`
-      );
-      return;
-    }
     if (!teamDomain) {
       setTeamError("Missing an allowed email domain.");
       return;
@@ -603,7 +590,7 @@ export default function HomePage() {
           domain: teamDomain,
           createdAt: now,
           isPrimary: true,
-          ...(isPrimaryOwner ? { ownerId: instantUser.id } : {}),
+          ownerId: instantUser.id,
         }),
         db.tx.memberships[membershipId]
           .create({ role, createdAt: now })
