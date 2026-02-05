@@ -37,7 +37,7 @@ const perms = {
       isOrgTeam: "true in data.ref('team.isPrimary')",
     },
     allow: {
-      view: "isDomainUser && isTeamMember",
+      view: "isDomainUser",
       create: "isDomainUser",
       update: "isDomainUser && isTeamOwner",
       delete: "isDomainUser && (isSelf || isTeamOwner)",

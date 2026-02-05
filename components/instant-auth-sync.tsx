@@ -5,6 +5,7 @@ import { clerkEnabled, useOptionalAuth, useOptionalUser } from "@/lib/clerk";
 import { db, instantAppId } from "@/lib/instant";
 
 const clerkClientName = process.env.NEXT_PUBLIC_CLERK_CLIENT_NAME;
+const clerkTokenTemplate = process.env.NEXT_PUBLIC_CLERK_JWT_TEMPLATE;
 const allowedDomain = (
   process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN ?? "cornerstonecompaniesfl.com"
 )
@@ -21,7 +22,12 @@ export function InstantAuthSync({
   onDomainError,
   onAuthError,
 }: InstantAuthSyncProps) {
-  const { isSignedIn, getToken, signOut: clerkSignOut } = useOptionalAuth();
+  const {
+    isLoaded,
+    isSignedIn,
+    getToken,
+    signOut: clerkSignOut,
+  } = useOptionalAuth();
   const { user } = useOptionalUser();
   const lastAuthErrorRef = useRef<string | null>(null);
 
@@ -41,6 +47,7 @@ export function InstantAuthSync({
       return;
     }
     if (!clerkEnabled) return;
+    if (!isLoaded) return;
 
     const sync = async () => {
       if (!isSignedIn) {
@@ -59,7 +66,9 @@ export function InstantAuthSync({
         return;
       }
 
-      const idToken = await getToken();
+      const idToken = await getToken(
+        clerkTokenTemplate ? { template: clerkTokenTemplate } : undefined
+      );
       if (!idToken) {
         reportAuthError(
           "Clerk token missing. Confirm the session token includes email."
@@ -75,13 +84,29 @@ export function InstantAuthSync({
       } catch (err) {
         console.error("InstantDB auth sync failed", err);
         const message =
-          err instanceof Error ? err.message : "InstantDB auth sync failed.";
-        reportAuthError(message);
+          err instanceof Error
+            ? err.message
+            : typeof err === "string"
+              ? err
+              : "InstantDB auth sync failed.";
+        const details =
+          typeof err === "object" && err !== null
+            ? JSON.stringify(err, Object.getOwnPropertyNames(err))
+            : null;
+        reportAuthError(details && details !== "{}" ? details : message);
       }
     };
 
     void sync();
-  }, [getToken, isSignedIn, clerkSignOut, onDomainError, reportAuthError, user?.id]);
+  }, [
+    getToken,
+    isLoaded,
+    isSignedIn,
+    clerkSignOut,
+    onDomainError,
+    reportAuthError,
+    user?.id,
+  ]);
 
   return null;
 }
