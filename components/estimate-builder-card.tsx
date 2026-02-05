@@ -107,6 +107,7 @@ export function EstimateBuilderCard({
     onEstimatePayloadChange?.({
       version: 2,
       name: name.trim(),
+      values: computed.pdfValues,
       info: draft.info,
       products: draft.products,
       bucking: draft.bucking,
@@ -487,75 +488,77 @@ export function EstimateBuilderCard({
               />
             </div>
           </div>
-          <div className="rounded-lg border border-border/70 bg-background/70">
-            <div className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-2 border-b border-border/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
-              <span>Product</span>
-              <span>Price</span>
-              <span>Markup</span>
-              <span>Total</span>
-              <span></span>
-            </div>
-            <div className="divide-y divide-border/60">
-              {draft.products.map((item, index) => {
-                const price = toNumber(item.price);
-                const markup = item.markup.trim()
-                  ? toNumber(item.markup)
-                  : toNumber(draft.calculator.product_markup_default);
-                const total = roundUp(price * (1 + markup));
-                return (
-                  <div
-                    key={item.id}
-                    className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-2 px-3 py-2 text-sm"
-                  >
-                    <input
-                      className="rounded-md border border-border bg-background px-2 py-1 text-sm"
-                      value={item.name}
-                      onChange={(event) =>
-                        handleProductChange(index, { name: event.target.value })
-                      }
-                      placeholder="Product name"
-                      disabled={Boolean(legacyValues)}
-                    />
-                    <input
-                      className="rounded-md border border-border bg-background px-2 py-1 text-sm"
-                      value={item.price}
-                      onChange={(event) =>
-                        handleProductChange(index, { price: event.target.value })
-                      }
-                      inputMode="decimal"
-                      placeholder="0"
-                      disabled={Boolean(legacyValues)}
-                    />
-                    <input
-                      className="rounded-md border border-border bg-background px-2 py-1 text-sm"
-                      value={item.markup}
-                      onChange={(event) =>
-                        handleProductChange(index, { markup: event.target.value })
-                      }
-                      inputMode="decimal"
-                      placeholder={draft.calculator.product_markup_default}
-                      disabled={Boolean(legacyValues)}
-                    />
-                    <div className="self-center text-sm text-muted-foreground">
-                      {Number.isFinite(total) ? total.toLocaleString("en-US") : "-"}
-                    </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        const next = draft.products.filter((_, idx) => idx !== index);
-                        handleDraftChange({
-                          ...draft,
-                          products: next.length ? next : DEFAULT_DRAFT.products,
-                        });
-                      }}
-                      disabled={draft.products.length === 1 || Boolean(legacyValues)}
+          <div className="rounded-lg border border-border/70 bg-background/70 overflow-x-auto">
+            <div className="min-w-[640px]">
+              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-2 border-b border-border/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
+                <span>Product</span>
+                <span>Price</span>
+                <span>Markup</span>
+                <span>Total</span>
+                <span></span>
+              </div>
+              <div className="divide-y divide-border/60">
+                {draft.products.map((item, index) => {
+                  const price = toNumber(item.price);
+                  const markup = item.markup.trim()
+                    ? toNumber(item.markup)
+                    : toNumber(draft.calculator.product_markup_default);
+                  const total = roundUp(price * (1 + markup));
+                  return (
+                    <div
+                      key={item.id}
+                      className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-2 px-3 py-2 text-sm"
                     >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                );
-              })}
+                      <input
+                        className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+                        value={item.name}
+                        onChange={(event) =>
+                          handleProductChange(index, { name: event.target.value })
+                        }
+                        placeholder="Product name"
+                        disabled={Boolean(legacyValues)}
+                      />
+                      <input
+                        className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+                        value={item.price}
+                        onChange={(event) =>
+                          handleProductChange(index, { price: event.target.value })
+                        }
+                        inputMode="decimal"
+                        placeholder="0"
+                        disabled={Boolean(legacyValues)}
+                      />
+                      <input
+                        className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+                        value={item.markup}
+                        onChange={(event) =>
+                          handleProductChange(index, { markup: event.target.value })
+                        }
+                        inputMode="decimal"
+                        placeholder={draft.calculator.product_markup_default}
+                        disabled={Boolean(legacyValues)}
+                      />
+                      <div className="self-center text-sm text-muted-foreground">
+                        {Number.isFinite(total) ? total.toLocaleString("en-US") : "-"}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          const next = draft.products.filter((_, idx) => idx !== index);
+                          handleDraftChange({
+                            ...draft,
+                            products: next.length ? next : DEFAULT_DRAFT.products,
+                          });
+                        }}
+                        disabled={draft.products.length === 1 || Boolean(legacyValues)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
           <div>
@@ -645,102 +648,104 @@ export function EstimateBuilderCard({
               />
             </div>
           </div>
-          <div className="rounded-lg border border-border/70 bg-background/70">
-            <div className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_auto] gap-2 border-b border-border/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
-              <span>Unit Type</span>
-              <span>Qty</span>
-              <span>SqFt</span>
-              <span>Replacement</span>
-              <span>Clerestory</span>
-              <span>Lineal Ft</span>
-              <span></span>
-            </div>
-            <div className="divide-y divide-border/60">
-              {draft.bucking.map((item, index) => {
-                const qty = toNumber(item.qty);
-                const sqft = toNumber(item.sqft);
-                const lineal = qty
-                  ? Math.abs(Math.sqrt((sqft / qty) / 6) * 11) * qty
-                  : 0;
-                return (
-                  <div
-                    key={item.id}
-                    className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_auto] gap-2 px-3 py-2 text-sm"
-                  >
-                    <select
-                      className="rounded-md border border-border bg-background px-2 py-1 text-sm"
-                      value={item.unit_type}
-                      onChange={(event) =>
-                        handleBuckingChange(index, { unit_type: event.target.value })
-                      }
-                      disabled={Boolean(legacyValues)}
+          <div className="rounded-lg border border-border/70 bg-background/70 overflow-x-auto">
+            <div className="min-w-[760px]">
+              <div className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_auto] gap-2 border-b border-border/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
+                <span>Unit Type</span>
+                <span>Qty</span>
+                <span>SqFt</span>
+                <span>Replacement</span>
+                <span>Clerestory</span>
+                <span>Lineal Ft</span>
+                <span></span>
+              </div>
+              <div className="divide-y divide-border/60">
+                {draft.bucking.map((item, index) => {
+                  const qty = toNumber(item.qty);
+                  const sqft = toNumber(item.sqft);
+                  const lineal = qty
+                    ? Math.abs(Math.sqrt((sqft / qty) / 6) * 11) * qty
+                    : 0;
+                  return (
+                    <div
+                      key={item.id}
+                      className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_auto] gap-2 px-3 py-2 text-sm"
                     >
-                      {PANEL_TYPES.map((panel) => (
-                        <option key={panel.id} value={panel.id}>
-                          {panel.label}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      className="rounded-md border border-border bg-background px-2 py-1 text-sm"
-                      value={item.qty}
-                      onChange={(event) =>
-                        handleBuckingChange(index, { qty: event.target.value })
-                      }
-                      inputMode="decimal"
-                      placeholder="0"
-                      disabled={Boolean(legacyValues)}
-                    />
-                    <input
-                      className="rounded-md border border-border bg-background px-2 py-1 text-sm"
-                      value={item.sqft}
-                      onChange={(event) =>
-                        handleBuckingChange(index, { sqft: event.target.value })
-                      }
-                      inputMode="decimal"
-                      placeholder="0"
-                      disabled={Boolean(legacyValues)}
-                    />
-                    <input
-                      className="rounded-md border border-border bg-background px-2 py-1 text-sm"
-                      value={item.replacement_qty}
-                      onChange={(event) =>
-                        handleBuckingChange(index, { replacement_qty: event.target.value })
-                      }
-                      inputMode="decimal"
-                      placeholder="0"
-                      disabled={Boolean(legacyValues)}
-                    />
-                    <input
-                      className="rounded-md border border-border bg-background px-2 py-1 text-sm"
-                      value={item.clerestory_qty}
-                      onChange={(event) =>
-                        handleBuckingChange(index, { clerestory_qty: event.target.value })
-                      }
-                      inputMode="decimal"
-                      placeholder="0"
-                      disabled={Boolean(legacyValues)}
-                    />
-                    <div className="self-center text-sm text-muted-foreground">
-                      {lineal ? lineal.toFixed(2) : "-"}
+                      <select
+                        className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+                        value={item.unit_type}
+                        onChange={(event) =>
+                          handleBuckingChange(index, { unit_type: event.target.value })
+                        }
+                        disabled={Boolean(legacyValues)}
+                      >
+                        {PANEL_TYPES.map((panel) => (
+                          <option key={panel.id} value={panel.id}>
+                            {panel.label}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+                        value={item.qty}
+                        onChange={(event) =>
+                          handleBuckingChange(index, { qty: event.target.value })
+                        }
+                        inputMode="decimal"
+                        placeholder="0"
+                        disabled={Boolean(legacyValues)}
+                      />
+                      <input
+                        className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+                        value={item.sqft}
+                        onChange={(event) =>
+                          handleBuckingChange(index, { sqft: event.target.value })
+                        }
+                        inputMode="decimal"
+                        placeholder="0"
+                        disabled={Boolean(legacyValues)}
+                      />
+                      <input
+                        className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+                        value={item.replacement_qty}
+                        onChange={(event) =>
+                          handleBuckingChange(index, { replacement_qty: event.target.value })
+                        }
+                        inputMode="decimal"
+                        placeholder="0"
+                        disabled={Boolean(legacyValues)}
+                      />
+                      <input
+                        className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+                        value={item.clerestory_qty}
+                        onChange={(event) =>
+                          handleBuckingChange(index, { clerestory_qty: event.target.value })
+                        }
+                        inputMode="decimal"
+                        placeholder="0"
+                        disabled={Boolean(legacyValues)}
+                      />
+                      <div className="self-center text-sm text-muted-foreground">
+                        {lineal ? lineal.toFixed(2) : "-"}
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => {
+                          const next = draft.bucking.filter((_, idx) => idx !== index);
+                          handleDraftChange({
+                            ...draft,
+                            bucking: next.length ? next : DEFAULT_DRAFT.bucking,
+                          });
+                        }}
+                        disabled={draft.bucking.length === 1 || Boolean(legacyValues)}
+                      >
+                        <X className="h-4 w-4" />
+                      </Button>
                     </div>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => {
-                        const next = draft.bucking.filter((_, idx) => idx !== index);
-                        handleDraftChange({
-                          ...draft,
-                          bucking: next.length ? next : DEFAULT_DRAFT.bucking,
-                        });
-                      }}
-                      disabled={draft.bucking.length === 1 || Boolean(legacyValues)}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                );
-              })}
+                  );
+                })}
+              </div>
             </div>
           </div>
           <div>
@@ -824,37 +829,39 @@ export function EstimateBuilderCard({
             </div>
           </div>
 
-          <div className="rounded-lg border border-border/70 bg-background/70">
-            <div className="grid grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr] gap-2 border-b border-border/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
-              <span>Panel Type</span>
-              <span>Total Qty</span>
-              <span>Clerestory</span>
-              <span>Replacement</span>
-            </div>
-            <ScrollArea className="h-44">
-              <div className="divide-y divide-border/60">
-                {PANEL_TYPES.map((panel) => {
-                  const counts = computed.panelCounts[panel.id];
-                  return (
-                    <div
-                      key={panel.id}
-                      className="grid grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr] gap-2 px-3 py-2 text-sm"
-                    >
-                      <span>{panel.label}</span>
-                      <span className="text-muted-foreground">
-                        {counts.total_qty}
-                      </span>
-                      <span className="text-muted-foreground">
-                        {counts.clerestory_qty}
-                      </span>
-                      <span className="text-muted-foreground">
-                        {counts.replacement_qty}
-                      </span>
-                    </div>
-                  );
-                })}
+          <div className="rounded-lg border border-border/70 bg-background/70 overflow-x-auto">
+            <div className="min-w-[520px]">
+              <div className="grid grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr] gap-2 border-b border-border/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
+                <span>Panel Type</span>
+                <span>Total Qty</span>
+                <span>Clerestory</span>
+                <span>Replacement</span>
               </div>
-            </ScrollArea>
+              <div className="max-h-44 overflow-y-auto">
+                <div className="divide-y divide-border/60">
+                  {PANEL_TYPES.map((panel) => {
+                    const counts = computed.panelCounts[panel.id];
+                    return (
+                      <div
+                        key={panel.id}
+                        className="grid grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr] gap-2 px-3 py-2 text-sm"
+                      >
+                        <span>{panel.label}</span>
+                        <span className="text-muted-foreground">
+                          {counts.total_qty}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {counts.clerestory_qty}
+                        </span>
+                        <span className="text-muted-foreground">
+                          {counts.replacement_qty}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
           </div>
           <div className="text-xs text-muted-foreground">
             Total installation value: {computed.breakdown.total_install_value.toFixed(2)}
