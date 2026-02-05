@@ -32,7 +32,7 @@ const perms = {
     },
     allow: {
       view: "isDomainUser || isMember",
-      create: "isPrimaryOwner",
+      create: "isPrimaryOwner || (isDomainUser && data.isPrimary == true)",
       update: "isOwner || isPrimaryOwner",
       delete: "(isOwner || isPrimaryOwner) && data.isPrimary != true",
     },

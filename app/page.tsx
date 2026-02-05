@@ -590,7 +590,7 @@ export default function HomePage() {
           domain: teamDomain,
           createdAt: now,
           isPrimary: true,
-          ownerId: instantUser.id,
+          ...(isPrimaryOwner ? { ownerId: instantUser.id } : {}),
         }),
         db.tx.memberships[membershipId]
           .create({ role, createdAt: now })
