@@ -106,6 +106,10 @@ export default function HomePage() {
   )
     .trim()
     .toLowerCase();
+  const preferredOrgTeamName = (
+    process.env.NEXT_PUBLIC_ORG_TEAM_NAME ?? "CORNERSTONE"
+  ).trim();
+  const normalizedOrgTeamName = preferredOrgTeamName.toLowerCase();
   const teamDomain = (allowedDomain || emailDomain || "").trim();
   const teamLookupDomain = teamDomain || "__none__";
 
@@ -133,6 +137,13 @@ export default function HomePage() {
     if (!teams.length) return null;
     const rootTeams = teams.filter((team) => !team.parentTeamId);
     const candidates = rootTeams.length ? rootTeams : teams;
+    const namedTeam = normalizedOrgTeamName
+      ? candidates.find(
+          (team) =>
+            team.name?.trim().toLowerCase() === normalizedOrgTeamName
+        )
+      : null;
+    if (namedTeam) return namedTeam;
     const primary = candidates.find((team) => team.isPrimary);
     if (primary) return primary;
     return candidates.reduce((oldest, team) => {
@@ -162,7 +173,11 @@ export default function HomePage() {
     (membership) => membership.user?.id === instantUser?.id
   );
   const teamReady = Boolean(orgTeam && orgMembership);
-  const isOrgOwner = isPrimaryOwner;
+  const isOrgOwner = Boolean(
+    isPrimaryOwner ||
+      (orgTeam?.ownerId && orgTeam.ownerId === instantUser?.id) ||
+      orgMembership?.role === "owner"
+  );
   const appLocked = clerkEnabled && (!authLoaded || !isSignedIn);
   const autoProvisionRef = useRef(false);
   const orgSetupRef = useRef<string | null>(null);
@@ -262,14 +277,16 @@ export default function HomePage() {
     if (!isPrimaryOwner) return;
     if (!orgMembership) return;
     const needsPrimary = !orgTeam.isPrimary;
+    const needsRoot = Boolean(orgTeam.parentTeamId);
     const needsOwner = orgTeam.ownerId !== instantUser.id;
     const needsRole = orgMembership.role !== "owner";
-    if (!needsPrimary && !needsOwner && !needsRole) return;
+    if (!needsPrimary && !needsRoot && !needsOwner && !needsRole) return;
     if (orgSetupRef.current === orgTeam.id) return;
     orgSetupRef.current = orgTeam.id;
     const updates = [
       db.tx.teams[orgTeam.id].update({
         ...(needsPrimary ? { isPrimary: true } : {}),
+        ...(needsRoot ? { parentTeamId: null } : {}),
         ...(needsOwner ? { ownerId: instantUser.id } : {}),
       }),
       ...(needsRole
@@ -577,8 +594,9 @@ export default function HomePage() {
     const now = Date.now();
     const teamId = id();
     const membershipId = id();
-    const trimmedName = teamName.trim() || `${teamDomain} Team`;
-    const role = isPrimaryOwner ? "owner" : "member";
+    const trimmedName =
+      preferredOrgTeamName || teamName.trim() || `${teamDomain} Team`;
+    const role = "owner";
 
     setTeamSaving(true);
     setTeamSetupPending(true);
@@ -590,7 +608,7 @@ export default function HomePage() {
           domain: teamDomain,
           createdAt: now,
           isPrimary: true,
-          ...(isPrimaryOwner ? { ownerId: instantUser.id } : {}),
+          ownerId: instantUser.id,
         }),
         db.tx.memberships[membershipId]
           .create({ role, createdAt: now })

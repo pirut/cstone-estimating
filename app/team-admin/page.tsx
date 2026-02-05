@@ -64,6 +64,10 @@ export default function TeamAdminPage() {
   )
     .trim()
     .toLowerCase();
+  const preferredOrgTeamName = (
+    process.env.NEXT_PUBLIC_ORG_TEAM_NAME ?? "CORNERSTONE"
+  ).trim();
+  const normalizedOrgTeamName = preferredOrgTeamName.toLowerCase();
   const teamDomain = (allowedDomain || emailDomain || "").trim();
   const teamLookupDomain = teamDomain || "__none__";
 
@@ -86,6 +90,13 @@ export default function TeamAdminPage() {
     if (!teams.length) return null;
     const rootTeams = teams.filter((team) => !team.parentTeamId);
     const candidates = rootTeams.length ? rootTeams : teams;
+    const namedTeam = normalizedOrgTeamName
+      ? candidates.find(
+          (team) =>
+            team.name?.trim().toLowerCase() === normalizedOrgTeamName
+        )
+      : null;
+    if (namedTeam) return namedTeam;
     const primary = candidates.find((team) => team.isPrimary);
     if (primary) return primary;
     return candidates.reduce((oldest, team) => {
@@ -99,7 +110,11 @@ export default function TeamAdminPage() {
   const orgMembership = orgTeam?.memberships?.find(
     (membership) => membership.user?.id === instantUser?.id
   );
-  const isOrgOwner = isPrimaryOwner;
+  const isOrgOwner = Boolean(
+    isPrimaryOwner ||
+      (orgTeam?.ownerId && orgTeam.ownerId === instantUser?.id) ||
+      orgMembership?.role === "owner"
+  );
 
   const selectedTeam = useMemo(
     () => teams.find((team) => team.id === selectedTeamId) ?? null,
@@ -170,6 +185,10 @@ export default function TeamAdminPage() {
     }
     if (!instantUser || !orgTeam) {
       setTeamError("Sign in with an org owner account.");
+      return;
+    }
+    if (!isOrgOwner) {
+      setTeamError("Only org owners can create sub teams.");
       return;
     }
     if (!subTeamName.trim()) {
@@ -287,18 +306,16 @@ export default function TeamAdminPage() {
   const handleMakeOwner = async (membershipId?: string, memberId?: string) => {
     setMemberActionError(null);
     if (!membershipId || !memberId || !selectedTeam) return;
-    const updates = [
-      db.tx.teams[selectedTeam.id].update({ ownerId: memberId }),
-      db.tx.memberships[membershipId].update({ role: "owner" }),
-    ];
     const previousOwner = selectedTeam.memberships?.find(
       (membership) => membership.user?.id === selectedTeam.ownerId
     );
-    if (previousOwner && previousOwner.id !== membershipId) {
-      updates.push(
-        db.tx.memberships[previousOwner.id].update({ role: "member" })
-      );
-    }
+    const updates = [
+      db.tx.memberships[membershipId].update({ role: "owner" }),
+      ...(previousOwner && previousOwner.id !== membershipId
+        ? [db.tx.memberships[previousOwner.id].update({ role: "member" })]
+        : []),
+      db.tx.teams[selectedTeam.id].update({ ownerId: memberId }),
+    ];
     setMemberActionLoading(true);
     try {
       await db.transact(updates);
