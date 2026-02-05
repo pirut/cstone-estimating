@@ -100,6 +100,19 @@ export default function TeamAdminPage() {
     );
   });
 
+  const getMemberLabel = (member: (typeof orgMembers)[number] | undefined) => {
+    const fallback = member?.user?.email ?? member?.user?.id ?? "User";
+    return member?.user?.name || fallback;
+  };
+
+  const getInitials = (label: string) =>
+    label
+      .split(" ")
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase())
+      .join("") || "U";
+
   useEffect(() => {
     if (!teams.length) {
       setSelectedTeamId(null);
@@ -452,9 +465,7 @@ export default function TeamAdminPage() {
                       <option value="">Select member</option>
                       {availableOrgMembers.map((member) => (
                         <option key={member.id} value={member.user?.id ?? ""}>
-                          {member.user?.name ??
-                            member.user?.email ??
-                            "Unnamed user"}
+                          {getMemberLabel(member)}
                         </option>
                       ))}
                     </select>
@@ -503,20 +514,36 @@ export default function TeamAdminPage() {
                     {selectedTeamMembers.map((membership) => {
                       const memberId = membership.user?.id;
                       const isOwner = memberId === selectedTeam.ownerId;
+                      const memberLabel = getMemberLabel(membership);
+                      const initials = getInitials(memberLabel);
+                      const imageUrl = membership.user?.imageUrl ?? "";
                       return (
                         <div
                           key={membership.id}
                           className="flex flex-wrap items-center justify-between gap-4 rounded-lg border border-border/60 bg-background/70 px-4 py-3"
                         >
-                          <div>
-                            <p className="text-sm font-semibold text-foreground">
-                              {membership.user?.name ??
-                                membership.user?.email ??
-                                "Unnamed user"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {membership.user?.email ?? memberId ?? "Unknown user"}
-                            </p>
+                          <div className="flex items-center gap-3">
+                            {imageUrl ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={imageUrl}
+                                alt={memberLabel}
+                                className="h-10 w-10 rounded-full object-cover"
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : (
+                              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/15 text-xs font-semibold text-accent-foreground">
+                                {initials}
+                              </div>
+                            )}
+                            <div>
+                              <p className="text-sm font-semibold text-foreground">
+                                {memberLabel}
+                              </p>
+                              <p className="text-xs text-muted-foreground">
+                                {membership.user?.email ?? memberId ?? "Unknown user"}
+                              </p>
+                            </div>
                           </div>
                           <div className="flex flex-wrap items-center gap-2">
                             {isOwner ? (

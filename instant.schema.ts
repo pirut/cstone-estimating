@@ -5,6 +5,7 @@ const _schema = i.schema({
     $users: i.entity({
       email: i.string().unique().indexed().optional(),
       name: i.string().optional(),
+      imageUrl: i.string().optional(),
     }),
     teams: i.entity({
       name: i.string(),

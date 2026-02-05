@@ -117,18 +117,24 @@ export function InstantAuthSync({
 
     const email =
       user.primaryEmailAddress?.emailAddress?.trim().toLowerCase() ?? "";
+    const imageUrl =
+      user.imageUrl ||
+      (typeof (user as { profileImageUrl?: string }).profileImageUrl === "string"
+        ? (user as { profileImageUrl?: string }).profileImageUrl
+        : "");
     const name =
       user.fullName ||
       [user.firstName, user.lastName].filter(Boolean).join(" ") ||
       user.username ||
       email;
 
-    const payload: { email?: string; name?: string } = {};
+    const payload: { email?: string; name?: string; imageUrl?: string } = {};
     if (email) payload.email = email;
     if (name) payload.name = name;
+    if (imageUrl) payload.imageUrl = imageUrl;
 
     if (!payload.email && !payload.name) return;
-    const signature = `${instantUser.id}:${payload.email ?? ""}:${payload.name ?? ""}`;
+    const signature = `${instantUser.id}:${payload.email ?? ""}:${payload.name ?? ""}:${payload.imageUrl ?? ""}`;
     if (lastProfileSyncRef.current === signature) return;
     lastProfileSyncRef.current = signature;
 

@@ -76,6 +76,8 @@ export default function HomePage() {
   const [teamSetupAction, setTeamSetupAction] = useState<
     "idle" | "creating" | "joining"
   >("idle");
+  const [knownOrgTeamId, setKnownOrgTeamId] = useState<string | null>(null);
+  const [knownOrgTeamDomain, setKnownOrgTeamDomain] = useState<string | null>(null);
   const [editingEstimateId, setEditingEstimateId] = useState<string | null>(null);
   const [loadedEstimatePayload, setLoadedEstimatePayload] = useState<Record<
     string,
@@ -111,7 +113,11 @@ export default function HomePage() {
       }
     : { teams: { $: { where: { domain: "__none__" } } } };
 
-  const { data: teamData } = db.useQuery(teamQuery);
+  const {
+    data: teamData,
+    error: teamQueryError,
+    isLoading: teamLoading,
+  } = db.useQuery(teamQuery);
 
   const teams = teamData?.teams ?? [];
   const orgTeam = useMemo(() => {
@@ -230,6 +236,21 @@ export default function HomePage() {
   }, [estimatePayload]);
 
   useEffect(() => {
+    if (typeof window === "undefined") return;
+    setKnownOrgTeamId(localStorage.getItem("cstone-org-team-id"));
+    setKnownOrgTeamDomain(localStorage.getItem("cstone-org-team-domain"));
+  }, []);
+
+  useEffect(() => {
+    if (!orgTeam?.id) return;
+    if (typeof window === "undefined") return;
+    localStorage.setItem("cstone-org-team-id", orgTeam.id);
+    localStorage.setItem("cstone-org-team-domain", orgTeam.domain ?? teamDomain);
+    setKnownOrgTeamId(orgTeam.id);
+    setKnownOrgTeamDomain(orgTeam.domain ?? teamDomain);
+  }, [orgTeam?.id, orgTeam?.domain, teamDomain]);
+
+  useEffect(() => {
     if (!orgTeam) return;
     if (!orgMembership || orgMembership.role !== "owner") return;
     if (!instantUser?.id) return;
@@ -257,6 +278,7 @@ export default function HomePage() {
     if (instantLoading) return;
     if (teamReady) return;
     if (!teamData) return;
+    if (teamLoading || teamQueryError) return;
     if (teamSaving || teamSetupAction !== "idle" || teamSetupPending) return;
     if (autoProvisionRef.current) return;
     if (!teamDomain) {
@@ -268,6 +290,13 @@ export default function HomePage() {
     setTeamError(null);
 
     if (!teams.length) {
+      if (knownOrgTeamId && knownOrgTeamDomain === teamDomain) {
+        setTeamError(
+          "We couldn't load your existing org workspace. Refresh and try again."
+        );
+        autoProvisionRef.current = false;
+        return;
+      }
       void handleCreateTeam().finally(() => {
         autoProvisionRef.current = false;
       });
@@ -292,12 +321,25 @@ export default function HomePage() {
     instantUser,
     isSignedIn,
     teamData,
+    teamLoading,
+    teamQueryError,
     teamDomain,
     teamReady,
     teamSaving,
     teamSetupAction,
     teamSetupPending,
+    knownOrgTeamId,
+    knownOrgTeamDomain,
   ]);
+
+  useEffect(() => {
+    if (!teamQueryError) return;
+    const message =
+      teamQueryError instanceof Error
+        ? teamQueryError.message
+        : "Unable to load team data.";
+    setTeamError(message);
+  }, [teamQueryError]);
 
   useEffect(() => {
     if (!teamSetupPending) return;
