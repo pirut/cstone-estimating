@@ -17,7 +17,7 @@ const perms = {
     },
     allow: {
       view: "isDomainUser || isMember",
-      create: "isDomainUser && isOwner",
+      create: "isDomainUser && (data.isPrimary == true || auth.id == data.ownerId)",
       update: "isMember",
       delete: "isOwner",
     },
@@ -28,10 +28,11 @@ const perms = {
       isSelf: "auth.id in data.ref('user.id')",
       isTeamMember: "auth.id in data.ref('team.memberships.user.id')",
       isTeamOwner: "auth.id in data.ref('team.ownerId')",
+      isOrgTeam: "true in data.ref('team.isPrimary')",
     },
     allow: {
       view: "isDomainUser && isTeamMember",
-      create: "isDomainUser && (isSelf || isTeamOwner)",
+      create: "isDomainUser && (isSelf || isTeamOwner || isOrgTeam)",
       update: "isDomainUser && isTeamOwner",
       delete: "isDomainUser && (isSelf || isTeamOwner)",
     },
