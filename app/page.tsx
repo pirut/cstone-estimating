@@ -72,6 +72,7 @@ export default function HomePage() {
   const [teamError, setTeamError] = useState<string | null>(null);
   const [teamSaving, setTeamSaving] = useState(false);
   const [teamSetupPending, setTeamSetupPending] = useState(false);
+  const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
   const [teamSetupAction, setTeamSetupAction] = useState<
     "idle" | "creating" | "joining"
   >("idle");
@@ -113,27 +114,50 @@ export default function HomePage() {
   const { data: teamData } = db.useQuery(teamQuery);
 
   const teams = teamData?.teams ?? [];
-  const teamWithMembership =
-    instantUser?.id != null
-      ? teams.find((team) =>
-          team.memberships?.some(
-            (membership) => membership.user?.id === instantUser.id
-          )
-        ) ?? null
-      : null;
-  const currentTeam = teamWithMembership ?? teams[0] ?? null;
-  const teamMembership = currentTeam?.memberships?.find(
+  const orgTeam = useMemo(() => {
+    if (!teams.length) return null;
+    const primary = teams.find((team) => team.isPrimary);
+    if (primary) return primary;
+    return teams.reduce((oldest, team) => {
+      if (!oldest) return team;
+      const oldestTime = oldest.createdAt ?? 0;
+      const teamTime = team.createdAt ?? 0;
+      return teamTime < oldestTime ? team : oldest;
+    }, null as (typeof teams)[number] | null);
+  }, [teams]);
+  const memberTeams = useMemo(() => {
+    if (!instantUser?.id) return [];
+    return teams.filter((team) =>
+      team.memberships?.some((membership) => membership.user?.id === instantUser.id)
+    );
+  }, [teams, instantUser?.id]);
+  const orgMembership = orgTeam?.memberships?.find(
     (membership) => membership.user?.id === instantUser?.id
   );
-  const teamReady = Boolean(currentTeam && teamMembership);
+  const activeTeam = useMemo(() => {
+    if (!memberTeams.length) return null;
+    const selected = memberTeams.find((team) => team.id === activeTeamId);
+    if (selected) return selected;
+    const orgMatch = memberTeams.find((team) => team.id === orgTeam?.id);
+    return orgMatch ?? memberTeams[0] ?? null;
+  }, [activeTeamId, memberTeams, orgTeam?.id]);
+  const activeMembership = activeTeam?.memberships?.find(
+    (membership) => membership.user?.id === instantUser?.id
+  );
+  const teamReady = Boolean(orgTeam && orgMembership);
+  const isOrgOwner = Boolean(
+    orgMembership &&
+      (orgMembership.role === "owner" || orgTeam?.ownerId === instantUser?.id)
+  );
   const appLocked = clerkEnabled && (!authLoaded || !isSignedIn);
   const autoProvisionRef = useRef(false);
+  const orgSetupRef = useRef<string | null>(null);
   const teamEstimates = useMemo(() => {
-    const list = currentTeam?.estimates ?? [];
+    const list = activeTeam?.estimates ?? [];
     return [...list].sort(
       (a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)
     );
-  }, [currentTeam?.estimates]);
+  }, [activeTeam?.estimates]);
 
   const hasEstimateValues = useMemo(() => {
     if (estimatePayload?.values) {
@@ -180,10 +204,49 @@ export default function HomePage() {
   }, [teamDomain, teamName]);
 
   useEffect(() => {
+    if (!memberTeams.length) {
+      if (activeTeamId) {
+        setActiveTeamId(null);
+      }
+      return;
+    }
+    if (!activeTeamId || !memberTeams.some((team) => team.id === activeTeamId)) {
+      const nextId =
+        memberTeams.find((team) => team.id === orgTeam?.id)?.id ??
+        memberTeams[0]?.id ??
+        null;
+      if (nextId) {
+        setActiveTeamId(nextId);
+      }
+    }
+  }, [activeTeamId, memberTeams, orgTeam?.id]);
+
+  useEffect(() => {
     if (!estimatePayload) {
       setEditingEstimateId(null);
     }
   }, [estimatePayload]);
+
+  useEffect(() => {
+    if (!orgTeam) return;
+    if (!orgMembership || orgMembership.role !== "owner") return;
+    if (!instantUser?.id) return;
+    const needsPrimary = !orgTeam.isPrimary;
+    const needsOwner = !orgTeam.ownerId;
+    if (!needsPrimary && !needsOwner) return;
+    if (orgSetupRef.current === orgTeam.id) return;
+    orgSetupRef.current = orgTeam.id;
+    void db
+      .transact(
+        db.tx.teams[orgTeam.id].update({
+          ...(needsPrimary ? { isPrimary: true } : {}),
+          ...(needsOwner ? { ownerId: instantUser.id } : {}),
+        })
+      )
+      .catch(() => {
+        orgSetupRef.current = null;
+      });
+  }, [db, instantUser?.id, orgMembership, orgTeam]);
 
   useEffect(() => {
     if (!instantAppId) return;
@@ -202,14 +265,14 @@ export default function HomePage() {
     autoProvisionRef.current = true;
     setTeamError(null);
 
-    if (!currentTeam) {
+    if (!teams.length) {
       void handleCreateTeam().finally(() => {
         autoProvisionRef.current = false;
       });
       return;
     }
 
-    if (!teamMembership) {
+    if (orgTeam && !orgMembership) {
       void handleJoinTeam().finally(() => {
         autoProvisionRef.current = false;
       });
@@ -219,14 +282,15 @@ export default function HomePage() {
     autoProvisionRef.current = false;
   }, [
     authLoaded,
-    currentTeam,
+    orgMembership,
+    orgTeam,
+    teams.length,
     instantAppId,
     instantLoading,
     instantUser,
     isSignedIn,
     teamData,
     teamDomain,
-    teamMembership,
     teamReady,
     teamSaving,
     teamSetupAction,
@@ -391,8 +455,8 @@ export default function HomePage() {
       setError("Sign in to save estimates.");
       return;
     }
-    if (!currentTeam || !teamMembership) {
-      setError("Create or join a team to save estimates.");
+    if (!activeTeam || !activeMembership) {
+      setError("Select a team to save estimates.");
       return;
     }
     if (!estimatePayload && !Object.keys(estimateValues).length) {
@@ -417,7 +481,7 @@ export default function HomePage() {
             payload,
             totals,
           })
-          .link({ team: currentTeam.id, owner: instantUser.id })
+          .link({ team: activeTeam.id, owner: instantUser.id })
       );
       return;
     }
@@ -435,7 +499,7 @@ export default function HomePage() {
           payload,
           totals,
         })
-        .link({ team: currentTeam.id, owner: instantUser.id })
+        .link({ team: activeTeam.id, owner: instantUser.id })
     );
     setEditingEstimateId(estimateId);
   };
@@ -468,6 +532,8 @@ export default function HomePage() {
           name: trimmedName,
           domain: teamDomain,
           createdAt: now,
+          isPrimary: true,
+          ownerId: instantUser.id,
         }),
         db.tx.memberships[membershipId]
           .create({ role: "owner", createdAt: now })
@@ -487,7 +553,7 @@ export default function HomePage() {
       setTeamError("InstantDB is not configured yet.");
       return;
     }
-    if (!instantUser || !currentTeam) return;
+    if (!instantUser || !orgTeam) return;
     const now = Date.now();
     const membershipId = id();
     setTeamSaving(true);
@@ -497,7 +563,7 @@ export default function HomePage() {
       await db.transact(
         db.tx.memberships[membershipId]
           .create({ role: "member", createdAt: now })
-          .link({ team: currentTeam.id, user: instantUser.id })
+          .link({ team: orgTeam.id, user: instantUser.id })
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
@@ -508,11 +574,11 @@ export default function HomePage() {
   };
 
   const handleRetryTeamSetup = () => {
-    if (!currentTeam) {
+    if (!orgTeam && !teams.length) {
       void handleCreateTeam();
       return;
     }
-    if (!teamMembership) {
+    if (orgTeam && !orgMembership) {
       void handleJoinTeam();
     }
   };
@@ -937,25 +1003,34 @@ export default function HomePage() {
                 {teamReady ? (
                   <div className="space-y-3">
                     <div className="space-y-1">
-                      <p className="text-sm text-muted-foreground">Team name</p>
+                      <p className="text-sm text-muted-foreground">
+                        Organization workspace
+                      </p>
                       <p className="text-lg font-semibold text-foreground">
-                        {currentTeam?.name}
+                        {orgTeam?.name}
                       </p>
                     </div>
                     <div className="text-xs text-muted-foreground">
-                      Domain: {currentTeam?.domain}
+                      Domain: {orgTeam?.domain}
                     </div>
-                    <Badge variant="outline" className="bg-background/80">
-                      {teamMembership?.role === "owner" ? "Owner" : "Member"}
-                    </Badge>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge variant="outline" className="bg-background/80">
+                        {orgMembership?.role === "owner" ? "Owner" : "Member"}
+                      </Badge>
+                      {isOrgOwner ? (
+                        <Button asChild variant="outline" size="sm">
+                          <Link href="/team-admin">Manage teams</Link>
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-3">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      {currentTeam
-                        ? "Joining team workspace..."
-                        : "Creating team workspace..."}
+                      {orgTeam
+                        ? "Joining organization workspace..."
+                        : "Creating organization workspace..."}
                     </div>
                     <div className="text-xs text-muted-foreground">
                       Domain: {teamDomain || "Unknown"}
@@ -980,10 +1055,28 @@ export default function HomePage() {
                   Team Estimates
                 </CardTitle>
                 <CardDescription>
-                  Shared estimates for {currentTeam?.name ?? "your team"}.
+                  Shared estimates for {activeTeam?.name ?? "your team"}.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
+                {memberTeams.length > 1 ? (
+                  <div className="space-y-2">
+                    <label className="text-xs text-muted-foreground">
+                      Active team
+                    </label>
+                    <select
+                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                      value={activeTeam?.id ?? ""}
+                      onChange={(event) => setActiveTeamId(event.target.value)}
+                    >
+                      {memberTeams.map((team) => (
+                        <option key={team.id} value={team.id}>
+                          {team.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : null}
                 {!teamReady ? (
                   <div className="text-sm text-muted-foreground">
                     Preparing your team workspace...
@@ -1117,9 +1210,9 @@ export default function HomePage() {
                     <span className="text-xs text-muted-foreground">
                       Configure Clerk + InstantDB to enable team saving.
                     </span>
-                  ) : !teamReady ? (
+                  ) : !activeMembership ? (
                     <span className="text-xs text-muted-foreground">
-                      Setting up your team workspace...
+                      Select a team to save estimates.
                     </span>
                   ) : null}
                 </div>

@@ -1,17 +1,25 @@
 const allowedDomain = "cornerstonecompaniesfl.com";
 const isDomainUser = `auth.email != null && auth.email.endsWith('@${allowedDomain}')`;
+const isTeammate = "auth.id in data.ref('memberships.team.memberships.user.id')";
 
 const perms = {
+  $users: {
+    allow: {
+      view: isTeammate,
+      update: "auth.id == data.id",
+    },
+  },
   teams: {
     bind: {
       isDomainUser,
       isMember: "auth.id in data.ref('memberships.user.id')",
+      isOwner: "auth.id == data.ownerId",
     },
     allow: {
       view: "isDomainUser || isMember",
-      create: "isDomainUser",
+      create: "isDomainUser && isOwner",
       update: "isMember",
-      delete: "isMember",
+      delete: "isOwner",
     },
   },
   memberships: {
@@ -19,12 +27,13 @@ const perms = {
       isDomainUser,
       isSelf: "auth.id in data.ref('user.id')",
       isTeamMember: "auth.id in data.ref('team.memberships.user.id')",
+      isTeamOwner: "auth.id in data.ref('team.ownerId')",
     },
     allow: {
       view: "isDomainUser && isTeamMember",
-      create: "isDomainUser && isSelf",
-      update: "isDomainUser && isTeamMember",
-      delete: "isDomainUser && isTeamMember",
+      create: "isDomainUser && (isSelf || isTeamOwner)",
+      update: "isDomainUser && isTeamOwner",
+      delete: "isDomainUser && (isSelf || isTeamOwner)",
     },
   },
   estimates: {

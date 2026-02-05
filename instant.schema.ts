@@ -10,6 +10,9 @@ const _schema = i.schema({
       name: i.string(),
       domain: i.string().indexed(),
       createdAt: i.number().indexed(),
+      isPrimary: i.boolean().indexed().optional(),
+      parentTeamId: i.string().indexed().optional(),
+      ownerId: i.string().indexed().optional(),
     }),
     memberships: i.entity({
       role: i.string(),
