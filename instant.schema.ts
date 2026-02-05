@@ -29,6 +29,22 @@ const _schema = i.schema({
       payload: i.json(),
       totals: i.json().optional(),
     }),
+    vendors: i.entity({
+      name: i.string(),
+      sortOrder: i.number().indexed().optional(),
+      isActive: i.boolean().indexed().optional(),
+      createdAt: i.number().indexed(),
+      updatedAt: i.number().indexed().optional(),
+    }),
+    unitTypes: i.entity({
+      code: i.string().indexed(),
+      label: i.string(),
+      price: i.number(),
+      sortOrder: i.number().indexed().optional(),
+      isActive: i.boolean().indexed().optional(),
+      createdAt: i.number().indexed(),
+      updatedAt: i.number().indexed().optional(),
+    }),
   },
   links: {
     teamMembers: {
@@ -81,6 +97,32 @@ const _schema = i.schema({
         on: "$users",
         has: "many",
         label: "estimates",
+      },
+    },
+    vendorTeam: {
+      forward: {
+        on: "vendors",
+        has: "one",
+        label: "team",
+        onDelete: "cascade",
+      },
+      reverse: {
+        on: "teams",
+        has: "many",
+        label: "vendors",
+      },
+    },
+    unitTypeTeam: {
+      forward: {
+        on: "unitTypes",
+        has: "one",
+        label: "team",
+        onDelete: "cascade",
+      },
+      reverse: {
+        on: "teams",
+        has: "many",
+        label: "unitTypes",
       },
     },
   },

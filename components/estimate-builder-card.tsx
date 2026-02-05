@@ -23,6 +23,7 @@ import {
   toNumber,
   type BuckingLineItem,
   type EstimateDraft,
+  type PanelType,
   type ProductItem,
 } from "@/lib/estimate-calculator";
 import { cn } from "@/lib/utils";
@@ -34,6 +35,7 @@ import {
   Trash2,
   X,
 } from "lucide-react";
+import { DEFAULT_VENDORS } from "@/lib/catalog-defaults";
 
 const EMPTY_VALUES: Record<string, string | number> = {};
 
@@ -47,6 +49,13 @@ type EstimateBuilderCardProps = {
   onEstimatePayloadChange?: (payload: Record<string, any> | null) => void;
   loadPayload?: Record<string, any> | null;
   onActivate?: () => void;
+  vendors?: Array<{
+    id?: string;
+    name: string;
+    sortOrder?: number;
+    isActive?: boolean;
+  }>;
+  panelTypes?: PanelType[];
 };
 
 type EstimateLibraryState = {
@@ -77,6 +86,8 @@ export function EstimateBuilderCard({
   onEstimatePayloadChange,
   loadPayload,
   onActivate,
+  vendors,
+  panelTypes,
 }: EstimateBuilderCardProps) {
   const [library, setLibrary] = useState<EstimateLibraryState>({
     items: [],
@@ -91,10 +102,42 @@ export function EstimateBuilderCard({
   const [legacyValues, setLegacyValues] = useState<
     Record<string, string | number> | null
   >(null);
+  const vendorListId = "estimate-vendor-options";
 
   const groupList = useMemo(() => estimateFields.groups ?? [], []);
 
-  const computed = useMemo(() => computeEstimate(draft), [draft]);
+  const vendorOptions = useMemo(() => {
+    const source = vendors?.length ? vendors : DEFAULT_VENDORS;
+    const normalized = source.map((vendor, index) => ({
+      id: vendor.id ?? `${vendor.name}-${index}`,
+      name: vendor.name,
+      sortOrder:
+        typeof vendor.sortOrder === "number" ? vendor.sortOrder : index + 1,
+      isActive: vendor.isActive !== false,
+    }));
+    return normalized
+      .filter((vendor) => vendor.isActive)
+      .sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+        return a.name.localeCompare(b.name);
+      });
+  }, [vendors]);
+
+  const panelTypeOptions = useMemo(() => {
+    const base = panelTypes?.length ? panelTypes : PANEL_TYPES;
+    const map = new Map(base.map((panel) => [panel.id, panel]));
+    for (const item of draft.bucking) {
+      const key = item.unit_type;
+      if (!key || map.has(key)) continue;
+      map.set(key, { id: key, label: key, price: 0 });
+    }
+    return Array.from(map.values());
+  }, [panelTypes, draft.bucking]);
+
+  const computed = useMemo(
+    () => computeEstimate(draft, panelTypeOptions),
+    [draft, panelTypeOptions]
+  );
 
   useEffect(() => {
     if (legacyValues) {
@@ -474,6 +517,11 @@ export function EstimateBuilderCard({
               Matches the Product Pricing table with per-line markups.
             </p>
           </div>
+          <datalist id={vendorListId}>
+            {vendorOptions.map((vendor) => (
+              <option key={vendor.id} value={vendor.name} />
+            ))}
+          </datalist>
           <div className="grid gap-3 md:grid-cols-3">
             <div className="space-y-2">
               <label className="text-xs text-muted-foreground">Default product markup</label>
@@ -516,6 +564,7 @@ export function EstimateBuilderCard({
                           handleProductChange(index, { name: event.target.value })
                         }
                         placeholder="Product name"
+                        list={vendorListId}
                         disabled={Boolean(legacyValues)}
                       />
                       <input
@@ -679,7 +728,7 @@ export function EstimateBuilderCard({
                         }
                         disabled={Boolean(legacyValues)}
                       >
-                        {PANEL_TYPES.map((panel) => (
+                        {panelTypeOptions.map((panel) => (
                           <option key={panel.id} value={panel.id}>
                             {panel.label}
                           </option>
@@ -759,7 +808,7 @@ export function EstimateBuilderCard({
                     ...draft.bucking,
                     {
                       id: createId("bucking"),
-                      unit_type: PANEL_TYPES[0]?.id ?? "SH",
+                      unit_type: panelTypeOptions[0]?.id ?? "SH",
                       qty: "",
                       sqft: "",
                       replacement_qty: "",
@@ -839,7 +888,7 @@ export function EstimateBuilderCard({
               </div>
               <div className="max-h-44 overflow-y-auto">
                 <div className="divide-y divide-border/60">
-                  {PANEL_TYPES.map((panel) => {
+                  {panelTypeOptions.map((panel) => {
                     const counts = computed.panelCounts[panel.id];
                     return (
                       <div

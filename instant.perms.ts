@@ -15,6 +15,8 @@ const isPrimaryOwner = normalizedPrimaryOwnerEmail
   ? `auth.email != null && auth.email == '${normalizedPrimaryOwnerEmail}'`
   : "false";
 const isTeammate = "auth.id in data.ref('memberships.team.memberships.user.id')";
+const isTeamMember = "auth.id in data.ref('team.memberships.user.id')";
+const isTeamOwner = "auth.id == data.ref('team.ownerId')";
 
 const perms = {
   $users: {
@@ -56,13 +58,39 @@ const perms = {
   },
   estimates: {
     bind: {
-      isTeamMember: "auth.id in data.ref('team.memberships.user.id')",
+      isTeamMember,
     },
     allow: {
       view: "isTeamMember",
       create: "isTeamMember",
       update: "isTeamMember",
       delete: "isTeamMember",
+    },
+  },
+  vendors: {
+    bind: {
+      isTeamMember,
+      isTeamOwner,
+      isPrimaryOwner,
+    },
+    allow: {
+      view: "isTeamMember",
+      create: "isTeamOwner || isPrimaryOwner",
+      update: "isTeamOwner || isPrimaryOwner",
+      delete: "isTeamOwner || isPrimaryOwner",
+    },
+  },
+  unitTypes: {
+    bind: {
+      isTeamMember,
+      isTeamOwner,
+      isPrimaryOwner,
+    },
+    allow: {
+      view: "isTeamMember",
+      create: "isTeamOwner || isPrimaryOwner",
+      update: "isTeamOwner || isPrimaryOwner",
+      delete: "isTeamOwner || isPrimaryOwner",
     },
   },
 };

@@ -122,6 +122,8 @@ export default function HomePage() {
           },
           memberships: { user: {} },
           estimates: { owner: {} },
+          vendors: {},
+          unitTypes: {},
         },
       }
     : { teams: { $: { where: { domain: "__none__" } } } };
@@ -172,6 +174,7 @@ export default function HomePage() {
   const activeMembership = activeTeam?.memberships?.find(
     (membership) => membership.user?.id === instantUser?.id
   );
+  const catalogTeam = orgTeam ?? activeTeam;
   const teamReady = Boolean(orgTeam && orgMembership);
   const isOrgOwner = Boolean(
     isPrimaryOwner ||
@@ -187,6 +190,27 @@ export default function HomePage() {
       (a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)
     );
   }, [activeTeam?.estimates]);
+
+  const vendorOptions = useMemo(
+    () => catalogTeam?.vendors ?? [],
+    [catalogTeam?.vendors]
+  );
+  const panelTypeOptions = useMemo(() => {
+    const list = (catalogTeam?.unitTypes ?? [])
+      .filter((unit) => unit.isActive !== false && unit.code)
+      .slice()
+      .sort((a, b) => {
+        const orderA = typeof a.sortOrder === "number" ? a.sortOrder : 0;
+        const orderB = typeof b.sortOrder === "number" ? b.sortOrder : 0;
+        if (orderA !== orderB) return orderA - orderB;
+        return String(a.code ?? "").localeCompare(String(b.code ?? ""));
+      });
+    return list.map((unit) => ({
+      id: unit.code,
+      label: unit.label ?? unit.code,
+      price: typeof unit.price === "number" ? unit.price : 0,
+    }));
+  }, [catalogTeam?.unitTypes]);
 
   const hasEstimateValues = useMemo(() => {
     if (estimatePayload?.values) {
@@ -1256,6 +1280,8 @@ export default function HomePage() {
                   onSelectEstimate={setSelectedEstimate}
                   onEstimatePayloadChange={setEstimatePayload}
                   loadPayload={loadedEstimatePayload}
+                  vendors={vendorOptions}
+                  panelTypes={panelTypeOptions}
                   onActivate={() => {
                     setEstimateMode("estimate");
                     setError(null);

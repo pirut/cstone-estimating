@@ -1,3 +1,5 @@
+import { DEFAULT_UNIT_TYPES } from "@/lib/catalog-defaults";
+
 export type EstimateInfo = {
   prepared_for?: string;
   project_name?: string;
@@ -47,18 +49,11 @@ export type PanelType = {
   price: number;
 };
 
-export const PANEL_TYPES: PanelType[] = [
-  { id: "SH", label: "SH", price: 300 },
-  { id: "HR", label: "HR", price: 300 },
-  { id: "CA", label: "CA", price: 440 },
-  { id: "SF Medium", label: "SF Medium", price: 450 },
-  { id: "SF Large", label: "SF Large", price: 700 },
-  { id: "FD", label: "FD", price: 600 },
-  { id: "SGD", label: "SGD", price: 550 },
-  { id: "Pivot", label: "Pivot", price: 770 },
-  { id: "Bifold", label: "Bifold", price: 715 },
-  { id: "Mull Bar", label: "Mull Bar", price: 100 },
-];
+export const PANEL_TYPES: PanelType[] = DEFAULT_UNIT_TYPES.map((unit) => ({
+  id: unit.code,
+  label: unit.label,
+  price: unit.price,
+}));
 
 export const DEFAULT_DRAFT: EstimateDraft = {
   info: {},
@@ -127,7 +122,11 @@ export type EstimateComputed = {
   pdfValues: Record<string, number | string>;
 };
 
-export function computeEstimate(draft: EstimateDraft): EstimateComputed {
+export function computeEstimate(
+  draft: EstimateDraft,
+  panelTypes: PanelType[] = PANEL_TYPES
+): EstimateComputed {
+  const resolvedPanelTypes = normalizePanelTypes(panelTypes, draft.bucking ?? []);
   const productMarkupDefault = toNumber(draft.calculator.product_markup_default);
   const installMarkup = toNumber(draft.calculator.install_markup);
   const buckingRate = toNumber(draft.calculator.bucking_rate);
@@ -165,7 +164,7 @@ export function computeEstimate(draft: EstimateDraft): EstimateComputed {
 
   const panelCounts: EstimateComputed["panelCounts"] = {};
   const panelTotals: EstimateComputed["panelTotals"] = {};
-  PANEL_TYPES.forEach((panel) => {
+  resolvedPanelTypes.forEach((panel) => {
     panelCounts[panel.id] = {
       total_qty: 0,
       clerestory_qty: 0,
@@ -181,7 +180,7 @@ export function computeEstimate(draft: EstimateDraft): EstimateComputed {
     panelCounts[type].replacement_qty += toNumber(item.replacement_qty);
   }
 
-  for (const panel of PANEL_TYPES) {
+  for (const panel of resolvedPanelTypes) {
     const counts = panelCounts[panel.id];
     const total =
       panel.price * counts.total_qty +
@@ -273,6 +272,25 @@ export function computeEstimate(draft: EstimateDraft): EstimateComputed {
     panelTotals,
     pdfValues,
   };
+}
+
+function normalizePanelTypes(
+  panelTypes: PanelType[],
+  bucking: BuckingLineItem[]
+) {
+  const fallback = panelTypes.length ? panelTypes : PANEL_TYPES;
+  const map = new Map(fallback.map((panel) => [panel.id, panel] as const));
+
+  for (const item of bucking) {
+    if (!item.unit_type || map.has(item.unit_type)) continue;
+    map.set(item.unit_type, {
+      id: item.unit_type,
+      label: item.unit_type,
+      price: 0,
+    });
+  }
+
+  return Array.from(map.values());
 }
 
 export function roundUp(value: number) {

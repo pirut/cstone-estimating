@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { DEFAULT_UNIT_TYPES, DEFAULT_VENDORS } from "@/lib/catalog-defaults";
 import { db, instantAppId } from "@/lib/instant";
 import {
   SignInButton,
@@ -22,7 +23,23 @@ import {
   useOptionalUser,
 } from "@/lib/clerk";
 import { id } from "@instantdb/react";
-import { Loader2 } from "lucide-react";
+import { Loader2, Plus, Save, Trash2 } from "lucide-react";
+
+type VendorDraft = {
+  id?: string;
+  name: string;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+type UnitTypeDraft = {
+  id?: string;
+  code: string;
+  label: string;
+  price: string;
+  sortOrder: number;
+  isActive: boolean;
+};
 
 export default function TeamAdminPage() {
   const { isLoaded: authLoaded, isSignedIn } = useOptionalAuth();
@@ -79,6 +96,8 @@ export default function TeamAdminPage() {
             order: { createdAt: "desc" as const },
           },
           memberships: { user: {} },
+          vendors: {},
+          unitTypes: {},
         },
       }
     : { teams: { $: { where: { domain: "__none__" } } } };
@@ -120,6 +139,27 @@ export default function TeamAdminPage() {
     () => teams.find((team) => team.id === selectedTeamId) ?? null,
     [selectedTeamId, teams]
   );
+  const catalogTeam = orgTeam ?? selectedTeam;
+
+  const vendorRecords = useMemo(() => {
+    const list = (catalogTeam?.vendors ?? []).slice();
+    return list.sort((a, b) => {
+      const orderA = typeof a.sortOrder === "number" ? a.sortOrder : 0;
+      const orderB = typeof b.sortOrder === "number" ? b.sortOrder : 0;
+      if (orderA !== orderB) return orderA - orderB;
+      return String(a.name ?? "").localeCompare(String(b.name ?? ""));
+    });
+  }, [catalogTeam?.vendors]);
+
+  const unitTypeRecords = useMemo(() => {
+    const list = (catalogTeam?.unitTypes ?? []).slice();
+    return list.sort((a, b) => {
+      const orderA = typeof a.sortOrder === "number" ? a.sortOrder : 0;
+      const orderB = typeof b.sortOrder === "number" ? b.sortOrder : 0;
+      if (orderA !== orderB) return orderA - orderB;
+      return String(a.code ?? "").localeCompare(String(b.code ?? ""));
+    });
+  }, [catalogTeam?.unitTypes]);
 
   const orgMembers = orgTeam?.memberships ?? [];
   const selectedTeamMembers = selectedTeam?.memberships ?? [];
@@ -171,11 +211,46 @@ export default function TeamAdminPage() {
   const [teamNameSaving, setTeamNameSaving] = useState(false);
   const [teamDeleteError, setTeamDeleteError] = useState<string | null>(null);
   const [teamDeleteLoading, setTeamDeleteLoading] = useState(false);
+  const [vendorDrafts, setVendorDrafts] = useState<VendorDraft[]>([]);
+  const [vendorSaving, setVendorSaving] = useState(false);
+  const [vendorError, setVendorError] = useState<string | null>(null);
+  const [vendorStatus, setVendorStatus] = useState<string | null>(null);
+  const [unitTypeDrafts, setUnitTypeDrafts] = useState<UnitTypeDraft[]>([]);
+  const [unitTypeSaving, setUnitTypeSaving] = useState(false);
+  const [unitTypeError, setUnitTypeError] = useState<string | null>(null);
+  const [unitTypeStatus, setUnitTypeStatus] = useState<string | null>(null);
 
   useEffect(() => {
     setTeamNameDraft(selectedTeam?.name ?? "");
     setTeamNameError(null);
   }, [selectedTeam?.id, selectedTeam?.name]);
+
+  useEffect(() => {
+    const next = vendorRecords.map((vendor, index) => ({
+      id: vendor.id,
+      name: vendor.name ?? "",
+      sortOrder:
+        typeof vendor.sortOrder === "number" ? vendor.sortOrder : index + 1,
+      isActive: vendor.isActive !== false,
+    }));
+    setVendorDrafts(next);
+  }, [vendorRecords]);
+
+  useEffect(() => {
+    const next = unitTypeRecords.map((unit, index) => ({
+      id: unit.id,
+      code: unit.code ?? "",
+      label: unit.label ?? "",
+      price:
+        typeof unit.price === "number" && Number.isFinite(unit.price)
+          ? unit.price.toString()
+          : "",
+      sortOrder:
+        typeof unit.sortOrder === "number" ? unit.sortOrder : index + 1,
+      isActive: unit.isActive !== false,
+    }));
+    setUnitTypeDrafts(next);
+  }, [unitTypeRecords]);
 
   const handleCreateSubTeam = async () => {
     setTeamError(null);
@@ -324,6 +399,324 @@ export default function TeamAdminPage() {
       setMemberActionError(message);
     } finally {
       setMemberActionLoading(false);
+    }
+  };
+
+  const canEditCatalog = Boolean(isOrgOwner && catalogTeam);
+
+  const handleVendorChange = (index: number, patch: Partial<VendorDraft>) => {
+    setVendorDrafts((prev) =>
+      prev.map((vendor, idx) =>
+        idx === index ? { ...vendor, ...patch } : vendor
+      )
+    );
+  };
+
+  const handleAddVendor = () => {
+    const nextOrder =
+      vendorDrafts.reduce(
+        (max, vendor) => Math.max(max, vendor.sortOrder || 0),
+        0
+      ) + 1;
+    setVendorDrafts((prev) => [
+      ...prev,
+      { name: "", sortOrder: nextOrder, isActive: true },
+    ]);
+  };
+
+  const handleSaveVendors = async () => {
+    setVendorError(null);
+    setVendorStatus(null);
+    if (!catalogTeam) {
+      setVendorError("Select an organization team before editing vendors.");
+      return;
+    }
+    if (!canEditCatalog) {
+      setVendorError("Only org owners can update vendors.");
+      return;
+    }
+
+    const cleaned = vendorDrafts
+      .map((vendor) => ({
+        ...vendor,
+        name: vendor.name.trim(),
+        sortOrder:
+          typeof vendor.sortOrder === "number" && Number.isFinite(vendor.sortOrder)
+            ? vendor.sortOrder
+            : 0,
+      }))
+      .filter((vendor) => vendor.name);
+
+    if (!cleaned.length) {
+      setVendorError("Add at least one vendor before saving.");
+      return;
+    }
+
+    const seen = new Set<string>();
+    for (const vendor of cleaned) {
+      const key = vendor.name.toLowerCase();
+      if (seen.has(key)) {
+        setVendorError(`Duplicate vendor: ${vendor.name}`);
+        return;
+      }
+      seen.add(key);
+    }
+
+    const now = Date.now();
+    const txs = cleaned.map((vendor, index) => {
+      const payload = {
+        name: vendor.name,
+        sortOrder: vendor.sortOrder || index + 1,
+        isActive: vendor.isActive,
+        updatedAt: now,
+      };
+      if (vendor.id) {
+        return db.tx.vendors[vendor.id].update(payload);
+      }
+      const vendorId = id();
+      return db.tx.vendors[vendorId]
+        .create({ ...payload, createdAt: now })
+        .link({ team: catalogTeam.id });
+    });
+
+    setVendorSaving(true);
+    try {
+      await db.transact(txs);
+      setVendorStatus("Vendors updated.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setVendorError(message);
+    } finally {
+      setVendorSaving(false);
+    }
+  };
+
+  const handleDeleteVendor = async (vendor: VendorDraft) => {
+    setVendorError(null);
+    setVendorStatus(null);
+    if (!vendor.id) {
+      setVendorDrafts((prev) => prev.filter((item) => item !== vendor));
+      return;
+    }
+    if (!window.confirm(`Delete vendor "${vendor.name}"?`)) return;
+    setVendorSaving(true);
+    try {
+      await db.transact(db.tx.vendors[vendor.id].delete());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setVendorError(message);
+    } finally {
+      setVendorSaving(false);
+    }
+  };
+
+  const handleSeedVendors = async () => {
+    setVendorError(null);
+    setVendorStatus(null);
+    if (!catalogTeam) {
+      setVendorError("Select an organization team before seeding vendors.");
+      return;
+    }
+    if (!canEditCatalog) {
+      setVendorError("Only org owners can seed vendors.");
+      return;
+    }
+    if (vendorRecords.length) {
+      setVendorError("Vendors already exist.");
+      return;
+    }
+    const now = Date.now();
+    const txs = DEFAULT_VENDORS.map((vendor) => {
+      const vendorId = id();
+      return db.tx.vendors[vendorId]
+        .create({
+          name: vendor.name,
+          sortOrder: vendor.sortOrder,
+          isActive: vendor.isActive,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .link({ team: catalogTeam.id });
+    });
+    setVendorSaving(true);
+    try {
+      await db.transact(txs);
+      setVendorStatus("Seeded default vendors.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setVendorError(message);
+    } finally {
+      setVendorSaving(false);
+    }
+  };
+
+  const handleUnitTypeChange = (index: number, patch: Partial<UnitTypeDraft>) => {
+    setUnitTypeDrafts((prev) =>
+      prev.map((unit, idx) => (idx === index ? { ...unit, ...patch } : unit))
+    );
+  };
+
+  const handleAddUnitType = () => {
+    const nextOrder =
+      unitTypeDrafts.reduce(
+        (max, unit) => Math.max(max, unit.sortOrder || 0),
+        0
+      ) + 1;
+    setUnitTypeDrafts((prev) => [
+      ...prev,
+      {
+        code: "",
+        label: "",
+        price: "",
+        sortOrder: nextOrder,
+        isActive: true,
+      },
+    ]);
+  };
+
+  const handleSaveUnitTypes = async () => {
+    setUnitTypeError(null);
+    setUnitTypeStatus(null);
+    if (!catalogTeam) {
+      setUnitTypeError("Select an organization team before editing unit types.");
+      return;
+    }
+    if (!canEditCatalog) {
+      setUnitTypeError("Only org owners can update unit types.");
+      return;
+    }
+
+    const cleaned = unitTypeDrafts
+      .map((unit) => ({
+        ...unit,
+        code: unit.code.trim(),
+        label: unit.label.trim(),
+        price: unit.price.trim(),
+        sortOrder:
+          typeof unit.sortOrder === "number" && Number.isFinite(unit.sortOrder)
+            ? unit.sortOrder
+            : 0,
+      }))
+      .filter((unit) => unit.code || unit.label || unit.price);
+
+    if (!cleaned.length) {
+      setUnitTypeError("Add at least one unit type before saving.");
+      return;
+    }
+
+    const seenCodes = new Set<string>();
+    for (const unit of cleaned) {
+      if (!unit.code || !unit.label) {
+        setUnitTypeError("Unit type code and label are required.");
+        return;
+      }
+      if (!unit.price) {
+        setUnitTypeError(`Price required for ${unit.code}.`);
+        return;
+      }
+      const key = unit.code.toLowerCase();
+      if (seenCodes.has(key)) {
+        setUnitTypeError(`Duplicate unit type: ${unit.code}`);
+        return;
+      }
+      seenCodes.add(key);
+      const priceValue = Number(unit.price);
+      if (!Number.isFinite(priceValue)) {
+        setUnitTypeError(`Invalid price for ${unit.code}.`);
+        return;
+      }
+    }
+
+    const now = Date.now();
+    const txs = cleaned.map((unit, index) => {
+      const priceValue = Number(unit.price);
+      const payload = {
+        code: unit.code,
+        label: unit.label,
+        price: priceValue,
+        sortOrder: unit.sortOrder || index + 1,
+        isActive: unit.isActive,
+        updatedAt: now,
+      };
+      if (unit.id) {
+        return db.tx.unitTypes[unit.id].update(payload);
+      }
+      const unitId = id();
+      return db.tx.unitTypes[unitId]
+        .create({ ...payload, createdAt: now })
+        .link({ team: catalogTeam.id });
+    });
+
+    setUnitTypeSaving(true);
+    try {
+      await db.transact(txs);
+      setUnitTypeStatus("Unit types updated.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setUnitTypeError(message);
+    } finally {
+      setUnitTypeSaving(false);
+    }
+  };
+
+  const handleDeleteUnitType = async (unit: UnitTypeDraft) => {
+    setUnitTypeError(null);
+    setUnitTypeStatus(null);
+    if (!unit.id) {
+      setUnitTypeDrafts((prev) => prev.filter((item) => item !== unit));
+      return;
+    }
+    if (!window.confirm(`Delete unit type "${unit.code}"?`)) return;
+    setUnitTypeSaving(true);
+    try {
+      await db.transact(db.tx.unitTypes[unit.id].delete());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setUnitTypeError(message);
+    } finally {
+      setUnitTypeSaving(false);
+    }
+  };
+
+  const handleSeedUnitTypes = async () => {
+    setUnitTypeError(null);
+    setUnitTypeStatus(null);
+    if (!catalogTeam) {
+      setUnitTypeError("Select an organization team before seeding unit types.");
+      return;
+    }
+    if (!canEditCatalog) {
+      setUnitTypeError("Only org owners can seed unit types.");
+      return;
+    }
+    if (unitTypeRecords.length) {
+      setUnitTypeError("Unit types already exist.");
+      return;
+    }
+    const now = Date.now();
+    const txs = DEFAULT_UNIT_TYPES.map((unit) => {
+      const unitId = id();
+      return db.tx.unitTypes[unitId]
+        .create({
+          code: unit.code,
+          label: unit.label,
+          price: unit.price,
+          sortOrder: unit.sortOrder,
+          isActive: unit.isActive,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .link({ team: catalogTeam.id });
+    });
+    setUnitTypeSaving(true);
+    try {
+      await db.transact(txs);
+      setUnitTypeStatus("Seeded default unit types.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setUnitTypeError(message);
+    } finally {
+      setUnitTypeSaving(false);
     }
   };
 
@@ -744,6 +1137,297 @@ export default function TeamAdminPage() {
                     )}
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/60 bg-card/80 shadow-elevated lg:col-span-2">
+              <CardHeader>
+                <CardTitle className="text-2xl font-serif">
+                  Catalog settings
+                </CardTitle>
+                <CardDescription>
+                  Manage the vendor list and unit type pricing used in estimates.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-8">
+                {!catalogTeam ? (
+                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
+                    Select or create the organization workspace to edit catalog
+                    settings.
+                  </div>
+                ) : null}
+                {!isOrgOwner ? (
+                  <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                    Only org owners can edit vendors and unit types.
+                  </div>
+                ) : null}
+
+                <section className="space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">Vendors</p>
+                    <p className="text-xs text-muted-foreground">
+                      Controls the product type dropdown in the estimate builder.
+                    </p>
+                  </div>
+                  {vendorError ? (
+                    <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                      {vendorError}
+                    </div>
+                  ) : null}
+                  {vendorStatus ? (
+                    <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                      {vendorStatus}
+                    </div>
+                  ) : null}
+                  <div className="rounded-lg border border-border/70 bg-background/70 overflow-x-auto">
+                    <div className="min-w-[640px]">
+                      <div className="grid grid-cols-[auto_2fr_1fr_auto] gap-2 border-b border-border/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
+                        <span>Active</span>
+                        <span>Name</span>
+                        <span>Order</span>
+                        <span></span>
+                      </div>
+                      <div className="divide-y divide-border/60">
+                        {vendorDrafts.map((vendor, index) => (
+                          <div
+                            key={vendor.id ?? `vendor-${index}`}
+                            className="grid grid-cols-[auto_2fr_1fr_auto] items-center gap-2 px-3 py-2 text-sm"
+                          >
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 accent-foreground"
+                              checked={vendor.isActive}
+                              onChange={(event) =>
+                                handleVendorChange(index, {
+                                  isActive: event.target.checked,
+                                })
+                              }
+                              disabled={!canEditCatalog}
+                            />
+                            <input
+                              className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+                              value={vendor.name}
+                              onChange={(event) =>
+                                handleVendorChange(index, { name: event.target.value })
+                              }
+                              placeholder="Vendor name"
+                              disabled={!canEditCatalog}
+                            />
+                            <input
+                              className="w-24 rounded-md border border-border bg-background px-2 py-1 text-sm"
+                              type="number"
+                              value={vendor.sortOrder}
+                              onChange={(event) =>
+                                handleVendorChange(index, {
+                                  sortOrder: Number(event.target.value || 0),
+                                })
+                              }
+                              disabled={!canEditCatalog}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteVendor(vendor)}
+                              disabled={!canEditCatalog || vendorSaving}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                        {!vendorDrafts.length ? (
+                          <div className="px-3 py-3 text-sm text-muted-foreground">
+                            No vendors yet.
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAddVendor}
+                      disabled={!canEditCatalog}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add vendor
+                    </Button>
+                    <Button
+                      variant="accent"
+                      size="sm"
+                      onClick={handleSaveVendors}
+                      disabled={!canEditCatalog || vendorSaving}
+                    >
+                      {vendorSaving ? (
+                        "Saving..."
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4" />
+                          Save vendors
+                        </>
+                      )}
+                    </Button>
+                    {!vendorRecords.length ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleSeedVendors}
+                        disabled={!canEditCatalog || vendorSaving}
+                      >
+                        Seed defaults
+                      </Button>
+                    ) : null}
+                  </div>
+                </section>
+
+                <Separator />
+
+                <section className="space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      Unit types
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Drives bucking line items and the install calculator.
+                    </p>
+                  </div>
+                  {unitTypeError ? (
+                    <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                      {unitTypeError}
+                    </div>
+                  ) : null}
+                  {unitTypeStatus ? (
+                    <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                      {unitTypeStatus}
+                    </div>
+                  ) : null}
+                  <div className="rounded-lg border border-border/70 bg-background/70 overflow-x-auto">
+                    <div className="min-w-[760px]">
+                      <div className="grid grid-cols-[auto_1fr_1.6fr_1fr_0.6fr_auto] gap-2 border-b border-border/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
+                        <span>Active</span>
+                        <span>Code</span>
+                        <span>Label</span>
+                        <span>Price</span>
+                        <span>Order</span>
+                        <span></span>
+                      </div>
+                      <div className="divide-y divide-border/60">
+                        {unitTypeDrafts.map((unit, index) => (
+                          <div
+                            key={unit.id ?? `unit-${index}`}
+                            className="grid grid-cols-[auto_1fr_1.6fr_1fr_0.6fr_auto] items-center gap-2 px-3 py-2 text-sm"
+                          >
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 accent-foreground"
+                              checked={unit.isActive}
+                              onChange={(event) =>
+                                handleUnitTypeChange(index, {
+                                  isActive: event.target.checked,
+                                })
+                              }
+                              disabled={!canEditCatalog}
+                            />
+                            <input
+                              className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+                              value={unit.code}
+                              onChange={(event) =>
+                                handleUnitTypeChange(index, {
+                                  code: event.target.value,
+                                })
+                              }
+                              placeholder="SH"
+                              disabled={!canEditCatalog}
+                            />
+                            <input
+                              className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+                              value={unit.label}
+                              onChange={(event) =>
+                                handleUnitTypeChange(index, {
+                                  label: event.target.value,
+                                })
+                              }
+                              placeholder="Single Hung"
+                              disabled={!canEditCatalog}
+                            />
+                            <input
+                              className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+                              value={unit.price}
+                              onChange={(event) =>
+                                handleUnitTypeChange(index, {
+                                  price: event.target.value,
+                                })
+                              }
+                              inputMode="decimal"
+                              placeholder="0"
+                              disabled={!canEditCatalog}
+                            />
+                            <input
+                              className="w-20 rounded-md border border-border bg-background px-2 py-1 text-sm"
+                              type="number"
+                              value={unit.sortOrder}
+                              onChange={(event) =>
+                                handleUnitTypeChange(index, {
+                                  sortOrder: Number(event.target.value || 0),
+                                })
+                              }
+                              disabled={!canEditCatalog}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteUnitType(unit)}
+                              disabled={!canEditCatalog || unitTypeSaving}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                        {!unitTypeDrafts.length ? (
+                          <div className="px-3 py-3 text-sm text-muted-foreground">
+                            No unit types yet.
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAddUnitType}
+                      disabled={!canEditCatalog}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add unit type
+                    </Button>
+                    <Button
+                      variant="accent"
+                      size="sm"
+                      onClick={handleSaveUnitTypes}
+                      disabled={!canEditCatalog || unitTypeSaving}
+                    >
+                      {unitTypeSaving ? (
+                        "Saving..."
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4" />
+                          Save unit types
+                        </>
+                      )}
+                    </Button>
+                    {!unitTypeRecords.length ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleSeedUnitTypes}
+                        disabled={!canEditCatalog || unitTypeSaving}
+                      >
+                        Seed defaults
+                      </Button>
+                    ) : null}
+                  </div>
+                </section>
               </CardContent>
             </Card>
           </div>
