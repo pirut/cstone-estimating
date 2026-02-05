@@ -98,7 +98,10 @@ export default function HomePage() {
   const teamQuery = instantAppId
     ? {
         teams: {
-          $: { where: { domain: teamLookupDomain } },
+          $: {
+            where: { domain: teamLookupDomain },
+            order: { createdAt: "desc" as const },
+          },
           memberships: { user: {} },
           estimates: { owner: {} },
         },
@@ -107,7 +110,16 @@ export default function HomePage() {
 
   const { data: teamData } = db.useQuery(teamQuery);
 
-  const currentTeam = teamData?.teams?.[0] ?? null;
+  const teams = teamData?.teams ?? [];
+  const teamWithMembership =
+    instantUser?.id != null
+      ? teams.find((team) =>
+          team.memberships?.some(
+            (membership) => membership.user?.id === instantUser.id
+          )
+        ) ?? null
+      : null;
+  const currentTeam = teamWithMembership ?? teams[0] ?? null;
   const teamMembership = currentTeam?.memberships?.find(
     (membership) => membership.user?.id === instantUser?.id
   );
