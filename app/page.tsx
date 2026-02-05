@@ -92,6 +92,15 @@ export default function HomePage() {
 
   const emailAddress = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? "";
   const emailDomain = emailAddress.split("@")[1] ?? "";
+  const primaryOwnerEmail = (
+    process.env.NEXT_PUBLIC_PRIMARY_OWNER_EMAIL ??
+    "jr@cornerstonecompaniesfl.com"
+  )
+    .trim()
+    .toLowerCase();
+  const isPrimaryOwner = Boolean(
+    emailAddress && emailAddress === primaryOwnerEmail
+  );
   const allowedDomain = (
     process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN ?? "cornerstonecompaniesfl.com"
   )
@@ -154,8 +163,9 @@ export default function HomePage() {
   );
   const teamReady = Boolean(orgTeam && orgMembership);
   const isOrgOwner = Boolean(
-    orgMembership &&
-      (orgMembership.role === "owner" || orgTeam?.ownerId === instantUser?.id)
+    isPrimaryOwner ||
+      (orgMembership &&
+        (orgMembership.role === "owner" || orgTeam?.ownerId === instantUser?.id))
   );
   const appLocked = clerkEnabled && (!authLoaded || !isSignedIn);
   const autoProvisionRef = useRef(false);
@@ -252,24 +262,29 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!orgTeam) return;
-    if (!orgMembership || orgMembership.role !== "owner") return;
+    if (!instantUser?.id) return;
+    if (!isPrimaryOwner) return;
+    if (!orgMembership) return;
     if (!instantUser?.id) return;
     const needsPrimary = !orgTeam.isPrimary;
-    const needsOwner = !orgTeam.ownerId;
-    if (!needsPrimary && !needsOwner) return;
+    const needsOwner = orgTeam.ownerId !== instantUser.id;
+    const needsRole = orgMembership.role !== "owner";
+    if (!needsPrimary && !needsOwner && !needsRole) return;
     if (orgSetupRef.current === orgTeam.id) return;
     orgSetupRef.current = orgTeam.id;
-    void db
-      .transact(
-        db.tx.teams[orgTeam.id].update({
-          ...(needsPrimary ? { isPrimary: true } : {}),
-          ...(needsOwner ? { ownerId: instantUser.id } : {}),
-        })
-      )
-      .catch(() => {
-        orgSetupRef.current = null;
-      });
-  }, [db, instantUser?.id, orgMembership, orgTeam]);
+    const updates = [
+      db.tx.teams[orgTeam.id].update({
+        ...(needsPrimary ? { isPrimary: true } : {}),
+        ...(needsOwner ? { ownerId: instantUser.id } : {}),
+      }),
+      ...(needsRole
+        ? [db.tx.memberships[orgMembership.id].update({ role: "owner" })]
+        : []),
+    ];
+    void db.transact(updates).catch(() => {
+      orgSetupRef.current = null;
+    });
+  }, [db, instantUser?.id, isPrimaryOwner, orgMembership, orgTeam]);
 
   useEffect(() => {
     if (!instantAppId) return;
@@ -566,6 +581,7 @@ export default function HomePage() {
     const teamId = id();
     const membershipId = id();
     const trimmedName = teamName.trim() || `${teamDomain} Team`;
+    const role = isPrimaryOwner ? "owner" : "member";
 
     setTeamSaving(true);
     setTeamSetupPending(true);
@@ -577,10 +593,10 @@ export default function HomePage() {
           domain: teamDomain,
           createdAt: now,
           isPrimary: true,
-          ownerId: instantUser.id,
+          ...(isPrimaryOwner ? { ownerId: instantUser.id } : {}),
         }),
         db.tx.memberships[membershipId]
-          .create({ role: "owner", createdAt: now })
+          .create({ role, createdAt: now })
           .link({ team: teamId, user: instantUser.id }),
       ]);
     } catch (err) {
@@ -601,13 +617,14 @@ export default function HomePage() {
     if (!instantUser || !orgTeam) return;
     const now = Date.now();
     const membershipId = id();
+    const role = isPrimaryOwner ? "owner" : "member";
     setTeamSaving(true);
     setTeamSetupPending(true);
     setTeamSetupAction("joining");
     try {
       await db.transact(
         db.tx.memberships[membershipId]
-          .create({ role: "member", createdAt: now })
+          .create({ role, createdAt: now })
           .link({ team: orgTeam.id, user: instantUser.id })
       );
     } catch (err) {

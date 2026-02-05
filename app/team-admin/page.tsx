@@ -40,6 +40,15 @@ export default function TeamAdminPage() {
 
   const emailAddress = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? "";
   const emailDomain = emailAddress.split("@")[1] ?? "";
+  const primaryOwnerEmail = (
+    process.env.NEXT_PUBLIC_PRIMARY_OWNER_EMAIL ??
+    "jr@cornerstonecompaniesfl.com"
+  )
+    .trim()
+    .toLowerCase();
+  const isPrimaryOwner = Boolean(
+    emailAddress && emailAddress === primaryOwnerEmail
+  );
   const clerkName =
     user?.fullName ||
     [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
@@ -91,8 +100,9 @@ export default function TeamAdminPage() {
     (membership) => membership.user?.id === instantUser?.id
   );
   const isOrgOwner = Boolean(
-    orgMembership &&
-      (orgMembership.role === "owner" || orgTeam?.ownerId === instantUser?.id)
+    isPrimaryOwner ||
+      (orgMembership &&
+        (orgMembership.role === "owner" || orgTeam?.ownerId === instantUser?.id))
   );
 
   const selectedTeam = useMemo(
@@ -112,7 +122,9 @@ export default function TeamAdminPage() {
 
   const getMemberProfile = (member?: (typeof orgMembers)[number]) => {
     const memberId = member?.user?.id ?? "";
-    const isCurrent = memberId && memberId === instantUser?.id;
+    const isCurrent =
+      (memberId && memberId === instantUser?.id) ||
+      (emailAddress && member?.user?.email === emailAddress);
     const name = isCurrent
       ? clerkName
       : member?.user?.name || member?.user?.email || member?.user?.id || "User";
