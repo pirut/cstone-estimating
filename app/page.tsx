@@ -71,6 +71,7 @@ export default function HomePage() {
   const [teamName, setTeamName] = useState("");
   const [teamError, setTeamError] = useState<string | null>(null);
   const [teamSaving, setTeamSaving] = useState(false);
+  const [teamSetupPending, setTeamSetupPending] = useState(false);
   const [teamSetupAction, setTeamSetupAction] = useState<
     "idle" | "creating" | "joining"
   >("idle");
@@ -190,7 +191,8 @@ export default function HomePage() {
     if (!instantUser) return;
     if (instantLoading) return;
     if (teamReady) return;
-    if (teamSaving || teamSetupAction !== "idle") return;
+    if (!teamData) return;
+    if (teamSaving || teamSetupAction !== "idle" || teamSetupPending) return;
     if (autoProvisionRef.current) return;
     if (!teamDomain) {
       setTeamError("Missing an allowed email domain.");
@@ -222,12 +224,22 @@ export default function HomePage() {
     instantLoading,
     instantUser,
     isSignedIn,
+    teamData,
     teamDomain,
     teamMembership,
     teamReady,
     teamSaving,
     teamSetupAction,
+    teamSetupPending,
   ]);
+
+  useEffect(() => {
+    if (!teamSetupPending) return;
+    if (teamReady || teamError) {
+      setTeamSetupPending(false);
+      setTeamSetupAction("idle");
+    }
+  }, [teamError, teamReady, teamSetupPending]);
 
   useEffect(() => {
     if (!isGenerating) {
@@ -448,6 +460,7 @@ export default function HomePage() {
     const trimmedName = teamName.trim() || `${teamDomain} Team`;
 
     setTeamSaving(true);
+    setTeamSetupPending(true);
     setTeamSetupAction("creating");
     try {
       await db.transact([
@@ -465,7 +478,6 @@ export default function HomePage() {
       setTeamError(message);
     } finally {
       setTeamSaving(false);
-      setTeamSetupAction("idle");
     }
   };
 
@@ -479,6 +491,7 @@ export default function HomePage() {
     const now = Date.now();
     const membershipId = id();
     setTeamSaving(true);
+    setTeamSetupPending(true);
     setTeamSetupAction("joining");
     try {
       await db.transact(
@@ -491,7 +504,6 @@ export default function HomePage() {
       setTeamError(message);
     } finally {
       setTeamSaving(false);
-      setTeamSetupAction("idle");
     }
   };
 
