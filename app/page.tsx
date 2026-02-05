@@ -162,11 +162,7 @@ export default function HomePage() {
     (membership) => membership.user?.id === instantUser?.id
   );
   const teamReady = Boolean(orgTeam && orgMembership);
-  const isOrgOwner = Boolean(
-    isPrimaryOwner ||
-      (orgMembership &&
-        (orgMembership.role === "owner" || orgTeam?.ownerId === instantUser?.id))
-  );
+  const isOrgOwner = isPrimaryOwner;
   const appLocked = clerkEnabled && (!authLoaded || !isSignedIn);
   const autoProvisionRef = useRef(false);
   const orgSetupRef = useRef<string | null>(null);
@@ -265,7 +261,6 @@ export default function HomePage() {
     if (!instantUser?.id) return;
     if (!isPrimaryOwner) return;
     if (!orgMembership) return;
-    if (!instantUser?.id) return;
     const needsPrimary = !orgTeam.isPrimary;
     const needsOwner = orgTeam.ownerId !== instantUser.id;
     const needsRole = orgMembership.role !== "owner";
@@ -305,6 +300,13 @@ export default function HomePage() {
     setTeamError(null);
 
     if (!teams.length) {
+      if (!isPrimaryOwner) {
+        setTeamError(
+          `Waiting for ${primaryOwnerEmail} to create the org workspace.`
+        );
+        autoProvisionRef.current = false;
+        return;
+      }
       if (knownOrgTeamId && knownOrgTeamDomain === teamDomain) {
         setTeamError(
           "We couldn't load your existing org workspace. Refresh and try again."
@@ -345,6 +347,8 @@ export default function HomePage() {
     teamSetupPending,
     knownOrgTeamId,
     knownOrgTeamDomain,
+    isPrimaryOwner,
+    primaryOwnerEmail,
   ]);
 
   useEffect(() => {
@@ -571,6 +575,12 @@ export default function HomePage() {
     }
     if (!instantUser) {
       setTeamError("Sign in to create a team workspace.");
+      return;
+    }
+    if (!isPrimaryOwner) {
+      setTeamError(
+        `Only ${primaryOwnerEmail} can create the main org workspace.`
+      );
       return;
     }
     if (!teamDomain) {

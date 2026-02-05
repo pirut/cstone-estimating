@@ -99,11 +99,7 @@ export default function TeamAdminPage() {
   const orgMembership = orgTeam?.memberships?.find(
     (membership) => membership.user?.id === instantUser?.id
   );
-  const isOrgOwner = Boolean(
-    isPrimaryOwner ||
-      (orgMembership &&
-        (orgMembership.role === "owner" || orgTeam?.ownerId === instantUser?.id))
-  );
+  const isOrgOwner = isPrimaryOwner;
 
   const selectedTeam = useMemo(
     () => teams.find((team) => team.id === selectedTeamId) ?? null,
@@ -534,13 +530,18 @@ export default function TeamAdminPage() {
                     <p className="text-xs text-muted-foreground">
                       Add a teammate from the org workspace to this team.
                     </p>
+                    {!isOrgOwner ? (
+                      <p className="text-xs text-muted-foreground">
+                        Only the org owner can assign members to sub teams.
+                      </p>
+                    ) : null}
                     <select
                       className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
                       value={selectedMemberId ?? ""}
                       onChange={(event) =>
                         setSelectedMemberId(event.target.value || null)
                       }
-                      disabled={!availableOrgMembers.length}
+                      disabled={!availableOrgMembers.length || !isOrgOwner}
                     >
                       <option value="">Select member</option>
                       {availableOrgMembers.map((member) => (
@@ -555,7 +556,8 @@ export default function TeamAdminPage() {
                       disabled={
                         !selectedMemberId ||
                         memberActionLoading ||
-                        !selectedTeam
+                        !selectedTeam ||
+                        !isOrgOwner
                       }
                     >
                       Add member
