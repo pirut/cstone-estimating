@@ -11,7 +11,7 @@ const isTeammate = "auth.id in data.ref('memberships.team.memberships.user.id')"
 const perms = {
   $users: {
     allow: {
-      view: isTeammate,
+      view: `auth.id == data.id || ${isTeammate} || ${isDomainUser}`,
       update: "auth.id == data.id",
     },
   },
