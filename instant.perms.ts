@@ -1,5 +1,11 @@
-const allowedDomain = "cornerstonecompaniesfl.com";
-const isDomainUser = `auth.email != null && auth.email.endsWith('@${allowedDomain}')`;
+const allowedDomain =
+  process.env.INSTANT_ALLOWED_EMAIL_DOMAIN ??
+  process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN ??
+  "cornerstonecompaniesfl.com";
+const normalizedAllowedDomain = allowedDomain.trim().toLowerCase();
+const isDomainUser = normalizedAllowedDomain
+  ? `auth.id != null && (auth.email == null || auth.email.endsWith('@${normalizedAllowedDomain}'))`
+  : "auth.id != null";
 const isTeammate = "auth.id in data.ref('memberships.team.memberships.user.id')";
 
 const perms = {
