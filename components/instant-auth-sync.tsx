@@ -29,7 +29,9 @@ export function InstantAuthSync({
     signOut: clerkSignOut,
   } = useOptionalAuth();
   const { user } = useOptionalUser();
+  const { user: instantUser } = db.useAuth();
   const lastAuthErrorRef = useRef<string | null>(null);
+  const lastProfileSyncRef = useRef<string | null>(null);
 
   const reportAuthError = useCallback(
     (message: string | null) => {
@@ -107,6 +109,35 @@ export function InstantAuthSync({
     reportAuthError,
     user?.id,
   ]);
+
+  useEffect(() => {
+    if (!instantAppId) return;
+    if (!clerkEnabled) return;
+    if (!instantUser?.id || !user) return;
+
+    const email =
+      user.primaryEmailAddress?.emailAddress?.trim().toLowerCase() ?? "";
+    const name =
+      user.fullName ||
+      [user.firstName, user.lastName].filter(Boolean).join(" ") ||
+      user.username ||
+      email;
+
+    const payload: { email?: string; name?: string } = {};
+    if (email) payload.email = email;
+    if (name) payload.name = name;
+
+    if (!payload.email && !payload.name) return;
+    const signature = `${instantUser.id}:${payload.email ?? ""}:${payload.name ?? ""}`;
+    if (lastProfileSyncRef.current === signature) return;
+    lastProfileSyncRef.current = signature;
+
+    void db
+      .transact(db.tx.$users[instantUser.id].update(payload))
+      .catch(() => {
+        lastProfileSyncRef.current = null;
+      });
+  }, [instantAppId, instantUser?.id, user, user?.id]);
 
   return null;
 }
