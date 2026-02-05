@@ -65,9 +65,11 @@ export default function TeamAdminPage() {
 
   const orgTeam = useMemo(() => {
     if (!teams.length) return null;
-    const primary = teams.find((team) => team.isPrimary);
+    const rootTeams = teams.filter((team) => !team.parentTeamId);
+    const candidates = rootTeams.length ? rootTeams : teams;
+    const primary = candidates.find((team) => team.isPrimary);
     if (primary) return primary;
-    return teams.reduce((oldest, team) => {
+    return candidates.reduce((oldest, team) => {
       if (!oldest) return team;
       const oldestTime = oldest.createdAt ?? 0;
       const teamTime = team.createdAt ?? 0;
