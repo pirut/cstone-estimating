@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { clerkEnabled, useOptionalAuth, useOptionalUser } from "@/lib/clerk";
 import { db, instantAppId } from "@/lib/instant";
 
@@ -14,20 +14,38 @@ const hasAllowedDomain = allowedDomain.length > 0;
 
 type InstantAuthSyncProps = {
   onDomainError?: (message: string) => void;
+  onAuthError?: (message: string | null) => void;
 };
 
-export function InstantAuthSync({ onDomainError }: InstantAuthSyncProps) {
+export function InstantAuthSync({
+  onDomainError,
+  onAuthError,
+}: InstantAuthSyncProps) {
   const { isSignedIn, getToken, signOut: clerkSignOut } = useOptionalAuth();
   const { user } = useOptionalUser();
+  const lastAuthErrorRef = useRef<string | null>(null);
+
+  const reportAuthError = useCallback(
+    (message: string | null) => {
+      if (lastAuthErrorRef.current === message) return;
+      lastAuthErrorRef.current = message;
+      onAuthError?.(message);
+    },
+    [onAuthError]
+  );
 
   useEffect(() => {
     if (!instantAppId) return;
-    if (!clerkClientName) return;
+    if (!clerkClientName) {
+      reportAuthError("Missing NEXT_PUBLIC_CLERK_CLIENT_NAME.");
+      return;
+    }
     if (!clerkEnabled) return;
 
     const sync = async () => {
       if (!isSignedIn) {
         await db.auth.signOut();
+        reportAuthError(null);
         return;
       }
 
@@ -42,19 +60,28 @@ export function InstantAuthSync({ onDomainError }: InstantAuthSyncProps) {
       }
 
       const idToken = await getToken();
-      if (!idToken) return;
+      if (!idToken) {
+        reportAuthError(
+          "Clerk token missing. Confirm the session token includes email."
+        );
+        return;
+      }
       try {
         await db.auth.signInWithIdToken({
           idToken,
           clientName: clerkClientName,
         });
+        reportAuthError(null);
       } catch (err) {
         console.error("InstantDB auth sync failed", err);
+        const message =
+          err instanceof Error ? err.message : "InstantDB auth sync failed.";
+        reportAuthError(message);
       }
     };
 
     void sync();
-  }, [getToken, isSignedIn, clerkSignOut, onDomainError, user?.id]);
+  }, [getToken, isSignedIn, clerkSignOut, onDomainError, reportAuthError, user?.id]);
 
   return null;
 }

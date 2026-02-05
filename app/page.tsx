@@ -67,6 +67,7 @@ export default function HomePage() {
     null
   );
   const [authError, setAuthError] = useState<string | null>(null);
+  const [instantSetupError, setInstantSetupError] = useState<string | null>(null);
   const [teamName, setTeamName] = useState("");
   const [teamError, setTeamError] = useState<string | null>(null);
   const [teamSaving, setTeamSaving] = useState(false);
@@ -716,7 +717,10 @@ export default function HomePage() {
 
   return (
     <main className="relative min-h-screen overflow-hidden">
-      <InstantAuthSync onDomainError={setAuthError} />
+      <InstantAuthSync
+        onDomainError={setAuthError}
+        onAuthError={setInstantSetupError}
+      />
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-24 left-1/2 h-72 w-[520px] -translate-x-1/2 rounded-full bg-accent/20 blur-3xl" />
         <div className="absolute top-24 right-0 h-72 w-72 rounded-full bg-foreground/10 blur-3xl" />
@@ -759,6 +763,11 @@ export default function HomePage() {
         {authError ? (
           <div className="mb-6 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {authError}
+          </div>
+        ) : null}
+        {instantSetupError ? (
+          <div className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
+            Instant auth issue: {instantSetupError}
           </div>
         ) : null}
         {!instantAppId ? (
@@ -891,6 +900,11 @@ export default function HomePage() {
                     {instantAuthError.message}
                   </div>
                 ) : null}
+                {instantSetupError ? (
+                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
+                    {instantSetupError}
+                  </div>
+                ) : null}
                 {teamError ? (
                   <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                     {teamError}
@@ -899,6 +913,12 @@ export default function HomePage() {
                 {instantLoading ? (
                   <div className="text-sm text-muted-foreground">
                     Connecting to InstantDB...
+                  </div>
+                ) : null}
+                {!instantLoading && !instantUser && !instantSetupError ? (
+                  <div className="text-sm text-muted-foreground">
+                    Waiting for Instant auth. If this persists, verify the Clerk
+                    client name and session token email claim.
                   </div>
                 ) : null}
 
