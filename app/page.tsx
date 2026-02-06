@@ -30,7 +30,19 @@ import { db, instantAppId } from "@/lib/instant";
 import { InstantAuthSync } from "@/components/instant-auth-sync";
 import { cn } from "@/lib/utils";
 import { APP_VERSION } from "@/lib/version";
-import { ArrowDownToLine, FileDown, FileText, Loader2, Sparkles } from "lucide-react";
+import {
+  ArrowDownToLine,
+  ArrowRight,
+  CheckCircle2,
+  CircleDashed,
+  FileDown,
+  FileSpreadsheet,
+  FileText,
+  LayoutTemplate,
+  Loader2,
+  Settings2,
+  Sparkles,
+} from "lucide-react";
 import {
   SignInButton,
   SignOutButton,
@@ -462,6 +474,33 @@ export default function HomePage() {
     status.tone === "idle" && "border-white/20 bg-white/5 text-white/70"
   );
 
+  const workflowMilestones = [
+    {
+      id: "input",
+      label:
+        estimateMode === "estimate"
+          ? "Manual estimate is filled"
+          : "Workbook is selected",
+      done:
+        estimateMode === "estimate" ? hasEstimateValues : Boolean(uploads.workbook),
+    },
+    {
+      id: "template",
+      label: "Template is selected",
+      done: Boolean(templateConfig?.templatePdf?.url),
+    },
+    {
+      id: "generate",
+      label: "Proposal is ready to generate",
+      done: canGenerate,
+    },
+  ] as const;
+  const workflowPercent = Math.round(
+    (workflowMilestones.filter((item) => item.done).length /
+      workflowMilestones.length) *
+      100
+  );
+
   const handleGenerate = async () => {
     setError(null);
     if (!templateConfig?.templatePdf?.url) {
@@ -813,12 +852,25 @@ export default function HomePage() {
   };
 
   const templateCard = (
-    <Card className="border-border/60 bg-card/80 shadow-elevated">
+    <Card
+      id="step-template"
+      className="rounded-3xl border-border/60 bg-card/80 shadow-elevated"
+    >
       <CardHeader>
-        <CardTitle className="text-2xl font-serif">Template Library</CardTitle>
-        <CardDescription>
-          Apply a saved PDF template with its calibrated coordinates.
-        </CardDescription>
+        <div className="flex items-start justify-between gap-4">
+          <div className="space-y-2">
+            <Badge variant="muted" className="bg-muted/80 text-[10px]">
+              Step 2
+            </Badge>
+            <CardTitle className="text-2xl font-serif">Template Library</CardTitle>
+            <CardDescription>
+              Apply a saved PDF template with its calibrated coordinates.
+            </CardDescription>
+          </div>
+          <Badge variant="outline" className="bg-background/80">
+            Required
+          </Badge>
+        </div>
       </CardHeader>
       <CardContent className="space-y-4">
         {templateConfigError ? (
@@ -852,11 +904,13 @@ export default function HomePage() {
                     </p>
                   </div>
                   <Button
-                    variant="outline"
+                    variant={
+                      templateConfig?.name === item.name ? "accent" : "outline"
+                    }
                     size="sm"
                     onClick={() => handleSelectTemplateConfig(item)}
                   >
-                    Use template
+                    {templateConfig?.name === item.name ? "Selected" : "Use template"}
                   </Button>
                 </div>
               ))}
@@ -902,11 +956,12 @@ export default function HomePage() {
         onAuthError={setInstantSetupError}
       />
       <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-24 left-1/2 h-72 w-[520px] -translate-x-1/2 rounded-full bg-accent/20 blur-3xl" />
-        <div className="absolute top-24 right-0 h-72 w-72 rounded-full bg-foreground/10 blur-3xl" />
+        <div className="absolute -top-28 left-1/2 h-80 w-[560px] -translate-x-1/2 rounded-full bg-accent/20 blur-3xl" />
+        <div className="absolute top-20 right-0 h-72 w-72 rounded-full bg-foreground/10 blur-3xl" />
+        <div className="absolute -bottom-24 left-10 h-72 w-72 rounded-full bg-accent/15 blur-3xl" />
       </div>
-      <div className="container relative py-12">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+      <div className="container relative py-8 md:py-10">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-card/70 px-4 py-3 backdrop-blur-sm">
           <div className="text-xs text-muted-foreground">
             {!clerkEnabled ? (
               <span>Clerk auth is not configured yet.</span>
@@ -921,6 +976,9 @@ export default function HomePage() {
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="outline" className="hidden bg-background/80 sm:inline-flex">
+              v{APP_VERSION}
+            </Badge>
             {clerkEnabled && isSignedIn ? (
               <SignOutButton>
                 <Button variant="outline" size="sm">
@@ -957,9 +1015,9 @@ export default function HomePage() {
           </div>
         ) : null}
         <section className="relative overflow-hidden rounded-[32px] border border-border/60 bg-foreground text-white shadow-elevated">
-          <div className="absolute -right-28 -top-24 h-72 w-72 rounded-full bg-accent/20 blur-3xl" />
+          <div className="absolute -right-28 -top-24 h-72 w-72 rounded-full bg-accent/25 blur-3xl" />
           <div className="absolute bottom-0 left-10 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
-          <div className="relative grid gap-8 p-8 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="relative grid gap-8 p-8 lg:grid-cols-[1.05fr_0.95fr]">
             <div className="space-y-6">
               <BrandMark tone="dark" />
               <div className="space-y-4">
@@ -976,6 +1034,22 @@ export default function HomePage() {
                   </p>
                 </div>
               </div>
+              <div className="flex flex-wrap gap-3">
+                <Button asChild variant="accent" size="sm">
+                  <a href="#step-input">
+                    Start workflow
+                    <ArrowRight className="h-4 w-4" />
+                  </a>
+                </Button>
+                <Button
+                  asChild
+                  variant="outline"
+                  size="sm"
+                  className="border-white/20 bg-white/5 text-white hover:bg-white/10"
+                >
+                  <a href="#step-generate">Jump to generate</a>
+                </Button>
+              </div>
               <div className="grid gap-3 sm:grid-cols-3">
                 <Metric
                   icon={FileText}
@@ -990,31 +1064,41 @@ export default function HomePage() {
                 />
               </div>
             </div>
-            <Card className="border-white/10 bg-white/10 text-white shadow-none">
+            <Card className="border-white/10 bg-white/10 text-white shadow-none backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="text-xl text-white">
-                  Workflow Overview
-                </CardTitle>
+                <CardTitle className="text-xl text-white">Readiness</CardTitle>
                 <CardDescription className="text-white/60">
                   {status.helper}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {[
-                  "Enter estimate values or upload the job workbook",
-                  "Select a saved proposal template",
-                  "Generate and download the stamped proposal",
-                ].map((step, index) => (
-                  <div
-                    key={step}
-                    className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3"
-                  >
-                    <div className="flex h-8 w-8 items-center justify-center rounded-full border border-white/20 text-sm font-semibold">
-                      {index + 1}
-                    </div>
-                    <p className="text-sm text-white/70">{step}</p>
+                <div className="space-y-2 rounded-xl border border-white/10 bg-black/10 p-4">
+                  <div className="flex items-center justify-between text-xs uppercase tracking-[0.24em] text-white/60">
+                    <span>Completion</span>
+                    <span>{workflowPercent}%</span>
                   </div>
-                ))}
+                  <div className="h-2 w-full overflow-hidden rounded-full bg-white/20">
+                    <div
+                      className="h-full rounded-full bg-accent transition-all duration-500"
+                      style={{ width: `${workflowPercent}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  {workflowMilestones.map((milestone) => (
+                    <div
+                      key={milestone.id}
+                      className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3"
+                    >
+                      {milestone.done ? (
+                        <CheckCircle2 className="mt-0.5 h-4 w-4 text-accent" />
+                      ) : (
+                        <CircleDashed className="mt-0.5 h-4 w-4 text-white/60" />
+                      )}
+                      <p className="text-sm text-white/70">{milestone.label}</p>
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -1022,7 +1106,7 @@ export default function HomePage() {
 
         {appLocked ? (
           <section className="mt-10">
-            <Card className="border-border/60 bg-card/80 shadow-elevated">
+            <Card className="rounded-3xl border-border/60 bg-card/80 shadow-elevated">
               <CardHeader>
                 <CardTitle className="text-2xl font-serif">
                   Sign in required
@@ -1066,13 +1150,18 @@ export default function HomePage() {
         ) : (
           <>
         {authLoaded && isSignedIn ? (
-          <section className="mt-10 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-            <Card className="border-border/60 bg-card/80 shadow-elevated">
+          <section className="mt-10 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+            <Card className="rounded-3xl border-border/60 bg-card/80 shadow-elevated">
               <CardHeader>
-                <CardTitle className="text-2xl font-serif">Team Workspace</CardTitle>
-                <CardDescription>
-                  InstantDB keeps shared estimates synced for your domain.
-                </CardDescription>
+                <div className="space-y-2">
+                  <Badge variant="muted" className="bg-muted/80 text-[10px]">
+                    Workspace
+                  </Badge>
+                  <CardTitle className="text-2xl font-serif">Team Workspace</CardTitle>
+                  <CardDescription>
+                    InstantDB keeps shared estimates synced for your domain.
+                  </CardDescription>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 {instantAuthError ? (
@@ -1151,14 +1240,19 @@ export default function HomePage() {
                 )}
               </CardContent>
             </Card>
-            <Card className="border-border/60 bg-card/80 shadow-elevated">
+            <Card className="rounded-3xl border-border/60 bg-card/80 shadow-elevated">
               <CardHeader>
-                <CardTitle className="text-2xl font-serif">
-                  Team Estimates
-                </CardTitle>
-                <CardDescription>
-                  Shared estimates for {activeTeam?.name ?? "your team"}.
-                </CardDescription>
+                <div className="space-y-2">
+                  <Badge variant="muted" className="bg-muted/80 text-[10px]">
+                    Shared
+                  </Badge>
+                  <CardTitle className="text-2xl font-serif">
+                    Team Estimates
+                  </CardTitle>
+                  <CardDescription>
+                    Shared estimates for {activeTeam?.name ?? "your team"}.
+                  </CardDescription>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 {memberTeams.length > 1 ? (
@@ -1228,12 +1322,31 @@ export default function HomePage() {
         ) : null}
 
         <section
+          id="step-input"
           className={cn(
             "mt-12 grid gap-6",
             estimateMode === "estimate" ? "" : "lg:grid-cols-2"
           )}
         >
           <div className="space-y-6">
+            <div className="rounded-2xl border border-border/60 bg-card/80 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <Badge variant="muted" className="bg-muted/80 text-[10px]">
+                    Step 1
+                  </Badge>
+                  <h2 className="text-2xl font-serif text-foreground">
+                    Choose Input Source
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Start with either a workbook upload or a manual estimate.
+                  </p>
+                </div>
+                <Badge variant="outline" className="bg-background/80">
+                  {estimateMode === "estimate" ? "Manual estimate" : "Excel workbook"}
+                </Badge>
+              </div>
+            </div>
             <Tabs
               value={estimateMode}
               onValueChange={(value) =>
@@ -1242,8 +1355,14 @@ export default function HomePage() {
               className="space-y-4"
             >
               <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="workbook">Excel Workbook</TabsTrigger>
-                <TabsTrigger value="estimate">Manual Estimate</TabsTrigger>
+                <TabsTrigger value="workbook" className="gap-2">
+                  <FileSpreadsheet className="h-4 w-4" />
+                  Excel Workbook
+                </TabsTrigger>
+                <TabsTrigger value="estimate" className="gap-2">
+                  <FileText className="h-4 w-4" />
+                  Manual Estimate
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="workbook">
                 <UploadCard
@@ -1328,27 +1447,56 @@ export default function HomePage() {
         </section>
 
         <section className="mt-10 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-          <AdvancedOverridesCard
-            mapping={uploads.mapping}
-            coords={uploads.coords}
-            onUploadMapping={(file) => {
-              setError(null);
-              setUploads((prev) => ({ ...prev, mapping: file }));
-            }}
-            onUploadCoords={(file) => {
-              setError(null);
-              setUploads((prev) => ({ ...prev, coords: file }));
-            }}
-            onError={setError}
-          />
-          <Card className="border-border/60 bg-card/80 shadow-elevated">
+          <div id="step-overrides" className="space-y-3">
+            <div className="rounded-2xl border border-border/60 bg-card/80 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <Badge variant="muted" className="bg-muted/80 text-[10px]">
+                    Step 3
+                  </Badge>
+                  <h2 className="text-2xl font-serif text-foreground">
+                    Fine-Tune Mapping
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    Optional JSON overrides for special templates and calibration.
+                  </p>
+                </div>
+                <Settings2 className="mt-1 h-5 w-5 text-muted-foreground" />
+              </div>
+            </div>
+            <AdvancedOverridesCard
+              mapping={uploads.mapping}
+              coords={uploads.coords}
+              onUploadMapping={(file) => {
+                setError(null);
+                setUploads((prev) => ({ ...prev, mapping: file }));
+              }}
+              onUploadCoords={(file) => {
+                setError(null);
+                setUploads((prev) => ({ ...prev, coords: file }));
+              }}
+              onError={setError}
+            />
+          </div>
+          <Card
+            id="step-generate"
+            className="h-fit rounded-3xl border-border/60 bg-card/85 shadow-elevated lg:sticky lg:top-6"
+          >
             <CardHeader>
-              <CardTitle className="text-2xl font-serif">
-                Generate Proposal
-              </CardTitle>
-              <CardDescription>
-                Combine selected inputs into a branded PDF download.
-              </CardDescription>
+              <div className="flex items-start justify-between gap-3">
+                <div className="space-y-2">
+                  <Badge variant="muted" className="bg-muted/80 text-[10px]">
+                    Step 4
+                  </Badge>
+                  <CardTitle className="text-2xl font-serif">
+                    Generate Proposal
+                  </CardTitle>
+                  <CardDescription>
+                    Combine selected inputs into a branded PDF download.
+                  </CardDescription>
+                </div>
+                <LayoutTemplate className="mt-1 h-5 w-5 text-muted-foreground" />
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               {error ? (
@@ -1356,6 +1504,24 @@ export default function HomePage() {
                   {error}
                 </div>
               ) : null}
+              <div className="space-y-2 rounded-xl border border-border/60 bg-muted/30 p-3">
+                {workflowMilestones.map((milestone) => (
+                  <div key={milestone.id} className="flex items-center gap-2 text-sm">
+                    {milestone.done ? (
+                      <CheckCircle2 className="h-4 w-4 text-accent" />
+                    ) : (
+                      <CircleDashed className="h-4 w-4 text-muted-foreground" />
+                    )}
+                    <span
+                      className={cn(
+                        milestone.done ? "text-foreground" : "text-muted-foreground"
+                      )}
+                    >
+                      {milestone.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
               {isGenerating ? (
                 <div className="space-y-2 rounded-lg border border-border/60 bg-muted/40 px-4 py-3">
                   <div className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">

@@ -6,7 +6,7 @@
 
 @layer base {
   :root {
-    --background: 40 18% 96%;
+    --background: 36 20% 97%;
     --foreground: 24 10% 8%;
     --card: 0 0% 100%;
     --card-foreground: 24 10% 10%;
@@ -14,18 +14,18 @@
     --popover-foreground: 24 10% 10%;
     --primary: 24 12% 8%;
     --primary-foreground: 40 30% 96%;
-    --secondary: 32 14% 90%;
+    --secondary: 30 18% 91%;
     --secondary-foreground: 24 10% 16%;
-    --accent: 38 44% 55%;
+    --accent: 37 48% 57%;
     --accent-foreground: 24 12% 12%;
-    --muted: 30 12% 92%;
+    --muted: 32 16% 93%;
     --muted-foreground: 24 8% 40%;
     --destructive: 0 70% 46%;
     --destructive-foreground: 0 0% 98%;
-    --border: 30 10% 84%;
-    --input: 30 10% 84%;
-    --ring: 38 44% 55%;
-    --radius: 18px;
+    --border: 30 12% 82%;
+    --input: 30 12% 82%;
+    --ring: 37 48% 57%;
+    --radius: 16px;
   }
 
   .dark {
@@ -57,9 +57,11 @@
   body {
     @apply bg-background text-foreground antialiased;
     background-image:
-      radial-gradient(circle at 12% 18%, rgba(204, 170, 112, 0.18), transparent 55%),
-      radial-gradient(circle at 85% 5%, rgba(15, 15, 15, 0.12), transparent 55%),
-      linear-gradient(140deg, rgba(255, 255, 255, 0.86), rgba(245, 239, 231, 0.9));
+      radial-gradient(circle at 10% 16%, rgba(204, 170, 112, 0.17), transparent 48%),
+      radial-gradient(circle at 86% 8%, rgba(20, 20, 20, 0.12), transparent 52%),
+      radial-gradient(circle at 72% 92%, rgba(208, 179, 124, 0.16), transparent 45%),
+      linear-gradient(140deg, rgba(255, 255, 255, 0.9), rgba(245, 238, 230, 0.92));
+    background-attachment: fixed;
   }
 
   h1,
