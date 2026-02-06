@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import estimateFields from "@/config/estimate-fields.json";
 import { uploadFiles } from "@/components/uploadthing";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -12,7 +14,6 @@ import {
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { Button } from "@/components/ui/button";
 import type { LibraryItem, UploadedFile } from "@/lib/types";
 import {
   computeEstimate,
@@ -28,16 +29,30 @@ import {
 } from "@/lib/estimate-calculator";
 import { cn } from "@/lib/utils";
 import {
+  CheckCircle2,
+  CircleDashed,
   Loader2,
+  LockKeyhole,
   Plus,
   RefreshCw,
   Save,
+  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
 import { DEFAULT_VENDORS } from "@/lib/catalog-defaults";
 
 const EMPTY_VALUES: Record<string, string | number> = {};
+const inputClassName =
+  "h-11 w-full rounded-xl border border-border/70 bg-background px-3 text-sm text-foreground transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const inputSmClassName =
+  "h-10 w-full rounded-lg border border-border/70 bg-background px-3 text-sm text-foreground transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+
+const REQUIRED_INFO_FIELDS: Array<keyof EstimateDraft["info"]> = [
+  "prepared_for",
+  "project_name",
+  "proposal_date",
+];
 
 type EstimateBuilderCardProps = {
   values: Record<string, string | number>;
@@ -77,7 +92,7 @@ type EstimateFilePayload = {
 };
 
 export function EstimateBuilderCard({
-  values,
+  values: _values,
   onValuesChange,
   name,
   onNameChange,
@@ -396,21 +411,117 @@ export function EstimateBuilderCard({
     setLoadError(null);
   };
 
+  const projectStepComplete = REQUIRED_INFO_FIELDS.every((field) =>
+    String(draft.info[field] ?? "").trim()
+  );
+  const productStepComplete = draft.products.some(
+    (item) => item.name.trim() && toNumber(item.price) > 0
+  );
+  const buckingStepComplete = draft.bucking.some(
+    (item) => toNumber(item.qty) > 0 && toNumber(item.sqft) > 0
+  );
+  const installStepComplete = computed.totals.total_contract_price > 0;
+
+  const stepProgress = [
+    {
+      id: "project",
+      label: "Project Details",
+      done: projectStepComplete,
+      locked: false,
+    },
+    {
+      id: "products",
+      label: "Product Pricing",
+      done: productStepComplete,
+      locked: !projectStepComplete,
+    },
+    {
+      id: "bucking",
+      label: "Bucking & Waterproof",
+      done: buckingStepComplete,
+      locked: !projectStepComplete || !productStepComplete,
+    },
+    {
+      id: "install",
+      label: "Install Calculator",
+      done: installStepComplete,
+      locked: !projectStepComplete || !productStepComplete || !buckingStepComplete,
+    },
+    {
+      id: "review",
+      label: "Review Totals",
+      done: installStepComplete,
+      locked: !projectStepComplete || !productStepComplete || !buckingStepComplete,
+    },
+  ] as const;
+
+  const completedCount = stepProgress.filter((step) => step.done).length;
+  const completionPercent = Math.round((completedCount / stepProgress.length) * 100);
+
+  const showProducts = projectStepComplete;
+  const showBucking = showProducts && productStepComplete;
+  const showInstall = showBucking && buckingStepComplete;
+
   return (
-    <Card className="relative overflow-hidden border-border/60 bg-card/80 shadow-elevated">
-      <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-accent/10 to-transparent" />
-      <CardHeader className="relative">
-        <CardTitle className="text-2xl font-serif">Estimate Builder</CardTitle>
-        <CardDescription>
-          Create markups and install pricing from the template workbook.
-        </CardDescription>
+    <Card className="relative overflow-hidden rounded-3xl border-border/60 bg-card/80 shadow-elevated">
+      <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-accent/10 to-transparent" />
+      <CardHeader className="relative space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-2">
+            <Badge variant="muted" className="bg-muted/80 text-[10px]">
+              Step 1
+            </Badge>
+            <CardTitle className="text-2xl font-serif">Manual Estimate Builder</CardTitle>
+            <CardDescription>
+              Complete each section to unlock the next and keep calculations clean.
+            </CardDescription>
+          </div>
+          <Badge variant="outline" className="bg-background/80">
+            Guided workflow
+          </Badge>
+        </div>
+
+        <div className="space-y-2 rounded-xl border border-border/60 bg-background/65 p-3">
+          <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-muted-foreground">
+            <span>Completion</span>
+            <span>{completionPercent}%</span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
+            <div
+              className="h-full rounded-full bg-accent transition-all duration-300"
+              style={{ width: `${completionPercent}%` }}
+            />
+          </div>
+          <div className="grid gap-2 md:grid-cols-5">
+            {stepProgress.map((step) => (
+              <div
+                key={step.id}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg border px-2 py-2 text-xs",
+                  step.done && "border-accent/40 bg-accent/10 text-foreground",
+                  !step.done && !step.locked && "border-border/60 bg-muted/20 text-muted-foreground",
+                  step.locked && "border-border/50 bg-background/80 text-muted-foreground/80"
+                )}
+              >
+                {step.done ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-accent" />
+                ) : step.locked ? (
+                  <LockKeyhole className="h-3.5 w-3.5" />
+                ) : (
+                  <CircleDashed className="h-3.5 w-3.5" />
+                )}
+                <span className="truncate">{step.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
       </CardHeader>
+
       <CardContent className="relative space-y-6">
         {legacyValues ? (
-          <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
-            Legacy estimate loaded. Calculator inputs are disabled until you
-            convert to the new format.
-            <div className="mt-2">
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-800">
+            Legacy estimate loaded. Convert to the new calculator to use the guided flow.
+            <div className="mt-3">
               <Button
                 size="sm"
                 variant="outline"
@@ -421,27 +532,51 @@ export function EstimateBuilderCard({
             </div>
           </div>
         ) : null}
+
         {saveError ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {saveError}
           </div>
         ) : null}
         {loadError ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {loadError}
           </div>
         ) : null}
         {saveStatus ? (
-          <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          <div className="rounded-xl border border-border/60 bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
             {saveStatus}
           </div>
         ) : null}
 
-        <div className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-foreground">Estimate Session</p>
+              <p className="text-xs text-muted-foreground">
+                Name this estimate and save snapshots anytime.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="accent" onClick={handleSave} disabled={isSaving}>
+                {isSaving ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                {isSaving ? "Saving..." : "Save estimate"}
+              </Button>
+              <Button variant="outline" onClick={handleClear} disabled={isSaving}>
+                Clear
+              </Button>
+            </div>
+          </div>
           <div className="space-y-2">
-            <label className="text-xs text-muted-foreground">Estimate name</label>
+            <label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              Estimate name
+            </label>
             <input
-              className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              className={inputClassName}
               value={name}
               onChange={(event) => {
                 onNameChange(event.target.value);
@@ -455,523 +590,514 @@ export function EstimateBuilderCard({
               </p>
             ) : null}
           </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <Button variant="accent" onClick={handleSave} disabled={isSaving}>
-              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-              {isSaving ? "Saving..." : "Save estimate"}
-            </Button>
-            <Button variant="outline" onClick={handleClear} disabled={isSaving}>
-              Clear
-            </Button>
-          </div>
-        </div>
-
-        <Separator />
-
-        <div className="space-y-6">
-          {groupList.map((group) => (
-            <div key={group.id} className="space-y-3">
-              <div>
-                <p className="text-sm font-semibold text-foreground">
-                  {group.label}
-                </p>
-                {group.description ? (
-                  <p className="text-xs text-muted-foreground">
-                    {group.description}
-                  </p>
-                ) : null}
-              </div>
-              <div className="grid gap-3 md:grid-cols-2">
-                {group.fields.map((field) => {
-                  const fieldValue = draft.info[field.key as keyof EstimateDraft["info"]] ?? "";
-                  const isDate = field.type === "date";
-                  return (
-                    <div key={field.key} className="space-y-2">
-                      <label className="text-xs text-muted-foreground">
-                        {field.label}
-                      </label>
-                      <input
-                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                        type={isDate ? "date" : "text"}
-                        placeholder={field.placeholder ?? ""}
-                        value={fieldValue}
-                        onChange={(event) =>
-                          handleInfoChange(field.key, event.target.value)
-                        }
-                        disabled={Boolean(legacyValues)}
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-
-        <Separator />
-
-        <section className="space-y-3">
-          <div>
-            <p className="text-sm font-semibold text-foreground">Product Pricing</p>
-            <p className="text-xs text-muted-foreground">
-              Matches the Product Pricing table with per-line markups.
-            </p>
-          </div>
-          <datalist id={vendorListId}>
-            {vendorOptions.map((vendor) => (
-              <option key={vendor.id} value={vendor.name} />
-            ))}
-          </datalist>
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="space-y-2">
-              <label className="text-xs text-muted-foreground">Default product markup</label>
-              <input
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                value={draft.calculator.product_markup_default}
-                onChange={(event) =>
-                  handleCalculatorChange("product_markup_default", event.target.value)
-                }
-                inputMode="decimal"
-                disabled={Boolean(legacyValues)}
-              />
-            </div>
-          </div>
-          <div className="rounded-lg border border-border/70 bg-background/70 overflow-x-auto">
-            <div className="min-w-[640px]">
-              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-2 border-b border-border/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
-                <span>Product</span>
-                <span>Price</span>
-                <span>Markup</span>
-                <span>Total</span>
-                <span></span>
-              </div>
-              <div className="divide-y divide-border/60">
-                {draft.products.map((item, index) => {
-                  const price = toNumber(item.price);
-                  const markup = item.markup.trim()
-                    ? toNumber(item.markup)
-                    : toNumber(draft.calculator.product_markup_default);
-                  const total = roundUp(price * (1 + markup));
-                  return (
-                    <div
-                      key={item.id}
-                      className="grid grid-cols-[2fr_1fr_1fr_1fr_auto] gap-2 px-3 py-2 text-sm"
-                    >
-                      <input
-                        className="rounded-md border border-border bg-background px-2 py-1 text-sm"
-                        value={item.name}
-                        onChange={(event) =>
-                          handleProductChange(index, { name: event.target.value })
-                        }
-                        placeholder="Product name"
-                        list={vendorListId}
-                        disabled={Boolean(legacyValues)}
-                      />
-                      <input
-                        className="rounded-md border border-border bg-background px-2 py-1 text-sm"
-                        value={item.price}
-                        onChange={(event) =>
-                          handleProductChange(index, { price: event.target.value })
-                        }
-                        inputMode="decimal"
-                        placeholder="0"
-                        disabled={Boolean(legacyValues)}
-                      />
-                      <input
-                        className="rounded-md border border-border bg-background px-2 py-1 text-sm"
-                        value={item.markup}
-                        onChange={(event) =>
-                          handleProductChange(index, { markup: event.target.value })
-                        }
-                        inputMode="decimal"
-                        placeholder={draft.calculator.product_markup_default}
-                        disabled={Boolean(legacyValues)}
-                      />
-                      <div className="self-center text-sm text-muted-foreground">
-                        {Number.isFinite(total) ? total.toLocaleString("en-US") : "-"}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          const next = draft.products.filter((_, idx) => idx !== index);
-                          handleDraftChange({
-                            ...draft,
-                            products: next.length ? next : DEFAULT_DRAFT.products,
-                          });
-                        }}
-                        disabled={draft.products.length === 1 || Boolean(legacyValues)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-          <div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                handleDraftChange({
-                  ...draft,
-                  products: [
-                    ...draft.products,
-                    {
-                      id: createId("product"),
-                      name: "",
-                      price: "",
-                      markup: draft.calculator.product_markup_default,
-                    },
-                  ],
-                })
-              }
-              disabled={Boolean(legacyValues)}
-            >
-              <Plus className="h-4 w-4" />
-              Add product line
-            </Button>
-          </div>
         </section>
 
-        <Separator />
+        <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
+          <SectionHeader
+            title="Project Details"
+            description="These values populate the proposal cover and headers."
+            done={projectStepComplete}
+          />
+          <div className="grid gap-3 md:grid-cols-2">
+            {groupList.flatMap((group) =>
+              group.fields.map((field) => {
+                const fieldValue =
+                  draft.info[field.key as keyof EstimateDraft["info"]] ?? "";
+                const isDate = field.type === "date";
+                const isRequired = REQUIRED_INFO_FIELDS.includes(
+                  field.key as keyof EstimateDraft["info"]
+                );
 
-        <section className="space-y-3">
-          <div>
-            <p className="text-sm font-semibold text-foreground">Bucking & Waterproof</p>
-            <p className="text-xs text-muted-foreground">
-              Matches lineal-ft math and panel counts from the workbook.
-            </p>
+                return (
+                  <div key={field.key} className="space-y-2">
+                    <label className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                      <span>{field.label}</span>
+                      {isRequired ? (
+                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-foreground">
+                          Required
+                        </span>
+                      ) : null}
+                    </label>
+                    <input
+                      className={inputClassName}
+                      type={isDate ? "date" : "text"}
+                      placeholder={field.placeholder ?? ""}
+                      value={fieldValue}
+                      onChange={(event) =>
+                        handleInfoChange(field.key, event.target.value)
+                      }
+                      disabled={Boolean(legacyValues)}
+                    />
+                  </div>
+                );
+              })
+            )}
           </div>
-          <div className="grid gap-3 md:grid-cols-4">
-            <div className="space-y-2">
-              <label className="text-xs text-muted-foreground">Bucking $/ft</label>
-              <input
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+          {!projectStepComplete ? (
+            <UnlockNotice message="Complete Prepared For, Project Name, and Proposal Date to unlock Product Pricing." />
+          ) : null}
+        </section>
+
+        {showProducts ? (
+          <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
+            <SectionHeader
+              title="Product Pricing"
+              description="Add vendor/product lines and markup values."
+              done={productStepComplete}
+            />
+
+            <datalist id={vendorListId}>
+              {vendorOptions.map((vendor) => (
+                <option key={vendor.id} value={vendor.name} />
+              ))}
+            </datalist>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="space-y-2">
+                <label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                  Default product markup
+                </label>
+                <input
+                  className={inputClassName}
+                  value={draft.calculator.product_markup_default}
+                  onChange={(event) =>
+                    handleCalculatorChange("product_markup_default", event.target.value)
+                  }
+                  inputMode="decimal"
+                  disabled={Boolean(legacyValues)}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {draft.products.map((item, index) => {
+                const price = toNumber(item.price);
+                const markup = item.markup.trim()
+                  ? toNumber(item.markup)
+                  : toNumber(draft.calculator.product_markup_default);
+                const total = roundUp(price * (1 + markup));
+                return (
+                  <div
+                    key={item.id}
+                    className="rounded-xl border border-border/60 bg-card/70 p-3"
+                  >
+                    <div className="grid gap-3 lg:grid-cols-[1.8fr_0.8fr_0.8fr_auto]">
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Product</label>
+                        <input
+                          className={inputSmClassName}
+                          value={item.name}
+                          onChange={(event) =>
+                            handleProductChange(index, { name: event.target.value })
+                          }
+                          placeholder="Vendor or product"
+                          list={vendorListId}
+                          disabled={Boolean(legacyValues)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Price</label>
+                        <input
+                          className={inputSmClassName}
+                          value={item.price}
+                          onChange={(event) =>
+                            handleProductChange(index, { price: event.target.value })
+                          }
+                          inputMode="decimal"
+                          placeholder="0"
+                          disabled={Boolean(legacyValues)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Markup</label>
+                        <input
+                          className={inputSmClassName}
+                          value={item.markup}
+                          onChange={(event) =>
+                            handleProductChange(index, { markup: event.target.value })
+                          }
+                          inputMode="decimal"
+                          placeholder={draft.calculator.product_markup_default}
+                          disabled={Boolean(legacyValues)}
+                        />
+                      </div>
+                      <div className="flex items-end justify-end gap-2">
+                        <div className="rounded-lg border border-border/60 bg-background px-3 py-2 text-sm font-semibold text-foreground">
+                          {Number.isFinite(total) ? formatCurrency(total) : "-"}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            const next = draft.products.filter((_, idx) => idx !== index);
+                            handleDraftChange({
+                              ...draft,
+                              products: next.length ? next : DEFAULT_DRAFT.products,
+                            });
+                          }}
+                          disabled={draft.products.length === 1 || Boolean(legacyValues)}
+                          aria-label="Remove product line"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  handleDraftChange({
+                    ...draft,
+                    products: [
+                      ...draft.products,
+                      {
+                        id: createId("product"),
+                        name: "",
+                        price: "",
+                        markup: draft.calculator.product_markup_default,
+                      },
+                    ],
+                  })
+                }
+                disabled={Boolean(legacyValues)}
+              >
+                <Plus className="h-4 w-4" />
+                Add product line
+              </Button>
+              <div className="text-xs text-muted-foreground">
+                Product subtotal: {formatCurrency(computed.totals.product_price)}
+              </div>
+            </div>
+
+            {!productStepComplete ? (
+              <UnlockNotice message="Add at least one product name and price above 0 to unlock Bucking & Waterproof." />
+            ) : null}
+          </section>
+        ) : null}
+
+        {showBucking ? (
+          <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
+            <SectionHeader
+              title="Bucking & Waterproof"
+              description="Capture lineal footage and rates for job conditions."
+              done={buckingStepComplete}
+            />
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <RateField
+                label="Bucking $/ft"
                 value={draft.calculator.bucking_rate}
-                onChange={(event) =>
-                  handleCalculatorChange("bucking_rate", event.target.value)
-                }
-                inputMode="decimal"
+                onChange={(value) => handleCalculatorChange("bucking_rate", value)}
                 disabled={Boolean(legacyValues)}
               />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs text-muted-foreground">Waterproofing $/ft</label>
-              <input
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              <RateField
+                label="Waterproofing $/ft"
                 value={draft.calculator.waterproofing_rate}
-                onChange={(event) =>
-                  handleCalculatorChange("waterproofing_rate", event.target.value)
+                onChange={(value) =>
+                  handleCalculatorChange("waterproofing_rate", value)
                 }
-                inputMode="decimal"
                 disabled={Boolean(legacyValues)}
               />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs text-muted-foreground">Override bucking cost</label>
-              <input
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              <RateField
+                label="Override bucking cost"
                 value={draft.calculator.override_bucking_cost}
-                onChange={(event) =>
-                  handleCalculatorChange("override_bucking_cost", event.target.value)
+                onChange={(value) =>
+                  handleCalculatorChange("override_bucking_cost", value)
                 }
-                inputMode="decimal"
-                placeholder="Leave blank for auto"
+                placeholder="Optional"
                 disabled={Boolean(legacyValues)}
               />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs text-muted-foreground">Override waterproof cost</label>
-              <input
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              <RateField
+                label="Override waterproof cost"
                 value={draft.calculator.override_waterproofing_cost}
-                onChange={(event) =>
-                  handleCalculatorChange("override_waterproofing_cost", event.target.value)
+                onChange={(value) =>
+                  handleCalculatorChange("override_waterproofing_cost", value)
                 }
-                inputMode="decimal"
-                placeholder="Leave blank for auto"
+                placeholder="Optional"
                 disabled={Boolean(legacyValues)}
               />
             </div>
-          </div>
-          <div className="rounded-lg border border-border/70 bg-background/70 overflow-x-auto">
-            <div className="min-w-[760px]">
-              <div className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_auto] gap-2 border-b border-border/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
-                <span>Unit Type</span>
-                <span>Qty</span>
-                <span>SqFt</span>
-                <span>Replacement</span>
-                <span>Clerestory</span>
-                <span>Lineal Ft</span>
-                <span></span>
-              </div>
-              <div className="divide-y divide-border/60">
-                {draft.bucking.map((item, index) => {
-                  const qty = toNumber(item.qty);
-                  const sqft = toNumber(item.sqft);
-                  const lineal = qty
-                    ? Math.abs(Math.sqrt((sqft / qty) / 6) * 11) * qty
-                    : 0;
-                  return (
-                    <div
-                      key={item.id}
-                      className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_1fr_auto] gap-2 px-3 py-2 text-sm"
-                    >
-                      <select
-                        className="rounded-md border border-border bg-background px-2 py-1 text-sm"
-                        value={item.unit_type}
-                        onChange={(event) =>
-                          handleBuckingChange(index, { unit_type: event.target.value })
-                        }
-                        disabled={Boolean(legacyValues)}
-                      >
-                        {panelTypeOptions.map((panel) => (
-                          <option key={panel.id} value={panel.id}>
-                            {panel.label}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        className="rounded-md border border-border bg-background px-2 py-1 text-sm"
-                        value={item.qty}
-                        onChange={(event) =>
-                          handleBuckingChange(index, { qty: event.target.value })
-                        }
-                        inputMode="decimal"
-                        placeholder="0"
-                        disabled={Boolean(legacyValues)}
-                      />
-                      <input
-                        className="rounded-md border border-border bg-background px-2 py-1 text-sm"
-                        value={item.sqft}
-                        onChange={(event) =>
-                          handleBuckingChange(index, { sqft: event.target.value })
-                        }
-                        inputMode="decimal"
-                        placeholder="0"
-                        disabled={Boolean(legacyValues)}
-                      />
-                      <input
-                        className="rounded-md border border-border bg-background px-2 py-1 text-sm"
-                        value={item.replacement_qty}
-                        onChange={(event) =>
-                          handleBuckingChange(index, { replacement_qty: event.target.value })
-                        }
-                        inputMode="decimal"
-                        placeholder="0"
-                        disabled={Boolean(legacyValues)}
-                      />
-                      <input
-                        className="rounded-md border border-border bg-background px-2 py-1 text-sm"
-                        value={item.clerestory_qty}
-                        onChange={(event) =>
-                          handleBuckingChange(index, { clerestory_qty: event.target.value })
-                        }
-                        inputMode="decimal"
-                        placeholder="0"
-                        disabled={Boolean(legacyValues)}
-                      />
-                      <div className="self-center text-sm text-muted-foreground">
-                        {lineal ? lineal.toFixed(2) : "-"}
+
+            <div className="space-y-3">
+              {draft.bucking.map((item, index) => {
+                const qty = toNumber(item.qty);
+                const sqft = toNumber(item.sqft);
+                const lineal = qty ? Math.abs(Math.sqrt((sqft / qty) / 6) * 11) * qty : 0;
+                return (
+                  <div
+                    key={item.id}
+                    className="rounded-xl border border-border/60 bg-card/70 p-3"
+                  >
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Unit Type</label>
+                        <select
+                          className={inputSmClassName}
+                          value={item.unit_type}
+                          onChange={(event) =>
+                            handleBuckingChange(index, { unit_type: event.target.value })
+                          }
+                          disabled={Boolean(legacyValues)}
+                        >
+                          {panelTypeOptions.map((panel) => (
+                            <option key={panel.id} value={panel.id}>
+                              {panel.label}
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => {
-                          const next = draft.bucking.filter((_, idx) => idx !== index);
-                          handleDraftChange({
-                            ...draft,
-                            bucking: next.length ? next : DEFAULT_DRAFT.bucking,
-                          });
-                        }}
-                        disabled={draft.bucking.length === 1 || Boolean(legacyValues)}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Qty</label>
+                        <input
+                          className={inputSmClassName}
+                          value={item.qty}
+                          onChange={(event) =>
+                            handleBuckingChange(index, { qty: event.target.value })
+                          }
+                          inputMode="decimal"
+                          placeholder="0"
+                          disabled={Boolean(legacyValues)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">SqFt</label>
+                        <input
+                          className={inputSmClassName}
+                          value={item.sqft}
+                          onChange={(event) =>
+                            handleBuckingChange(index, { sqft: event.target.value })
+                          }
+                          inputMode="decimal"
+                          placeholder="0"
+                          disabled={Boolean(legacyValues)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Replacement</label>
+                        <input
+                          className={inputSmClassName}
+                          value={item.replacement_qty}
+                          onChange={(event) =>
+                            handleBuckingChange(index, {
+                              replacement_qty: event.target.value,
+                            })
+                          }
+                          inputMode="decimal"
+                          placeholder="0"
+                          disabled={Boolean(legacyValues)}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Clerestory</label>
+                        <input
+                          className={inputSmClassName}
+                          value={item.clerestory_qty}
+                          onChange={(event) =>
+                            handleBuckingChange(index, {
+                              clerestory_qty: event.target.value,
+                            })
+                          }
+                          inputMode="decimal"
+                          placeholder="0"
+                          disabled={Boolean(legacyValues)}
+                        />
+                      </div>
+                      <div className="flex items-end justify-between gap-2">
+                        <div className="rounded-lg border border-border/60 bg-background px-3 py-2 text-sm font-semibold text-foreground">
+                          {lineal ? `${lineal.toFixed(2)} ft` : "-"}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => {
+                            const next = draft.bucking.filter((_, idx) => idx !== index);
+                            handleDraftChange({
+                              ...draft,
+                              bucking: next.length ? next : DEFAULT_DRAFT.bucking,
+                            });
+                          }}
+                          disabled={draft.bucking.length === 1 || Boolean(legacyValues)}
+                          aria-label="Remove bucking line"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                  );
-                })}
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  handleDraftChange({
+                    ...draft,
+                    bucking: [
+                      ...draft.bucking,
+                      {
+                        id: createId("bucking"),
+                        unit_type: panelTypeOptions[0]?.id ?? "SH",
+                        qty: "",
+                        sqft: "",
+                        replacement_qty: "",
+                        clerestory_qty: "",
+                      },
+                    ],
+                  })
+                }
+                disabled={Boolean(legacyValues)}
+              >
+                <Plus className="h-4 w-4" />
+                Add line item
+              </Button>
+              <div className="text-xs text-muted-foreground">
+                Total lineal ft: {computed.breakdown.total_lineal_ft.toFixed(2)}
               </div>
             </div>
-          </div>
-          <div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() =>
-                handleDraftChange({
-                  ...draft,
-                  bucking: [
-                    ...draft.bucking,
-                    {
-                      id: createId("bucking"),
-                      unit_type: panelTypeOptions[0]?.id ?? "SH",
-                      qty: "",
-                      sqft: "",
-                      replacement_qty: "",
-                      clerestory_qty: "",
-                    },
-                  ],
-                })
-              }
-              disabled={Boolean(legacyValues)}
-            >
-              <Plus className="h-4 w-4" />
-              Add line item
-            </Button>
-          </div>
-          <div className="text-xs text-muted-foreground">
-            Total lineal ft: {computed.breakdown.total_lineal_ft.toFixed(2)}
-          </div>
-        </section>
 
-        <Separator />
+            {!buckingStepComplete ? (
+              <UnlockNotice message="Add at least one line with Qty and SqFt to unlock Install Calculator." />
+            ) : null}
+          </section>
+        ) : null}
 
-        <section className="space-y-3">
-          <div>
-            <p className="text-sm font-semibold text-foreground">Install Calculator</p>
-            <p className="text-xs text-muted-foreground">
-              Uses panel counts to split install costs 70% / 20% / 10%.
-            </p>
-          </div>
-          <div className="grid gap-3 md:grid-cols-4">
-            <div className="space-y-2">
-              <label className="text-xs text-muted-foreground">Install markup</label>
-              <input
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+        {showInstall ? (
+          <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
+            <SectionHeader
+              title="Install Calculator"
+              description="Control install markup, rentals, and optional overrides."
+              done={installStepComplete}
+            />
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+              <RateField
+                label="Install markup"
                 value={draft.calculator.install_markup}
-                onChange={(event) =>
-                  handleCalculatorChange("install_markup", event.target.value)
-                }
-                inputMode="decimal"
+                onChange={(value) => handleCalculatorChange("install_markup", value)}
                 disabled={Boolean(legacyValues)}
               />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs text-muted-foreground">Rentals</label>
-              <input
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              <RateField
+                label="Rentals"
                 value={draft.calculator.rentals}
-                onChange={(event) =>
-                  handleCalculatorChange("rentals", event.target.value)
-                }
-                inputMode="decimal"
+                onChange={(value) => handleCalculatorChange("rentals", value)}
                 placeholder="0"
                 disabled={Boolean(legacyValues)}
               />
-            </div>
-            <div className="space-y-2">
-              <label className="text-xs text-muted-foreground">Override total install</label>
-              <input
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+              <RateField
+                label="Override total install"
                 value={draft.calculator.override_install_total}
-                onChange={(event) =>
-                  handleCalculatorChange("override_install_total", event.target.value)
+                onChange={(value) =>
+                  handleCalculatorChange("override_install_total", value)
                 }
-                inputMode="decimal"
-                placeholder="Leave blank for auto"
+                placeholder="Optional"
                 disabled={Boolean(legacyValues)}
               />
             </div>
-          </div>
 
-          <div className="rounded-lg border border-border/70 bg-background/70 overflow-x-auto">
-            <div className="min-w-[520px]">
-              <div className="grid grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr] gap-2 border-b border-border/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
-                <span>Panel Type</span>
-                <span>Total Qty</span>
-                <span>Clerestory</span>
-                <span>Replacement</span>
-              </div>
-              <div className="max-h-44 overflow-y-auto">
-                <div className="divide-y divide-border/60">
-                  {panelTypeOptions.map((panel) => {
-                    const counts = computed.panelCounts[panel.id];
-                    return (
-                      <div
-                        key={panel.id}
-                        className="grid grid-cols-[1.2fr_0.8fr_0.8fr_0.8fr] gap-2 px-3 py-2 text-sm"
-                      >
-                        <span>{panel.label}</span>
-                        <span className="text-muted-foreground">
-                          {counts.total_qty}
-                        </span>
-                        <span className="text-muted-foreground">
-                          {counts.clerestory_qty}
-                        </span>
-                        <span className="text-muted-foreground">
-                          {counts.replacement_qty}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
+            <div className="rounded-xl border border-border/60 bg-card/70 p-3">
+              <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                Panel count summary
+              </p>
+              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                {panelTypeOptions.map((panel) => {
+                  const counts = computed.panelCounts[panel.id];
+                  return (
+                    <div
+                      key={panel.id}
+                      className="rounded-lg border border-border/60 bg-background px-3 py-2"
+                    >
+                      <p className="text-sm font-semibold text-foreground">{panel.label}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Qty {counts.total_qty} | Clerestory {counts.clerestory_qty} | Replacement {counts.replacement_qty}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
             </div>
-          </div>
-          <div className="text-xs text-muted-foreground">
-            Total installation value: {computed.breakdown.total_install_value.toFixed(2)}
-          </div>
-        </section>
 
-        <Separator />
+            <div className="text-xs text-muted-foreground">
+              Total installation value: {formatCurrency(computed.breakdown.total_install_value)}
+            </div>
+          </section>
+        ) : null}
+
+        {showInstall ? (
+          <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
+            <SectionHeader
+              title="Calculated Totals"
+              description="These values are sent to the proposal PDF field mapping."
+              done={installStepComplete}
+            />
+
+            <div className="grid gap-3 md:grid-cols-2">
+              {[
+                ["Product price", computed.totals.product_price],
+                ["Bucking price", computed.totals.bucking_price],
+                ["Waterproofing price", computed.totals.waterproofing_price],
+                ["Installation price", computed.totals.installation_price],
+                ["Total contract", computed.totals.total_contract_price],
+              ].map(([label, value]) => (
+                <div
+                  key={label}
+                  className="flex items-center justify-between rounded-lg border border-border/60 bg-card/70 px-3 py-2"
+                >
+                  <span className="text-sm text-muted-foreground">{label}</span>
+                  <span className="text-sm font-semibold text-foreground">
+                    {formatCurrency(value as number)}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <Separator />
+
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                Payment schedule
+              </p>
+              <div className="grid gap-2 md:grid-cols-2">
+                {[
+                  ["Material draw 1", computed.schedule.material_draw_1],
+                  ["Material draw 2", computed.schedule.material_draw_2],
+                  ["Material draw 3", computed.schedule.material_draw_3],
+                  ["Mobilization deposit", computed.schedule.mobilization_deposit],
+                  ["Install draw 1", computed.schedule.installation_draw_1],
+                  ["Install draw 2", computed.schedule.installation_draw_2],
+                  ["Final payment", computed.schedule.final_payment],
+                ].map(([label, value]) => (
+                  <div
+                    key={label}
+                    className="flex items-center justify-between rounded-lg border border-border/60 bg-card/70 px-3 py-2"
+                  >
+                    <span className="text-sm text-muted-foreground">{label}</span>
+                    <span className="text-sm font-semibold text-foreground">
+                      {formatCurrency(value as number)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-accent/30 bg-accent/10 px-3 py-3 text-sm text-foreground">
+              <div className="flex items-center gap-2">
+                <Sparkles className="h-4 w-4 text-accent" />
+                Ready to generate. Your totals and schedule are synced into the PDF payload.
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         <section className="space-y-3">
-          <div>
-            <p className="text-sm font-semibold text-foreground">Calculated Totals</p>
-            <p className="text-xs text-muted-foreground">
-              These values feed the proposal PDF fields.
-            </p>
-          </div>
-          <div className="grid gap-3 md:grid-cols-2">
-            {[
-              ["Product price", computed.totals.product_price],
-              ["Bucking price", computed.totals.bucking_price],
-              ["Waterproofing price", computed.totals.waterproofing_price],
-              ["Installation price", computed.totals.installation_price],
-              ["Total contract", computed.totals.total_contract_price],
-            ].map(([label, value]) => (
-              <div key={label} className="flex items-center justify-between gap-4">
-                <span className="text-sm text-muted-foreground">{label}</span>
-                <span className="text-sm font-semibold text-foreground">
-                  {value.toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </span>
-              </div>
-            ))}
-          </div>
-          <Separator />
-          <div className="grid gap-3 md:grid-cols-2">
-            {[
-              ["Material draw 1", computed.schedule.material_draw_1],
-              ["Material draw 2", computed.schedule.material_draw_2],
-              ["Material draw 3", computed.schedule.material_draw_3],
-              ["Mobilization deposit", computed.schedule.mobilization_deposit],
-              ["Install draw 1", computed.schedule.installation_draw_1],
-              ["Install draw 2", computed.schedule.installation_draw_2],
-              ["Final payment", computed.schedule.final_payment],
-            ].map(([label, value]) => (
-              <div key={label} className="flex items-center justify-between gap-4">
-                <span className="text-sm text-muted-foreground">{label}</span>
-                <span className="text-sm font-semibold text-foreground">
-                  {value.toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <Separator />
-
-        <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-foreground">Saved estimates</p>
@@ -1033,7 +1159,7 @@ export function EstimateBuilderCard({
           {library.loading ? (
             <div className="text-sm text-muted-foreground">Loading...</div>
           ) : library.items.length ? (
-            <ScrollArea className="h-52 rounded-lg border border-border/70 bg-background/70">
+            <ScrollArea className="h-56 rounded-xl border border-border/70 bg-background/70">
               <div className="divide-y divide-border/60">
                 {library.items.map((item) => (
                   <div
@@ -1041,9 +1167,7 @@ export function EstimateBuilderCard({
                     className="flex items-center justify-between gap-4 px-4 py-3"
                   >
                     <div>
-                      <p className="text-sm font-medium text-foreground">
-                        {item.name}
-                      </p>
+                      <p className="text-sm font-medium text-foreground">{item.name}</p>
                       <p className="text-xs text-muted-foreground">
                         {new Date(item.uploadedAt).toLocaleString()}
                       </p>
@@ -1063,10 +1187,81 @@ export function EstimateBuilderCard({
           ) : (
             <div className="text-sm text-muted-foreground">No saved estimates yet.</div>
           )}
-        </div>
+        </section>
       </CardContent>
     </Card>
   );
+}
+
+function SectionHeader({
+  title,
+  description,
+  done,
+}: {
+  title: string;
+  description: string;
+  done: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap items-start justify-between gap-3">
+      <div>
+        <p className="text-sm font-semibold text-foreground">{title}</p>
+        <p className="text-xs text-muted-foreground">{description}</p>
+      </div>
+      <Badge
+        variant={done ? "accent" : "outline"}
+        className={cn("text-[10px]", done && "bg-accent/90")}
+      >
+        {done ? "Complete" : "In progress"}
+      </Badge>
+    </div>
+  );
+}
+
+function UnlockNotice({ message }: { message: string }) {
+  return (
+    <div className="flex items-start gap-2 rounded-xl border border-border/60 bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
+      <LockKeyhole className="mt-0.5 h-4 w-4" />
+      <span>{message}</span>
+    </div>
+  );
+}
+
+function RateField({
+  label,
+  value,
+  onChange,
+  placeholder,
+  disabled,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="space-y-2">
+      <label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+        {label}
+      </label>
+      <input
+        className={inputClassName}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        inputMode="decimal"
+        placeholder={placeholder}
+        disabled={disabled}
+      />
+    </div>
+  );
+}
+
+function formatCurrency(value: number) {
+  return value.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
 }
 
 function stripJsonExtension(name: string) {
