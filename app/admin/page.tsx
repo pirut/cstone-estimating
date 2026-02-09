@@ -28,6 +28,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { UploadedFile } from "@/lib/types";
@@ -1000,20 +1007,24 @@ export default function AdminPage() {
                     </label>
                     {libraries.template_config.items.length ? (
                       <div className="flex flex-wrap items-center gap-2">
-                        <select
-                          className="min-w-[240px] flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm"
-                          value={selectedTemplateKey}
-                          onChange={(event) =>
-                            setSelectedTemplateKey(event.target.value)
+                        <Select
+                          value={selectedTemplateKey || "__none__"}
+                          onValueChange={(value) =>
+                            setSelectedTemplateKey(value === "__none__" ? "" : value)
                           }
                         >
-                          <option value="">Select a saved template</option>
-                          {libraries.template_config.items.map((item) => (
-                            <option key={item.key} value={item.key}>
-                              {item.name}
-                            </option>
-                          ))}
-                        </select>
+                          <SelectTrigger className="min-w-[240px] flex-1">
+                            <SelectValue placeholder="Select a saved template" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">Select a saved template</SelectItem>
+                            {libraries.template_config.items.map((item) => (
+                              <SelectItem key={item.key} value={item.key}>
+                                {item.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <Button
                           variant="outline"
                           size="sm"
@@ -1177,22 +1188,26 @@ export default function AdminPage() {
                           <label className="text-xs text-muted-foreground">
                             Sheet
                           </label>
-                          <select
-                            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                            value={field.sheet ?? ""}
-                            onChange={(event) =>
+                          <Select
+                            value={field.sheet || "__none__"}
+                            onValueChange={(value) =>
                               updateMappingField(fieldName, {
-                                sheet: event.target.value,
+                                sheet: value === "__none__" ? "" : value,
                               })
                             }
                           >
-                            <option value="">Select sheet</option>
-                            {sheetNames.map((sheet) => (
-                              <option key={sheet} value={sheet}>
-                                {sheet}
-                              </option>
-                            ))}
-                          </select>
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Select sheet" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Select sheet</SelectItem>
+                              {sheetNames.map((sheet) => (
+                                <SelectItem key={sheet} value={sheet}>
+                                  {sheet}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
                         <div className="space-y-2">
                           <label className="text-xs text-muted-foreground">
@@ -1264,35 +1279,46 @@ export default function AdminPage() {
                       <label className="text-xs text-muted-foreground">
                         Preview page
                       </label>
-                      <select
-                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                      <Select
                         value={previewPage}
-                        onChange={(event) => setPreviewPage(event.target.value)}
+                        onValueChange={(value) => setPreviewPage(value)}
                       >
-                        {pageKeys.map((pageKey) => (
-                          <option key={pageKey} value={pageKey}>
-                            {pageKey.replace("_", " ").toUpperCase()}
-                          </option>
-                        ))}
-                      </select>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select page" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {pageKeys.map((pageKey) => (
+                            <SelectItem key={pageKey} value={pageKey}>
+                              {pageKey.replace("_", " ").toUpperCase()}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs text-muted-foreground">
                         Field to place
                       </label>
-                      <select
-                        className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                        value={selectedField ?? ""}
-                        onChange={(event) => setSelectedField(event.target.value)}
+                      <Select
+                        value={selectedField ?? "__none__"}
+                        onValueChange={(value) =>
+                          setSelectedField(value === "__none__" ? null : value)
+                        }
                       >
-                        {(Object.keys(
-                          (coordsConfig[previewPage] as Record<string, CoordField>) ?? {}
-                        ) as string[]).map((fieldName) => (
-                          <option key={fieldName} value={fieldName}>
-                            {formatFieldLabel(fieldName)}
-                          </option>
-                        ))}
-                      </select>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select field" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Select field</SelectItem>
+                          {(Object.keys(
+                            (coordsConfig[previewPage] as Record<string, CoordField>) ?? {}
+                          ) as string[]).map((fieldName) => (
+                            <SelectItem key={fieldName} value={fieldName}>
+                              {formatFieldLabel(fieldName)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <Separator />
                     <div className="space-y-3">
@@ -1466,39 +1492,47 @@ export default function AdminPage() {
                                   <label className="text-xs text-muted-foreground">
                                     Align
                                   </label>
-                                  <select
-                                    className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm"
+                                  <Select
                                     value={field.align ?? "left"}
-                                    onChange={(event) =>
+                                    onValueChange={(value) =>
                                       updateCoordField(pageKey, fieldName, {
-                                        align: event.target.value,
+                                        align: value,
                                       })
                                     }
                                   >
-                                    <option value="left">Left</option>
-                                    <option value="center">Center</option>
-                                    <option value="right">Right</option>
-                                  </select>
+                                    <SelectTrigger className="w-full px-2">
+                                      <SelectValue placeholder="Alignment" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="left">Left</SelectItem>
+                                      <SelectItem value="center">Center</SelectItem>
+                                      <SelectItem value="right">Right</SelectItem>
+                                    </SelectContent>
+                                  </Select>
                                 </div>
                                 <div className="space-y-2">
                                   <label className="text-xs text-muted-foreground">
                                     Font
                                   </label>
-                                  <select
-                                    className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm"
+                                  <Select
                                     value={field.font ?? "WorkSans"}
-                                    onChange={(event) =>
+                                    onValueChange={(value) =>
                                       updateCoordField(pageKey, fieldName, {
-                                        font: event.target.value,
+                                        font: value,
                                       })
                                     }
                                   >
-                                    {fontOptions.map((font) => (
-                                      <option key={font} value={font}>
-                                        {font}
-                                      </option>
-                                    ))}
-                                  </select>
+                                    <SelectTrigger className="w-full px-2">
+                                      <SelectValue placeholder="Font" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      {fontOptions.map((font) => (
+                                        <SelectItem key={font} value={font}>
+                                          {font}
+                                        </SelectItem>
+                                      ))}
+                                    </SelectContent>
+                                  </Select>
                                 </div>
                                 <div className="space-y-2">
                                   <label className="text-xs text-muted-foreground">

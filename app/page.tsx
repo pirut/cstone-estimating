@@ -22,6 +22,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
@@ -1324,17 +1331,21 @@ export default function HomePage() {
                     <label className="text-xs text-muted-foreground">
                       Active team
                     </label>
-                    <select
-                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                      value={activeTeam?.id ?? ""}
-                      onChange={(event) => setActiveTeamId(event.target.value)}
+                    <Select
+                      value={activeTeam?.id ?? undefined}
+                      onValueChange={(value) => setActiveTeamId(value)}
                     >
-                      {memberTeams.map((team) => (
-                        <option key={team.id} value={team.id}>
-                          {team.name}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select team" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {memberTeams.map((team) => (
+                          <SelectItem key={team.id} value={team.id}>
+                            {team.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 ) : null}
                 {!teamReady ? (

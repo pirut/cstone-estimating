@@ -13,6 +13,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { DEFAULT_UNIT_TYPES, DEFAULT_VENDORS } from "@/lib/catalog-defaults";
 import { db, instantAppId } from "@/lib/instant";
@@ -975,21 +982,25 @@ export default function TeamAdminPage() {
                         Owners and admins can assign members to sub teams.
                       </p>
                     ) : null}
-                    <select
-                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
-                      value={selectedMemberId ?? ""}
-                      onChange={(event) =>
-                        setSelectedMemberId(event.target.value || null)
+                    <Select
+                      value={selectedMemberId ?? "__none__"}
+                      onValueChange={(value) =>
+                        setSelectedMemberId(value === "__none__" ? null : value)
                       }
                       disabled={!availableOrgMembers.length || !hasTeamAdminAccess}
                     >
-                      <option value="">Select member</option>
-                      {availableOrgMembers.map((member) => (
-                        <option key={member.id} value={member.user?.id ?? ""}>
-                          {getMemberProfile(member).name}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select member" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">Select member</SelectItem>
+                        {availableOrgMembers.map((member) => (
+                          <SelectItem key={member.id} value={member.user?.id ?? member.id}>
+                            {getMemberProfile(member).name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                     <Button
                       variant="outline"
                       onClick={handleAddMember}
