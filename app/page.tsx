@@ -9,7 +9,6 @@ import {
   type ComponentType,
 } from "react";
 import Link from "next/link";
-import { AdvancedOverridesCard } from "@/components/advanced-overrides-card";
 import { BrandMark } from "@/components/brand-mark";
 import { EstimateBuilderCard } from "@/components/estimate-builder-card";
 import { UploadCard } from "@/components/upload-card";
@@ -47,7 +46,6 @@ import {
   FileText,
   LayoutTemplate,
   Loader2,
-  Settings2,
   Sparkles,
 } from "lucide-react";
 import {
@@ -547,12 +545,8 @@ export default function HomePage() {
       return;
     }
 
-    const mappingOverride =
-      templateConfig?.mapping && !uploads.mapping
-        ? templateConfig.mapping
-        : undefined;
-    const coordsOverride =
-      templateConfig?.coords && !uploads.coords ? templateConfig.coords : undefined;
+    const mappingOverride = templateConfig?.mapping;
+    const coordsOverride = templateConfig?.coords;
 
     setIsGenerating(true);
     setProgress(0.1);
@@ -565,8 +559,6 @@ export default function HomePage() {
           workbookUrl:
             estimateMode === "workbook" ? uploads.workbook?.url : undefined,
           templatePdfUrl: templateConfig.templatePdf.url,
-          mappingUrl: uploads.mapping?.url,
-          coordsUrl: uploads.coords?.url,
           mappingOverride,
           coordsOverride,
           estimate:
@@ -1518,47 +1510,16 @@ export default function HomePage() {
           {estimateMode === "estimate" ? null : templateCard}
         </section>
 
-        <section className="mt-10 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-          <div id="step-overrides" className="space-y-3">
-            <div className="rounded-2xl border border-border/60 bg-card/80 p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <Badge variant="muted" className="bg-muted/80 text-[10px]">
-                    Step 3
-                  </Badge>
-                  <h2 className="text-2xl font-serif text-foreground">
-                    Fine-Tune Mapping
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    Optional JSON overrides for special templates and calibration.
-                  </p>
-                </div>
-                <Settings2 className="mt-1 h-5 w-5 text-muted-foreground" />
-              </div>
-            </div>
-            <AdvancedOverridesCard
-              mapping={uploads.mapping}
-              coords={uploads.coords}
-              onUploadMapping={(file) => {
-                setError(null);
-                setUploads((prev) => ({ ...prev, mapping: file }));
-              }}
-              onUploadCoords={(file) => {
-                setError(null);
-                setUploads((prev) => ({ ...prev, coords: file }));
-              }}
-              onError={setError}
-            />
-          </div>
+        <section className="mt-10">
           <Card
             id="step-generate"
-            className="h-fit rounded-3xl border-border/60 bg-card/85 shadow-elevated lg:sticky lg:top-6"
+            className="h-fit rounded-3xl border-border/60 bg-card/85 shadow-elevated"
           >
             <CardHeader>
               <div className="flex items-start justify-between gap-3">
                 <div className="space-y-2">
                   <Badge variant="muted" className="bg-muted/80 text-[10px]">
-                    Step 4
+                    Step 3
                   </Badge>
                   <CardTitle className="text-2xl font-serif">
                     Generate Proposal
@@ -1635,20 +1596,6 @@ export default function HomePage() {
                   <span className="text-muted-foreground">Template</span>
                   <span className="text-right font-medium text-foreground">
                     {templateConfig?.name ?? "Not selected"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-muted-foreground">Mapping</span>
-                  <span className="text-right text-muted-foreground">
-                    {uploads.mapping?.name ??
-                      (templateConfig?.mapping ? "Template config" : "Default")}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-muted-foreground">Coordinates</span>
-                  <span className="text-right text-muted-foreground">
-                    {uploads.coords?.name ??
-                      (templateConfig?.coords ? "Template config" : "Default")}
                   </span>
                 </div>
               </div>
