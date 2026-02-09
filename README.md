@@ -64,11 +64,11 @@ DOWNLOAD_TIMEOUT_MS=15000
 DOWNLOAD_ALLOWLIST=uploadthing.com,utfs.io,ufs.sh
 DOWNLOAD_ALLOWLIST_SUFFIXES=uploadthing.com,utfs.io,ufs.sh
 ALLOW_PRIVATE_DOWNLOADS=false
-ADMIN_TOKEN=your-secret
-
-# For /admin, use Basic auth: any username + ADMIN_TOKEN as the password.
-# For API calls, you can also send Authorization: Bearer $ADMIN_TOKEN.
 ```
+
+Admin portal access is controlled by Clerk + InstantDB team roles. Only users
+with `owner` or `admin` membership on the org team can access `/admin` and
+`/team-admin`.
 
 ## Run locally
 

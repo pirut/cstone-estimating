@@ -45,17 +45,45 @@ export async function GET(request: NextRequest) {
     filtered.sort((a, b) => b.uploadedAt - a.uploadedAt);
 
     const urlMap = await getUrlMap(filtered.map((file) => file.key));
-    const items: LibraryItem[] = filtered.map((file) => ({
+    const baseItems: LibraryItem[] = filtered.map((file) => ({
       key: file.key,
       name: file.name,
       uploadedAt: file.uploadedAt,
       url: urlMap.get(file.key) ?? "",
     }));
+    const items =
+      type === "template_config"
+        ? await hydrateTemplateNames(baseItems)
+        : baseItems;
 
     return NextResponse.json({ items });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error.";
     return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+async function hydrateTemplateNames(items: LibraryItem[]) {
+  const next = await Promise.all(
+    items.map(async (item) => {
+      const templateName = await readTemplateName(item.url);
+      if (!templateName) return item;
+      return { ...item, name: templateName };
+    })
+  );
+  return next;
+}
+
+async function readTemplateName(url: string) {
+  if (!url) return null;
+  try {
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) return null;
+    const data = (await response.json()) as { name?: unknown };
+    const value = typeof data?.name === "string" ? data.name.trim() : "";
+    return value || null;
+  } catch {
+    return null;
   }
 }
 

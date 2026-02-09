@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       item: {
         key: fileResult.key,
-        name: fileResult.name,
+        name: config.name,
         url: fileResult.ufsUrl ?? fileResult.url,
       },
       template: config,

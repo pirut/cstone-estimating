@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import mappingDefault from "@/config/mapping.json";
 import coordinatesDefault from "@/config/coordinates.json";
+import { InstantAuthSync } from "@/components/instant-auth-sync";
 import { UploadDropzone } from "@/components/uploadthing";
 import { PdfCalibrationViewer } from "@/components/pdf-calibration-viewer";
 import {
@@ -30,6 +31,13 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { UploadedFile } from "@/lib/types";
+import { db, instantAppId } from "@/lib/instant";
+import {
+  SignInButton,
+  clerkEnabled,
+  useOptionalAuth,
+  useOptionalUser,
+} from "@/lib/clerk";
 import { cn } from "@/lib/utils";
 import { formatPreviewValue } from "@/lib/formatting";
 import {
@@ -132,6 +140,11 @@ const adminDropzoneAppearance = {
 };
 
 export default function AdminPage() {
+  const { isLoaded: authLoaded, isSignedIn } = useOptionalAuth();
+  const { user } = useOptionalUser();
+  const { isLoading: instantLoading, user: instantUser, error: instantAuthError } =
+    db.useAuth();
+  const [instantSetupError, setInstantSetupError] = useState<string | null>(null);
   const workbookWorkerRef = useRef<Worker | null>(null);
   const [libraries, setLibraries] = useState<
     Record<AdminLibraryType, LibraryState>
@@ -180,6 +193,75 @@ export default function AdminPage() {
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
 
+  const emailAddress = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? "";
+  const emailDomain = emailAddress.split("@")[1] ?? "";
+  const primaryOwnerEmail = (
+    process.env.NEXT_PUBLIC_PRIMARY_OWNER_EMAIL ??
+    "jr@cornerstonecompaniesfl.com"
+  )
+    .trim()
+    .toLowerCase();
+  const isPrimaryOwner = Boolean(
+    emailAddress && emailAddress === primaryOwnerEmail
+  );
+  const allowedDomain = (
+    process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN ?? "cornerstonecompaniesfl.com"
+  )
+    .trim()
+    .toLowerCase();
+  const preferredOrgTeamName = (
+    process.env.NEXT_PUBLIC_ORG_TEAM_NAME ?? "CORNERSTONE"
+  ).trim();
+  const normalizedOrgTeamName = preferredOrgTeamName.toLowerCase();
+  const teamDomain = (allowedDomain || emailDomain || "").trim();
+  const teamLookupDomain = teamDomain || "__none__";
+
+  const teamQuery = instantAppId
+    ? {
+        teams: {
+          $: {
+            where: { domain: teamLookupDomain },
+            order: { createdAt: "desc" as const },
+          },
+          memberships: { user: {} },
+        },
+      }
+    : { teams: { $: { where: { domain: "__none__" } } } };
+  const { data: teamData } = db.useQuery(teamQuery);
+  const teams = teamData?.teams ?? [];
+  const orgTeam = useMemo(() => {
+    if (!teams.length) return null;
+    const rootTeams = teams.filter((team) => !team.parentTeamId);
+    const candidates = rootTeams.length ? rootTeams : teams;
+    const namedTeam = normalizedOrgTeamName
+      ? candidates.find(
+          (team) =>
+            team.name?.trim().toLowerCase() === normalizedOrgTeamName
+        )
+      : null;
+    if (namedTeam) return namedTeam;
+    const primary = candidates.find((team) => team.isPrimary);
+    if (primary) return primary;
+    return candidates.reduce((oldest, team) => {
+      if (!oldest) return team;
+      const oldestTime = oldest.createdAt ?? 0;
+      const teamTime = team.createdAt ?? 0;
+      return teamTime < oldestTime ? team : oldest;
+    }, null as (typeof teams)[number] | null);
+  }, [teams, normalizedOrgTeamName]);
+  const orgMembership = orgTeam?.memberships?.find(
+    (membership) => membership.user?.id === instantUser?.id
+  );
+  const orgRole = String(orgMembership?.role ?? "")
+    .trim()
+    .toLowerCase();
+  const isOrgOwner = Boolean(
+    isPrimaryOwner ||
+      (orgTeam?.ownerId && orgTeam.ownerId === instantUser?.id) ||
+      orgRole === "owner"
+  );
+  const hasTeamAdminAccess = Boolean(isOrgOwner || orgRole === "admin");
+
   const progressSteps = useMemo(
     () => [
       { label: "Downloading workbook", value: 0.2 },
@@ -221,6 +303,7 @@ export default function AdminPage() {
   }, [coordsConfig.fonts]);
 
   useEffect(() => {
+    if (!hasTeamAdminAccess) return;
     if (typeof window === "undefined") return;
     try {
       const worker = new Worker(
@@ -272,7 +355,7 @@ export default function AdminPage() {
       setWorkbookError("Workbook reader failed to start.");
       setWorkbookWorkerReady(false);
     }
-  }, []);
+  }, [hasTeamAdminAccess]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -355,10 +438,11 @@ export default function AdminPage() {
   }, [coordsConfig, previewPage, cellPreviews, mappingConfig]);
 
   useEffect(() => {
+    if (!hasTeamAdminAccess) return;
     (Object.keys(LIBRARY_CONFIG) as AdminLibraryType[]).forEach((type) => {
       void loadLibrary(type);
     });
-  }, []);
+  }, [hasTeamAdminAccess]);
 
   const handleGenerate = async () => {
     setCalibrationError(null);
@@ -654,26 +738,202 @@ export default function AdminPage() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selectedField, nudgeStep, previewPage, coordsConfig, snapToGrid, gridSize]);
 
+  const renderAccessGate = () => {
+    if (!clerkEnabled) {
+      return (
+        <Card className="border-border/60 bg-card/80 shadow-elevated">
+          <CardHeader>
+            <CardTitle className="text-2xl font-serif">
+              Clerk not configured
+            </CardTitle>
+            <CardDescription>
+              Configure Clerk to protect admin access by team role.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      );
+    }
+
+    if (!authLoaded || !isSignedIn) {
+      return (
+        <Card className="border-border/60 bg-card/80 shadow-elevated">
+          <CardHeader>
+            <CardTitle className="text-2xl font-serif">
+              Sign in required
+            </CardTitle>
+            <CardDescription>
+              Only team owners and admins can access the admin portal.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SignInButton mode="modal">
+              <Button variant="accent" size="sm">
+                Sign in with Microsoft
+              </Button>
+            </SignInButton>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    if (instantLoading || !instantUser) {
+      return (
+        <Card className="border-border/60 bg-card/80 shadow-elevated">
+          <CardHeader>
+            <CardTitle className="text-2xl font-serif">
+              Connecting workspace
+            </CardTitle>
+            <CardDescription>
+              Verifying your team role in InstantDB...
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading access...
+          </CardContent>
+        </Card>
+      );
+    }
+
+    if (!hasTeamAdminAccess) {
+      return (
+        <Card className="border-border/60 bg-card/80 shadow-elevated">
+          <CardHeader>
+            <CardTitle className="text-2xl font-serif">
+              Admin access only
+            </CardTitle>
+            <CardDescription>
+              Ask an organization owner to grant owner/admin team access.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm text-muted-foreground">
+              Signed in as {user?.primaryEmailAddress?.emailAddress}
+            </div>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    return null;
+  };
+
+  const accessGate = renderAccessGate();
+  const totalLibraryFiles = useMemo(
+    () =>
+      (Object.keys(libraries) as AdminLibraryType[]).reduce(
+        (total, type) => total + libraries[type].items.length,
+        0
+      ),
+    [libraries]
+  );
+
+  if (accessGate) {
+    return (
+      <main className="relative min-h-screen overflow-hidden">
+        <InstantAuthSync onAuthError={setInstantSetupError} />
+        <div className="container relative py-12 space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="space-y-2">
+              <Badge variant="outline" className="bg-background/80">
+                Admin Portal
+              </Badge>
+              <h1 className="text-4xl font-serif">Calibration & File Manager</h1>
+            </div>
+            <Button asChild variant="outline">
+              <Link href="/">
+                <ArrowLeft className="h-4 w-4" />
+                Back to generator
+              </Link>
+            </Button>
+          </div>
+
+          {instantSetupError ? (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
+              Instant auth issue: {instantSetupError}
+            </div>
+          ) : null}
+          {instantAuthError ? (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              {instantAuthError.message}
+            </div>
+          ) : null}
+          {accessGate}
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main className="relative min-h-screen overflow-hidden">
-      <div className="container relative py-12">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="space-y-2">
-            <Badge variant="outline" className="bg-background/80">
-              Admin Portal
-            </Badge>
-            <h1 className="text-4xl font-serif">Calibration & File Manager</h1>
-            <p className="text-muted-foreground">
-              Manage uploads, calibrate coordinates, and craft mapping overrides.
-            </p>
+      <InstantAuthSync onAuthError={setInstantSetupError} />
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -top-24 left-1/2 h-80 w-[560px] -translate-x-1/2 rounded-full bg-accent/20 blur-3xl" />
+        <div className="absolute top-20 right-4 h-64 w-64 rounded-full bg-foreground/10 blur-3xl" />
+        <div className="absolute -bottom-20 left-10 h-72 w-72 rounded-full bg-accent/15 blur-3xl" />
+      </div>
+      <div className="container relative py-10">
+        <div className="rounded-3xl border border-border/60 bg-card/80 p-6 shadow-elevated">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="space-y-2">
+              <Badge variant="outline" className="bg-background/80">
+                Admin Portal
+              </Badge>
+              <h1 className="text-4xl font-serif">Operations & Calibration Studio</h1>
+              <p className="text-muted-foreground">
+                Manage libraries, calibrate templates, and ship reusable proposal
+                configurations.
+              </p>
+            </div>
+            <Button asChild variant="outline">
+              <Link href="/">
+                <ArrowLeft className="h-4 w-4" />
+                Back to generator
+              </Link>
+            </Button>
           </div>
-          <Button asChild variant="outline">
-            <Link href="/">
-              <ArrowLeft className="h-4 w-4" />
-              Back to generator
-            </Link>
-          </Button>
+          <div className="mt-5 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-2xl border border-border/60 bg-background/70 px-4 py-3">
+              <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                Files in library
+              </p>
+              <p className="mt-1 text-xl font-semibold text-foreground">
+                {totalLibraryFiles}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border/60 bg-background/70 px-4 py-3">
+              <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                Saved templates
+              </p>
+              <p className="mt-1 text-xl font-semibold text-foreground">
+                {libraries.template_config.items.length}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-border/60 bg-background/70 px-4 py-3">
+              <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                Active role
+              </p>
+              <p className="mt-1 text-xl font-semibold text-foreground">
+                {orgRole === "owner"
+                  ? "Owner"
+                  : orgRole === "admin"
+                    ? "Admin"
+                    : "Member"}
+              </p>
+            </div>
+          </div>
         </div>
+
+        {instantSetupError ? (
+          <div className="mt-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
+            Instant auth issue: {instantSetupError}
+          </div>
+        ) : null}
+        {instantAuthError ? (
+          <div className="mt-6 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            {instantAuthError.message}
+          </div>
+        ) : null}
 
         <Tabs defaultValue="files" className="mt-8">
           <TabsList className="grid w-full max-w-md grid-cols-2">

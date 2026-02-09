@@ -1,6 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type ComponentType } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ComponentType,
+} from "react";
 import Link from "next/link";
 import { AdvancedOverridesCard } from "@/components/advanced-overrides-card";
 import { BrandMark } from "@/components/brand-mark";
@@ -60,6 +67,9 @@ export default function HomePage() {
   const [uploads, setUploads] = useState<UploadState>({});
   const [error, setError] = useState<string | null>(null);
   const [templateConfig, setTemplateConfig] = useState<TemplateConfig | null>(null);
+  const [selectedTemplateConfigKey, setSelectedTemplateConfigKey] = useState<
+    string | null
+  >(null);
   const [templateConfigError, setTemplateConfigError] = useState<string | null>(null);
   const [templateConfigLoading, setTemplateConfigLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
@@ -90,6 +100,7 @@ export default function HomePage() {
   >("idle");
   const [knownOrgTeamId, setKnownOrgTeamId] = useState<string | null>(null);
   const [knownOrgTeamDomain, setKnownOrgTeamDomain] = useState<string | null>(null);
+  const [knownOrgLookupLoaded, setKnownOrgLookupLoaded] = useState(false);
   const [editingEstimateId, setEditingEstimateId] = useState<string | null>(null);
   const [loadedEstimatePayload, setLoadedEstimatePayload] = useState<Record<
     string,
@@ -176,6 +187,9 @@ export default function HomePage() {
   const orgMembership = orgTeam?.memberships?.find(
     (membership) => membership.user?.id === instantUser?.id
   );
+  const orgRole = String(orgMembership?.role ?? "")
+    .trim()
+    .toLowerCase();
   const activeTeam = useMemo(() => {
     if (!memberTeams.length) return null;
     const selected = memberTeams.find((team) => team.id === activeTeamId);
@@ -191,8 +205,9 @@ export default function HomePage() {
   const isOrgOwner = Boolean(
     isPrimaryOwner ||
       (orgTeam?.ownerId && orgTeam.ownerId === instantUser?.id) ||
-      orgMembership?.role === "owner"
+      orgRole === "owner"
   );
+  const hasTeamAdminAccess = Boolean(isOrgOwner || orgRole === "admin");
   const appLocked = clerkEnabled && (!authLoaded || !isSignedIn);
   const autoProvisionRef = useRef(false);
   const orgSetupRef = useRef<string | null>(null);
@@ -296,6 +311,7 @@ export default function HomePage() {
     if (typeof window === "undefined") return;
     setKnownOrgTeamId(localStorage.getItem("cstone-org-team-id"));
     setKnownOrgTeamDomain(localStorage.getItem("cstone-org-team-domain"));
+    setKnownOrgLookupLoaded(true);
   }, []);
 
   useEffect(() => {
@@ -337,6 +353,7 @@ export default function HomePage() {
   useEffect(() => {
     if (!instantAppId) return;
     if (!authLoaded || !isSignedIn) return;
+    if (!knownOrgLookupLoaded) return;
     if (!instantUser) return;
     if (instantLoading) return;
     if (teamReady) return;
@@ -353,16 +370,29 @@ export default function HomePage() {
     setTeamError(null);
 
     if (!teams.length) {
-      if (knownOrgTeamId && knownOrgTeamDomain === teamDomain) {
-        setTeamError(
-          "We couldn't load your existing org workspace. Refresh and try again."
-        );
-        autoProvisionRef.current = false;
-        return;
-      }
-      void handleCreateTeam().finally(() => {
-        autoProvisionRef.current = false;
-      });
+      void (async () => {
+        try {
+          const existingTeams = await checkExistingOrgWorkspace();
+          if (!existingTeams) {
+            return;
+          }
+          if (existingTeams.length > 0) {
+            setTeamError(
+              "We found an existing organization workspace. Please wait while it syncs."
+            );
+            return;
+          }
+          if (knownOrgTeamId && knownOrgTeamDomain === teamDomain) {
+            setTeamError(
+              "We couldn't load your existing org workspace. Refresh and try again."
+            );
+            return;
+          }
+          await handleCreateTeam();
+        } finally {
+          autoProvisionRef.current = false;
+        }
+      })();
       return;
     }
 
@@ -393,6 +423,7 @@ export default function HomePage() {
     teamSetupPending,
     knownOrgTeamId,
     knownOrgTeamDomain,
+    knownOrgLookupLoaded,
     isPrimaryOwner,
     primaryOwnerEmail,
   ]);
@@ -714,9 +745,39 @@ export default function HomePage() {
     }
   };
 
+  const checkExistingOrgWorkspace = useCallback(async () => {
+    if (!instantAppId || !teamDomain) return [];
+    try {
+      const snapshot = (await db.queryOnce({
+        teams: {
+          $: {
+            where: { domain: teamLookupDomain },
+            order: { createdAt: "desc" as const },
+          },
+        },
+      })) as { teams?: Array<{ id: string }> } | undefined;
+      return Array.isArray(snapshot?.teams) ? snapshot.teams : [];
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Unable to verify existing workspace.";
+      setTeamError(message);
+      return null;
+    }
+  }, [instantAppId, teamDomain, teamLookupDomain]);
+
   const handleRetryTeamSetup = () => {
     if (!orgTeam && !teams.length) {
-      void handleCreateTeam();
+      void (async () => {
+        const existingTeams = await checkExistingOrgWorkspace();
+        if (!existingTeams) return;
+        if (existingTeams.length > 0) {
+          setTeamError(
+            "We found an existing organization workspace. Please wait while it syncs."
+          );
+          return;
+        }
+        await handleCreateTeam();
+      })();
       return;
     }
     if (orgTeam && !orgMembership) {
@@ -781,6 +842,7 @@ export default function HomePage() {
     }));
     if (type === "template") {
       setTemplateConfig(null);
+      setSelectedTemplateConfigKey(null);
     }
   };
 
@@ -839,6 +901,7 @@ export default function HomePage() {
         throw new Error("Template configuration is missing a PDF.");
       }
       setTemplateConfig(data);
+      setSelectedTemplateConfigKey(item.key);
       setUploads((prev) => ({
         ...prev,
         template: { name: data.templatePdf.name, url: data.templatePdf.url },
@@ -905,12 +968,14 @@ export default function HomePage() {
                   </div>
                   <Button
                     variant={
-                      templateConfig?.name === item.name ? "accent" : "outline"
+                      selectedTemplateConfigKey === item.key ? "accent" : "outline"
                     }
                     size="sm"
                     onClick={() => handleSelectTemplateConfig(item)}
                   >
-                    {templateConfig?.name === item.name ? "Selected" : "Use template"}
+                    {selectedTemplateConfigKey === item.key
+                      ? "Selected"
+                      : "Use template"}
                   </Button>
                 </div>
               ))}
@@ -929,13 +994,16 @@ export default function HomePage() {
             </span>
           </span>
           {templateConfig ? (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setTemplateConfig(null)}
-            >
-              Clear selection
-            </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setTemplateConfig(null);
+                  setSelectedTemplateConfigKey(null);
+                }}
+              >
+                Clear selection
+              </Button>
           ) : null}
           <Button
             variant="secondary"
@@ -1206,9 +1274,13 @@ export default function HomePage() {
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge variant="outline" className="bg-background/80">
-                        {orgMembership?.role === "owner" ? "Owner" : "Member"}
+                        {orgRole === "owner"
+                          ? "Owner"
+                          : orgRole === "admin"
+                            ? "Admin"
+                            : "Member"}
                       </Badge>
-                      {isOrgOwner ? (
+                      {hasTeamAdminAccess ? (
                         <Button asChild variant="outline" size="sm">
                           <Link href="/team-admin">Manage teams</Link>
                         </Button>
@@ -1600,6 +1672,7 @@ export default function HomePage() {
                   onClick={() => {
                     setUploads({});
                     setTemplateConfig(null);
+                    setSelectedTemplateConfigKey(null);
                     setEstimateValues({});
                     setEstimateName("");
                     setSelectedEstimate(null);
@@ -1630,9 +1703,11 @@ export default function HomePage() {
             library tabs in each section.
           </span>
           <div className="flex items-center gap-4">
-            <Link className="hover:text-foreground" href="/admin">
-              Admin portal
-            </Link>
+            {hasTeamAdminAccess ? (
+              <Link className="hover:text-foreground" href="/admin">
+                Admin portal
+              </Link>
+            ) : null}
             <span>Cornerstone Proposal Generator · v{APP_VERSION}</span>
           </div>
         </footer>

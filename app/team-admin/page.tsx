@@ -129,11 +129,15 @@ export default function TeamAdminPage() {
   const orgMembership = orgTeam?.memberships?.find(
     (membership) => membership.user?.id === instantUser?.id
   );
+  const orgRole = String(orgMembership?.role ?? "")
+    .trim()
+    .toLowerCase();
   const isOrgOwner = Boolean(
     isPrimaryOwner ||
       (orgTeam?.ownerId && orgTeam.ownerId === instantUser?.id) ||
-      orgMembership?.role === "owner"
+      orgRole === "owner"
   );
+  const hasTeamAdminAccess = Boolean(isOrgOwner || orgRole === "admin");
 
   const selectedTeam = useMemo(
     () => teams.find((team) => team.id === selectedTeamId) ?? null,
@@ -259,11 +263,11 @@ export default function TeamAdminPage() {
       return;
     }
     if (!instantUser || !orgTeam) {
-      setTeamError("Sign in with an org owner account.");
+      setTeamError("Sign in with an organization admin account.");
       return;
     }
-    if (!isOrgOwner) {
-      setTeamError("Only org owners can create sub teams.");
+    if (!hasTeamAdminAccess) {
+      setTeamError("Only organization owners and admins can create sub teams.");
       return;
     }
     if (!subTeamName.trim()) {
@@ -301,6 +305,10 @@ export default function TeamAdminPage() {
   const handleRenameTeam = async () => {
     setTeamNameError(null);
     if (!selectedTeam) return;
+    if (!hasTeamAdminAccess) {
+      setTeamNameError("Only organization owners and admins can rename teams.");
+      return;
+    }
     const trimmed = teamNameDraft.trim();
     if (!trimmed) {
       setTeamNameError("Team name cannot be empty.");
@@ -321,6 +329,10 @@ export default function TeamAdminPage() {
   const handleDeleteTeam = async () => {
     setTeamDeleteError(null);
     if (!selectedTeam) return;
+    if (!isOrgOwner) {
+      setTeamDeleteError("Only organization owners can delete teams.");
+      return;
+    }
     if (selectedTeam.isPrimary) {
       setTeamDeleteError("You cannot delete the org workspace.");
       return;
@@ -341,6 +353,10 @@ export default function TeamAdminPage() {
 
   const handleAddMember = async () => {
     setMemberActionError(null);
+    if (!hasTeamAdminAccess) {
+      setMemberActionError("Only organization owners and admins can add members.");
+      return;
+    }
     if (!instantUser || !selectedTeam || !selectedMemberId) return;
     const now = Date.now();
     const membershipId = id();
@@ -362,6 +378,12 @@ export default function TeamAdminPage() {
 
   const handleRemoveMember = async (membershipId?: string, memberId?: string) => {
     setMemberActionError(null);
+    if (!hasTeamAdminAccess) {
+      setMemberActionError(
+        "Only organization owners and admins can remove members."
+      );
+      return;
+    }
     if (!membershipId || !selectedTeam) return;
     if (memberId && memberId === selectedTeam.ownerId) {
       setMemberActionError("Transfer ownership before removing the owner.");
@@ -380,6 +402,10 @@ export default function TeamAdminPage() {
 
   const handleMakeOwner = async (membershipId?: string, memberId?: string) => {
     setMemberActionError(null);
+    if (!isOrgOwner) {
+      setMemberActionError("Only organization owners can transfer ownership.");
+      return;
+    }
     if (!membershipId || !memberId || !selectedTeam) return;
     const previousOwner = selectedTeam.memberships?.find(
       (membership) => membership.user?.id === selectedTeam.ownerId
@@ -402,7 +428,7 @@ export default function TeamAdminPage() {
     }
   };
 
-  const canEditCatalog = Boolean(isOrgOwner && catalogTeam);
+  const canEditCatalog = Boolean(hasTeamAdminAccess && catalogTeam);
 
   const handleVendorChange = (index: number, patch: Partial<VendorDraft>) => {
     setVendorDrafts((prev) =>
@@ -432,7 +458,7 @@ export default function TeamAdminPage() {
       return;
     }
     if (!canEditCatalog) {
-      setVendorError("Only org owners can update vendors.");
+      setVendorError("Only organization owners and admins can update vendors.");
       return;
     }
 
@@ -518,7 +544,7 @@ export default function TeamAdminPage() {
       return;
     }
     if (!canEditCatalog) {
-      setVendorError("Only org owners can seed vendors.");
+      setVendorError("Only organization owners and admins can seed vendors.");
       return;
     }
     if (vendorRecords.length) {
@@ -582,7 +608,9 @@ export default function TeamAdminPage() {
       return;
     }
     if (!canEditCatalog) {
-      setUnitTypeError("Only org owners can update unit types.");
+      setUnitTypeError(
+        "Only organization owners and admins can update unit types."
+      );
       return;
     }
 
@@ -686,7 +714,9 @@ export default function TeamAdminPage() {
       return;
     }
     if (!canEditCatalog) {
-      setUnitTypeError("Only org owners can seed unit types.");
+      setUnitTypeError(
+        "Only organization owners and admins can seed unit types."
+      );
       return;
     }
     if (unitTypeRecords.length) {
@@ -744,7 +774,7 @@ export default function TeamAdminPage() {
               Sign in required
             </CardTitle>
             <CardDescription>
-              Only organization owners can manage teams and members.
+              Only organization owners and admins can manage teams and members.
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -793,14 +823,14 @@ export default function TeamAdminPage() {
 
         {authGate ? (
           authGate
-        ) : !isOrgOwner ? (
+        ) : !hasTeamAdminAccess ? (
           <Card className="border-border/60 bg-card/80 shadow-elevated">
             <CardHeader>
               <CardTitle className="text-2xl font-serif">
-                Owner access only
+                Admin access only
               </CardTitle>
               <CardDescription>
-                Ask your organization owner to grant access to team management.
+                Ask your organization owner to grant owner/admin access.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -940,9 +970,9 @@ export default function TeamAdminPage() {
                     <p className="text-xs text-muted-foreground">
                       Add a teammate from the org workspace to this team.
                     </p>
-                    {!isOrgOwner ? (
+                    {!hasTeamAdminAccess ? (
                       <p className="text-xs text-muted-foreground">
-                        Only the org owner can assign members to sub teams.
+                        Owners and admins can assign members to sub teams.
                       </p>
                     ) : null}
                     <select
@@ -951,7 +981,7 @@ export default function TeamAdminPage() {
                       onChange={(event) =>
                         setSelectedMemberId(event.target.value || null)
                       }
-                      disabled={!availableOrgMembers.length || !isOrgOwner}
+                      disabled={!availableOrgMembers.length || !hasTeamAdminAccess}
                     >
                       <option value="">Select member</option>
                       {availableOrgMembers.map((member) => (
@@ -967,7 +997,7 @@ export default function TeamAdminPage() {
                         !selectedMemberId ||
                         memberActionLoading ||
                         !selectedTeam ||
-                        !isOrgOwner
+                        !hasTeamAdminAccess
                       }
                     >
                       Add member
@@ -1022,13 +1052,13 @@ export default function TeamAdminPage() {
                           className="min-w-[220px] flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm"
                           value={teamNameDraft}
                           onChange={(event) => setTeamNameDraft(event.target.value)}
-                          disabled={!isOrgOwner}
+                          disabled={!hasTeamAdminAccess}
                         />
                         <Button
                           variant="outline"
                           onClick={handleRenameTeam}
                           disabled={
-                            !isOrgOwner ||
+                            !hasTeamAdminAccess ||
                             teamNameSaving ||
                             !teamNameDraft.trim() ||
                             teamNameDraft.trim() === selectedTeam.name
@@ -1047,7 +1077,8 @@ export default function TeamAdminPage() {
                         </Button>
                       </div>
                       <p className="mt-2 text-xs text-muted-foreground">
-                        Only org owners can rename or delete teams.
+                        Owners and admins can rename teams. Only owners can
+                        delete teams and transfer ownership.
                       </p>
                     </div>
 
@@ -1095,6 +1126,13 @@ export default function TeamAdminPage() {
                                   >
                                     Owner
                                   </Badge>
+                                ) : membership.role === "admin" ? (
+                                  <Badge
+                                    variant="outline"
+                                    className="bg-background/80"
+                                  >
+                                    Admin
+                                  </Badge>
                                 ) : (
                                   <Badge
                                     variant="outline"
@@ -1121,7 +1159,11 @@ export default function TeamAdminPage() {
                                   onClick={() =>
                                     handleRemoveMember(membership.id, memberId)
                                   }
-                                  disabled={memberActionLoading || isOwner || !isOrgOwner}
+                                  disabled={
+                                    memberActionLoading ||
+                                    isOwner ||
+                                    !hasTeamAdminAccess
+                                  }
                                 >
                                   Remove
                                 </Button>
@@ -1156,9 +1198,10 @@ export default function TeamAdminPage() {
                     settings.
                   </div>
                 ) : null}
-                {!isOrgOwner ? (
+                {!hasTeamAdminAccess ? (
                   <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                    Only org owners can edit vendors and unit types.
+                    Only organization owners and admins can edit vendors and unit
+                    types.
                   </div>
                 ) : null}
 
