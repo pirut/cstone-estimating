@@ -27,11 +27,16 @@ async function main() {
   const pdfDoc = await PDFDocument.load(templateBytes);
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const pages = pdfDoc.getPages();
+  const pageFields = new Map();
+  getSortedPageKeys(coords).forEach((pageKey) => {
+    const pageNumber = parsePageKey(pageKey);
+    if (!pageNumber) return;
+    pageFields.set(pageNumber - 1, coords[pageKey] || {});
+  });
 
   pages.forEach((page, index) => {
     const { width, height } = page.getSize();
-    const pageKey = `page_${index + 1}`;
-    const fields = coords[pageKey] || {};
+    const fields = pageFields.get(index) || {};
 
     if (showGrid && gridSize > 0) {
       const gridColor = rgb(0.7, 0.7, 0.7);
@@ -85,6 +90,18 @@ function parseArgs(argv) {
     }
   }
   return args;
+}
+
+function parsePageKey(value) {
+  if (!/^page_[1-9]\d*$/.test(String(value))) return null;
+  const pageNumber = Number(String(value).slice(5));
+  return Number.isInteger(pageNumber) && pageNumber >= 1 ? pageNumber : null;
+}
+
+function getSortedPageKeys(config) {
+  return Object.keys(config || {})
+    .filter((key) => parsePageKey(key) !== null)
+    .sort((left, right) => parsePageKey(left) - parsePageKey(right));
 }
 
 main().catch((err) => {

@@ -7,35 +7,17 @@ import coordinatesDefault from "@/config/coordinates.json";
 import { downloadBuffer, downloadJson } from "@/lib/server/download";
 import { formatValue } from "@/lib/formatting";
 import { computeEstimate, DEFAULT_DRAFT } from "@/lib/estimate-calculator";
+import {
+  CoordSpec,
+  getPageFields,
+  getSortedPageKeys,
+  parsePageKey,
+} from "@/lib/coordinates";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const DOWNLOAD_TIMEOUT_MS = 20000;
-
-type CoordSpec = {
-  x?: number;
-  y?: number;
-  size?: number;
-  align?: string;
-  max_width?: number;
-  min_size?: number;
-  font?: string;
-  font_url?: string;
-  color?: string | number[];
-  opacity?: number;
-  background?: {
-    color?: string | number[];
-    opacity?: number;
-    padding?: number;
-    padding_x?: number;
-    padding_y?: number;
-    width?: number;
-    height?: number;
-    offset_x?: number;
-    offset_y?: number;
-  };
-};
 
 export async function POST(request: NextRequest) {
   try {
@@ -259,13 +241,17 @@ async function stampPdf(
   const fontCache = new Map<string, any>();
   const fontsConfig = coordsConfig.fonts ?? {};
 
-  for (const [pageKey, pageFields] of Object.entries(coordsConfig)) {
-    if (!pageKey.startsWith("page_")) continue;
-    const pageIndex = Number(pageKey.replace("page_", "")) - 1;
+  for (const pageKey of getSortedPageKeys(coordsConfig)) {
+    const pageNumber = parsePageKey(pageKey);
+    if (!pageNumber) continue;
+    const pageIndex = pageNumber - 1;
     const page = pages[pageIndex];
     if (!page) continue;
 
-    const fields = pageFields as Record<string, CoordSpec>;
+    const fields = getPageFields(coordsConfig, pageKey) as Record<
+      string,
+      CoordSpec
+    >;
     for (const [fieldName, spec] of Object.entries(fields)) {
       if (!spec) continue;
       const value = fieldValues[fieldName];

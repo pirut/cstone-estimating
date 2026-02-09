@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import mappingDefault from "@/config/mapping.json";
 import coordinatesDefault from "@/config/coordinates.json";
@@ -49,6 +49,11 @@ import {
 } from "@/lib/clerk";
 import { cn } from "@/lib/utils";
 import { formatPreviewValue } from "@/lib/formatting";
+import {
+  getSortedPageKeys,
+  parsePageKey,
+  toPageKey,
+} from "@/lib/coordinates";
 import {
   ArrowDown,
   ArrowDownToLine,
@@ -102,6 +107,7 @@ type CoordField = {
   min_size?: number;
   font?: string;
   color?: string;
+  opacity?: number;
 };
 
 type CoordsConfig = Record<string, any>;
@@ -178,6 +184,11 @@ export default function AdminPage() {
   const [snapToGrid, setSnapToGrid] = useState(true);
   const [gridSize, setGridSize] = useState(10);
   const [nudgeStep, setNudgeStep] = useState(1);
+  const [templatePageCount, setTemplatePageCount] = useState(0);
+  const [pageNumberToAdd, setPageNumberToAdd] = useState("");
+  const [fieldToAdd, setFieldToAdd] = useState("");
+  const [customFieldToAdd, setCustomFieldToAdd] = useState("");
+  const [coordsEditorError, setCoordsEditorError] = useState<string | null>(null);
   const [templateName, setTemplateName] = useState("");
   const [templateDescription, setTemplateDescription] = useState("");
   const [selectedTemplateKey, setSelectedTemplateKey] = useState("");
@@ -421,6 +432,12 @@ export default function AdminPage() {
     const baseName = templateFile.name.replace(/\.[^.]+$/, "");
     setTemplateName(baseName);
   }, [templateFile?.name, templateName]);
+
+  useEffect(() => {
+    if (!templateFile?.url) {
+      setTemplatePageCount(0);
+    }
+  }, [templateFile?.url]);
 
   const previewLabelMap = useMemo(() => {
     const map: Record<string, string> = {};
@@ -701,21 +718,142 @@ export default function AdminPage() {
     updateCoordField(previewPage, selectedField, { x: nextX, y: nextY });
   };
 
-  const pageKeys = useMemo(
-    () => Object.keys(coordsConfig).filter((key) => key.startsWith("page_")),
-    [coordsConfig]
+  const pageKeys = useMemo(() => getSortedPageKeys(coordsConfig), [coordsConfig]);
+  const previewPageFields = useMemo(
+    () =>
+      ((coordsConfig[previewPage] as Record<string, CoordField> | undefined) ??
+      {}) as Record<string, CoordField>,
+    [coordsConfig, previewPage]
   );
+  const availableStampFields = useMemo(() => {
+    const result: string[] = [];
+    const seen = new Set<string>();
+
+    const addField = (fieldName: string) => {
+      const normalized = String(fieldName ?? "").trim();
+      if (!normalized || seen.has(normalized)) return;
+      seen.add(normalized);
+      result.push(normalized);
+    };
+
+    Object.keys(mappingConfig.fields ?? {}).forEach(addField);
+    addField("plan_set_date_line");
+    pageKeys.forEach((pageKey) => {
+      const fields =
+        (coordsConfig[pageKey] as Record<string, CoordField> | undefined) ?? {};
+      Object.keys(fields).forEach(addField);
+    });
+    return result;
+  }, [coordsConfig, mappingConfig.fields, pageKeys]);
+
+  const addPage = (pageNumber: number) => {
+    const pageKey = toPageKey(pageNumber);
+    setCoordsConfig((prev) => {
+      if (prev[pageKey]) return prev;
+      return {
+        ...prev,
+        [pageKey]: {},
+      };
+    });
+    setPreviewPage(pageKey);
+    setCoordsEditorError(null);
+  };
+
+  const addFieldToCurrentPage = (fieldName: string) => {
+    const nextField = String(fieldName ?? "").trim();
+    if (!nextField) {
+      setCoordsEditorError("Enter or select a field key to add.");
+      return;
+    }
+    if (!parsePageKey(previewPage)) {
+      setCoordsEditorError("Select a valid page before adding fields.");
+      return;
+    }
+    setCoordsConfig((prev) => {
+      const page =
+        (prev[previewPage] as Record<string, CoordField> | undefined) ?? {};
+      if (page[nextField]) return prev;
+      return {
+        ...prev,
+        [previewPage]: {
+          ...page,
+          [nextField]: {
+            x: 36,
+            y: 36,
+            size: 10,
+            align: "left",
+            font: "WorkSans",
+            color: "#111111",
+          },
+        },
+      };
+    });
+    setSelectedField(nextField);
+    setFieldToAdd(nextField);
+    setCustomFieldToAdd("");
+    setCoordsEditorError(null);
+  };
+
+  const removeSelectedField = () => {
+    if (!selectedField) return;
+    setCoordsConfig((prev) => {
+      const page =
+        (prev[previewPage] as Record<string, CoordField> | undefined) ?? {};
+      if (!page[selectedField]) return prev;
+      const nextPage = { ...page };
+      delete nextPage[selectedField];
+      return {
+        ...prev,
+        [previewPage]: nextPage,
+      };
+    });
+    setSelectedField(null);
+    setCoordsEditorError(null);
+  };
+
+  const removeCurrentPage = () => {
+    if (!parsePageKey(previewPage)) return;
+    setCoordsConfig((prev) => {
+      if (!prev[previewPage]) return prev;
+      const next = { ...prev };
+      delete next[previewPage];
+      return next;
+    });
+    setCoordsEditorError(null);
+  };
+
+  const addAllTemplatePages = () => {
+    if (!templatePageCount || templatePageCount < 1) {
+      setCoordsEditorError(
+        "Load a template PDF preview first so page count can be detected."
+      );
+      return;
+    }
+    setCoordsConfig((prev) => {
+      const next = { ...prev };
+      for (let page = 1; page <= templatePageCount; page += 1) {
+        const pageKey = toPageKey(page);
+        if (!next[pageKey]) {
+          next[pageKey] = {};
+        }
+      }
+      return next;
+    });
+    setCoordsEditorError(null);
+  };
 
   useEffect(() => {
-    if (pageKeys.length === 0) return;
+    if (pageKeys.length === 0) {
+      setSelectedField(null);
+      return;
+    }
     if (!pageKeys.includes(previewPage)) {
       setPreviewPage(pageKeys[0]);
     }
   }, [pageKeys, previewPage]);
 
   useEffect(() => {
-    const fields = coordsConfig[previewPage] as Record<string, CoordField> | undefined;
-    const fieldNames = fields ? Object.keys(fields) : [];
+    const fieldNames = Object.keys(previewPageFields);
     if (fieldNames.length === 0) {
       setSelectedField(null);
       return;
@@ -723,7 +861,25 @@ export default function AdminPage() {
     if (!selectedField || !fieldNames.includes(selectedField)) {
       setSelectedField(fieldNames[0]);
     }
-  }, [coordsConfig, previewPage, selectedField]);
+  }, [previewPageFields, selectedField]);
+
+  useEffect(() => {
+    if (!availableStampFields.length) {
+      setFieldToAdd("");
+      return;
+    }
+    if (!fieldToAdd || !availableStampFields.includes(fieldToAdd)) {
+      setFieldToAdd(availableStampFields[0]);
+    }
+  }, [availableStampFields, fieldToAdd]);
+
+  const handlePdfDocumentInfo = useCallback(
+    (info: { pageCount: number }) => {
+      const nextCount = Number(info.pageCount ?? 0);
+      setTemplatePageCount(nextCount > 0 ? nextCount : 0);
+    },
+    []
+  );
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -1095,7 +1251,7 @@ export default function AdminPage() {
                     Uses: {templateFile?.name ?? "no PDF selected"}
                   </span>
                   <span>•</span>
-                  <span>{Object.keys(coordsConfig).length} sections</span>
+                  <span>{pageKeys.length} configured page(s)</span>
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <Button
@@ -1275,22 +1431,85 @@ export default function AdminPage() {
                 <div className="grid gap-4 lg:grid-cols-[0.6fr_1.4fr]">
                   <div className="space-y-3 rounded-xl border border-border/60 bg-background/70 p-4">
                     <div className="space-y-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
+                        Page setup
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Template pages detected:{" "}
+                        {templatePageCount > 0 ? templatePageCount : "Not loaded"}
+                      </p>
+                      <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                        <Input
+                          uiSize="xs"
+                          type="number"
+                          min={1}
+                          placeholder="Page number"
+                          value={pageNumberToAdd}
+                          onChange={(event) =>
+                            setPageNumberToAdd(event.target.value)
+                          }
+                        />
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const pageNumber = Number(pageNumberToAdd);
+                            if (!Number.isInteger(pageNumber) || pageNumber < 1) {
+                              setCoordsEditorError(
+                                "Enter a valid page number (1 or greater)."
+                              );
+                              return;
+                            }
+                            addPage(pageNumber);
+                            setPageNumberToAdd("");
+                          }}
+                        >
+                          Add page
+                        </Button>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={addAllTemplatePages}
+                          disabled={!templatePageCount}
+                        >
+                          Add all template pages
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={removeCurrentPage}
+                          disabled={!parsePageKey(previewPage)}
+                        >
+                          Remove current page
+                        </Button>
+                      </div>
+                    </div>
+                    <Separator />
+                    <div className="space-y-2">
                       <label className="text-xs text-muted-foreground">
                         Preview page
                       </label>
                       <Select
-                        value={previewPage}
-                        onValueChange={(value) => setPreviewPage(value)}
+                        value={pageKeys.includes(previewPage) ? previewPage : "__none__"}
+                        onValueChange={(value) =>
+                          setPreviewPage(value === "__none__" ? previewPage : value)
+                        }
                       >
                         <SelectTrigger className="w-full">
                           <SelectValue placeholder="Select page" />
                         </SelectTrigger>
                         <SelectContent>
-                          {pageKeys.map((pageKey) => (
-                            <SelectItem key={pageKey} value={pageKey}>
-                              {pageKey.replace("_", " ").toUpperCase()}
-                            </SelectItem>
-                          ))}
+                          {pageKeys.length ? (
+                            pageKeys.map((pageKey) => (
+                              <SelectItem key={pageKey} value={pageKey}>
+                                {pageKey.replace("_", " ").toUpperCase()}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <SelectItem value="__none__">No pages configured</SelectItem>
+                          )}
                         </SelectContent>
                       </Select>
                     </div>
@@ -1309,9 +1528,7 @@ export default function AdminPage() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="__none__">Select field</SelectItem>
-                          {(Object.keys(
-                            (coordsConfig[previewPage] as Record<string, CoordField>) ?? {}
-                          ) as string[]).map((fieldName) => (
+                          {Object.keys(previewPageFields).map((fieldName) => (
                             <SelectItem key={fieldName} value={fieldName}>
                               {formatFieldLabel(fieldName)}
                             </SelectItem>
@@ -1319,6 +1536,60 @@ export default function AdminPage() {
                         </SelectContent>
                       </Select>
                     </div>
+                    <div className="space-y-2">
+                      <label className="text-xs text-muted-foreground">
+                        Add field to current page
+                      </label>
+                      <Select
+                        value={fieldToAdd || "__none__"}
+                        onValueChange={(value) =>
+                          setFieldToAdd(value === "__none__" ? "" : value)
+                        }
+                      >
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Choose field key" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">Choose field key</SelectItem>
+                          {availableStampFields.map((fieldName) => (
+                            <SelectItem key={fieldName} value={fieldName}>
+                              {fieldName}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Input
+                        uiSize="xs"
+                        placeholder="Or enter custom field key"
+                        value={customFieldToAdd}
+                        onChange={(event) => setCustomFieldToAdd(event.target.value)}
+                      />
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() =>
+                            addFieldToCurrentPage(customFieldToAdd || fieldToAdd)
+                          }
+                          disabled={!parsePageKey(previewPage)}
+                        >
+                          Add field
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={removeSelectedField}
+                          disabled={!selectedField}
+                        >
+                          Remove selected
+                        </Button>
+                      </div>
+                    </div>
+                    {coordsEditorError ? (
+                      <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                        {coordsEditorError}
+                      </div>
+                    ) : null}
                     <Separator />
                     <div className="space-y-3">
                       <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
@@ -1416,12 +1687,13 @@ export default function AdminPage() {
                   <PdfCalibrationViewer
                     pdfUrl={templateFile?.url}
                     pageKey={previewPage}
-                    fields={(coordsConfig[previewPage] as Record<string, CoordField>) ?? {}}
+                    fields={previewPageFields}
                     selectedField={selectedField}
                     onSelectField={setSelectedField}
                     onChangeCoord={(field, x, y) =>
                       updateCoordField(previewPage, field, { x, y })
                     }
+                    onDocumentInfo={handlePdfDocumentInfo}
                     showGrid={showGrid}
                     snapToGrid={snapToGrid}
                     gridSize={gridSize}
@@ -1429,128 +1701,161 @@ export default function AdminPage() {
                     className="min-h-[360px]"
                   />
                 </div>
-                <Tabs defaultValue={pageKeys[0] ?? "page_1"}>
-                  <TabsList className="flex flex-wrap">
-                    {pageKeys.map((pageKey) => (
-                      <TabsTrigger key={pageKey} value={pageKey}>
-                        {pageKey.replace("_", " ").toUpperCase()}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                  {pageKeys.map((pageKey) => {
-                    const fields = coordsConfig[pageKey] ?? {};
-                    return (
-                      <TabsContent key={pageKey} value={pageKey} className="mt-4">
-                        <div className="space-y-3">
-                          {Object.entries(fields as Record<string, CoordField>).map(
-                            ([fieldName, field]) => (
-                              <div
-                                key={fieldName}
-                                className="grid gap-3 rounded-xl border border-border/60 bg-background/80 p-4 md:grid-cols-[1.2fr_repeat(5,_minmax(0,_1fr))]"
-                              >
-                                <div>
-                                  <p className="text-sm font-semibold text-foreground">
-                                    {formatFieldLabel(fieldName)}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {fieldName}
-                                  </p>
-                                </div>
-                                <NumberField
-                                  label="X"
-                                  value={field.x}
-                                  onChange={(value) =>
-                                    updateCoordField(pageKey, fieldName, {
-                                      x: value,
-                                    })
-                                  }
-                                />
-                                <NumberField
-                                  label="Y"
-                                  value={field.y}
-                                  onChange={(value) =>
-                                    updateCoordField(pageKey, fieldName, {
-                                      y: value,
-                                    })
-                                  }
-                                />
-                                <NumberField
-                                  label="Size"
-                                  value={field.size}
-                                  onChange={(value) =>
-                                    updateCoordField(pageKey, fieldName, {
-                                      size: value,
-                                    })
-                                  }
-                                />
-                                <div className="space-y-2">
-                                  <label className="text-xs text-muted-foreground">
-                                    Align
-                                  </label>
-                                  <Select
-                                    value={field.align ?? "left"}
-                                    onValueChange={(value) =>
+                {pageKeys.length ? (
+                  <Tabs value={previewPage} onValueChange={setPreviewPage}>
+                    <TabsList className="flex flex-wrap">
+                      {pageKeys.map((pageKey) => (
+                        <TabsTrigger key={pageKey} value={pageKey}>
+                          {pageKey.replace("_", " ").toUpperCase()}
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+                    {pageKeys.map((pageKey) => {
+                      const fields = coordsConfig[pageKey] ?? {};
+                      return (
+                        <TabsContent key={pageKey} value={pageKey} className="mt-4">
+                          <div className="space-y-3">
+                            {Object.entries(fields as Record<string, CoordField>).map(
+                              ([fieldName, field]) => (
+                                <div
+                                  key={fieldName}
+                                  className="grid gap-3 rounded-xl border border-border/60 bg-background/80 p-4 md:grid-cols-[1.2fr_repeat(8,_minmax(0,_1fr))]"
+                                >
+                                  <div>
+                                    <p className="text-sm font-semibold text-foreground">
+                                      {formatFieldLabel(fieldName)}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {fieldName}
+                                    </p>
+                                  </div>
+                                  <NumberField
+                                    label="X"
+                                    value={field.x}
+                                    onChange={(value) =>
                                       updateCoordField(pageKey, fieldName, {
-                                        align: value,
+                                        x: value,
                                       })
                                     }
-                                  >
-                                    <SelectTrigger className="w-full">
-                                      <SelectValue placeholder="Alignment" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      <SelectItem value="left">Left</SelectItem>
-                                      <SelectItem value="center">Center</SelectItem>
-                                      <SelectItem value="right">Right</SelectItem>
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                                <div className="space-y-2">
-                                  <label className="text-xs text-muted-foreground">
-                                    Font
-                                  </label>
-                                  <Select
-                                    value={field.font ?? "WorkSans"}
-                                    onValueChange={(value) =>
+                                  />
+                                  <NumberField
+                                    label="Y"
+                                    value={field.y}
+                                    onChange={(value) =>
                                       updateCoordField(pageKey, fieldName, {
-                                        font: value,
+                                        y: value,
                                       })
                                     }
-                                  >
-                                    <SelectTrigger className="w-full">
-                                      <SelectValue placeholder="Font" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {fontOptions.map((font) => (
-                                        <SelectItem key={font} value={font}>
-                                          {font}
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
-                                </div>
-                                <div className="space-y-2">
-                                  <label className="text-xs text-muted-foreground">
-                                    Color
-                                  </label>
-                                  <Input
-                                    uiSize="xs"
-                                    value={field.color ?? "#111111"}
-                                    onChange={(event) =>
+                                  />
+                                  <NumberField
+                                    label="Size"
+                                    value={field.size}
+                                    onChange={(value) =>
                                       updateCoordField(pageKey, fieldName, {
-                                        color: event.target.value,
+                                        size: value,
+                                      })
+                                    }
+                                  />
+                                  <NumberField
+                                    label="Max width"
+                                    value={field.max_width}
+                                    onChange={(value) =>
+                                      updateCoordField(pageKey, fieldName, {
+                                        max_width: value,
+                                      })
+                                    }
+                                  />
+                                  <NumberField
+                                    label="Min size"
+                                    value={field.min_size}
+                                    onChange={(value) =>
+                                      updateCoordField(pageKey, fieldName, {
+                                        min_size: value,
+                                      })
+                                    }
+                                  />
+                                  <div className="space-y-2">
+                                    <label className="text-xs text-muted-foreground">
+                                      Align
+                                    </label>
+                                    <Select
+                                      value={field.align ?? "left"}
+                                      onValueChange={(value) =>
+                                        updateCoordField(pageKey, fieldName, {
+                                          align: value,
+                                        })
+                                      }
+                                    >
+                                      <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Alignment" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        <SelectItem value="left">Left</SelectItem>
+                                        <SelectItem value="center">Center</SelectItem>
+                                        <SelectItem value="right">Right</SelectItem>
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="text-xs text-muted-foreground">
+                                      Font
+                                    </label>
+                                    <Select
+                                      value={field.font ?? "WorkSans"}
+                                      onValueChange={(value) =>
+                                        updateCoordField(pageKey, fieldName, {
+                                          font: value,
+                                        })
+                                      }
+                                    >
+                                      <SelectTrigger className="w-full">
+                                        <SelectValue placeholder="Font" />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {fontOptions.map((font) => (
+                                          <SelectItem key={font} value={font}>
+                                            {font}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="text-xs text-muted-foreground">
+                                      Color
+                                    </label>
+                                    <Input
+                                      uiSize="xs"
+                                      value={field.color ?? "#111111"}
+                                      onChange={(event) =>
+                                        updateCoordField(pageKey, fieldName, {
+                                          color: event.target.value,
+                                        })
+                                      }
+                                    />
+                                  </div>
+                                  <NumberField
+                                    label="Opacity"
+                                    value={field.opacity}
+                                    onChange={(value) =>
+                                      updateCoordField(pageKey, fieldName, {
+                                        opacity: value,
                                       })
                                     }
                                   />
                                 </div>
-                              </div>
-                            )
-                          )}
-                        </div>
-                      </TabsContent>
-                    );
-                  })}
-                </Tabs>
+                              )
+                            )}
+                          </div>
+                        </TabsContent>
+                      );
+                    })}
+                  </Tabs>
+                ) : (
+                  <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                    No coordinate pages configured yet. Add a page to begin.
+                  </div>
+                )}
               </CardContent>
             </Card>
 
