@@ -32,6 +32,7 @@ type ViewerProps = {
   gridSize?: number;
   showGrid?: boolean;
   onPageSize?: (size: { width: number; height: number }) => void;
+  onDocumentInfo?: (info: { pageCount: number }) => void;
   labelMap?: Record<string, string>;
   className?: string;
 };
@@ -58,6 +59,7 @@ export function PdfCalibrationViewer({
   gridSize = 0,
   showGrid = false,
   onPageSize,
+  onDocumentInfo,
   labelMap,
   className,
 }: ViewerProps) {
@@ -161,6 +163,8 @@ export function PdfCalibrationViewer({
           pdfCacheRef.current = cached;
         }
 
+        onDocumentInfo?.({ pageCount: Number(cached.pdfDoc?.numPages ?? 0) });
+
         const page = await cached.pdfDoc.getPage(pageIndex + 1);
 
         if (renderToken !== renderTokenRef.current) return;
@@ -205,7 +209,7 @@ export function PdfCalibrationViewer({
     return () => {
       renderTokenRef.current += 1;
     };
-  }, [pdfUrl, pageIndex]);
+  }, [pdfUrl, pageIndex, onDocumentInfo]);
 
   useEffect(() => {
     pdfCacheRef.current = null;

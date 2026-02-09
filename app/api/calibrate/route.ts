@@ -2,6 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import coordinatesDefault from "@/config/coordinates.json";
 import { downloadBuffer } from "@/lib/server/download";
+import {
+  getPageFields,
+  getSortedPageKeys,
+  parsePageKey,
+} from "@/lib/coordinates";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -66,14 +71,17 @@ async function createCalibrationPdf(
   const pdfDoc = await PDFDocument.load(templateBuffer);
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
   const pages = pdfDoc.getPages();
+  const pageFields = new Map<number, Record<string, { x?: number; y?: number }>>();
+  getSortedPageKeys(coordsConfig).forEach((pageKey) => {
+    const pageNumber = parsePageKey(pageKey);
+    if (!pageNumber) return;
+    const fields = getPageFields<{ x?: number; y?: number }>(coordsConfig, pageKey);
+    pageFields.set(pageNumber - 1, fields);
+  });
 
   pages.forEach((page, index) => {
     const { width, height } = page.getSize();
-    const pageKey = `page_${index + 1}`;
-    const fields = (coordsConfig[pageKey] || {}) as Record<
-      string,
-      { x?: number; y?: number }
-    >;
+    const fields = pageFields.get(index) ?? {};
 
     if (showGrid && gridSize > 0) {
       const gridColor = rgb(0.7, 0.7, 0.7);
