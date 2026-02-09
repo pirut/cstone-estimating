@@ -5,6 +5,7 @@ import estimateFields from "@/config/estimate-fields.json";
 import { uploadFiles } from "@/components/uploadthing";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
 import {
   Card,
   CardContent,
@@ -12,7 +13,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import type { LibraryItem, UploadedFile } from "@/lib/types";
 import {
@@ -30,6 +39,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   CheckCircle2,
+  CalendarDays,
   CircleDashed,
   Loader2,
   LockKeyhole,
@@ -618,16 +628,25 @@ export function EstimateBuilderCard({
                         </span>
                       ) : null}
                     </label>
-                    <input
-                      className={inputClassName}
-                      type={isDate ? "date" : "text"}
-                      placeholder={field.placeholder ?? ""}
-                      value={fieldValue}
-                      onChange={(event) =>
-                        handleInfoChange(field.key, event.target.value)
-                      }
-                      disabled={Boolean(legacyValues)}
-                    />
+                    {isDate ? (
+                      <DatePickerField
+                        value={String(fieldValue)}
+                        onChange={(value) => handleInfoChange(field.key, value)}
+                        placeholder={field.placeholder ?? "Pick a date"}
+                        disabled={Boolean(legacyValues)}
+                      />
+                    ) : (
+                      <input
+                        className={inputClassName}
+                        type="text"
+                        placeholder={field.placeholder ?? ""}
+                        value={fieldValue}
+                        onChange={(event) =>
+                          handleInfoChange(field.key, event.target.value)
+                        }
+                        disabled={Boolean(legacyValues)}
+                      />
+                    )}
                   </div>
                 );
               })
@@ -837,20 +856,24 @@ export function EstimateBuilderCard({
                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">Unit Type</label>
-                        <select
-                          className={inputSmClassName}
+                        <Select
                           value={item.unit_type}
-                          onChange={(event) =>
-                            handleBuckingChange(index, { unit_type: event.target.value })
+                          onValueChange={(value) =>
+                            handleBuckingChange(index, { unit_type: value })
                           }
                           disabled={Boolean(legacyValues)}
                         >
-                          {panelTypeOptions.map((panel) => (
-                            <option key={panel.id} value={panel.id}>
-                              {panel.label}
-                            </option>
-                          ))}
-                        </select>
+                          <SelectTrigger className={inputSmClassName}>
+                            <SelectValue placeholder="Select unit type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {panelTypeOptions.map((panel) => (
+                              <SelectItem key={panel.id} value={panel.id}>
+                                {panel.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">Qty</label>
@@ -1227,6 +1250,70 @@ function UnlockNotice({ message }: { message: string }) {
   );
 }
 
+function DatePickerField({
+  value,
+  onChange,
+  placeholder,
+  disabled,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  const selectedDate = parseIsoDate(value);
+
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          disabled={disabled}
+          className={cn(
+            inputClassName,
+            "justify-start border-border/70 px-3 text-left font-normal",
+            !selectedDate && "text-muted-foreground",
+            disabled && "opacity-50"
+          )}
+        >
+          <CalendarDays className="h-4 w-4 text-muted-foreground" />
+          {selectedDate
+            ? selectedDate.toLocaleDateString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+              })
+            : placeholder || "Pick a date"}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-3" align="start">
+        <Calendar
+          mode="single"
+          selected={selectedDate}
+          onSelect={(date) => {
+            if (!date) {
+              onChange("");
+              return;
+            }
+            onChange(formatIsoDate(date));
+          }}
+          initialFocus
+        />
+        {selectedDate ? (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="mt-2 w-full text-xs"
+            onClick={() => onChange("")}
+          >
+            Clear date
+          </Button>
+        ) : null}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function RateField({
   label,
   value,
@@ -1262,6 +1349,30 @@ function formatCurrency(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
+}
+
+function parseIsoDate(value: string): Date | undefined {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return undefined;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return undefined;
+  }
+  return date;
+}
+
+function formatIsoDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function stripJsonExtension(name: string) {
