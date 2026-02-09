@@ -1,4 +1,3 @@
-import { DEFAULT_UNIT_TYPES } from "@/lib/catalog-defaults";
 
 export type EstimateInfo = {
   prepared_for?: string;
@@ -49,12 +48,6 @@ export type PanelType = {
   price: number;
 };
 
-export const PANEL_TYPES: PanelType[] = DEFAULT_UNIT_TYPES.map((unit) => ({
-  id: unit.code,
-  label: unit.label,
-  price: unit.price,
-}));
-
 export const DEFAULT_DRAFT: EstimateDraft = {
   info: {},
   products: [
@@ -68,7 +61,7 @@ export const DEFAULT_DRAFT: EstimateDraft = {
   bucking: [
     {
       id: "bucking-1",
-      unit_type: "SH",
+      unit_type: "",
       qty: "",
       sqft: "",
       replacement_qty: "",
@@ -124,7 +117,7 @@ export type EstimateComputed = {
 
 export function computeEstimate(
   draft: EstimateDraft,
-  panelTypes: PanelType[] = PANEL_TYPES
+  panelTypes: PanelType[] = []
 ): EstimateComputed {
   const resolvedPanelTypes = normalizePanelTypes(panelTypes, draft.bucking ?? []);
   const productMarkupDefault = toNumber(draft.calculator.product_markup_default);
@@ -278,8 +271,7 @@ function normalizePanelTypes(
   panelTypes: PanelType[],
   bucking: BuckingLineItem[]
 ) {
-  const fallback = panelTypes.length ? panelTypes : PANEL_TYPES;
-  const map = new Map(fallback.map((panel) => [panel.id, panel] as const));
+  const map = new Map(panelTypes.map((panel) => [panel.id, panel] as const));
 
   for (const item of bucking) {
     if (!item.unit_type || map.has(item.unit_type)) continue;

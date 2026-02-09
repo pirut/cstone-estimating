@@ -28,7 +28,6 @@ import {
   computeEstimate,
   createId,
   DEFAULT_DRAFT,
-  PANEL_TYPES,
   roundUp,
   toNumber,
   type BuckingLineItem,
@@ -49,7 +48,6 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { DEFAULT_VENDORS } from "@/lib/catalog-defaults";
 
 const EMPTY_VALUES: Record<string, string | number> = {};
 const inputClassName = inputVariants({ uiSize: "default" });
@@ -124,12 +122,11 @@ export function EstimateBuilderCard({
   const [legacyValues, setLegacyValues] = useState<
     Record<string, string | number> | null
   >(null);
-  const vendorListId = "estimate-vendor-options";
 
   const groupList = useMemo(() => estimateFields.groups ?? [], []);
 
   const vendorOptions = useMemo(() => {
-    const source = vendors?.length ? vendors : DEFAULT_VENDORS;
+    const source = vendors ?? [];
     const normalized = source.map((vendor, index) => ({
       id: vendor.id ?? `${vendor.name}-${index}`,
       name: vendor.name,
@@ -146,15 +143,8 @@ export function EstimateBuilderCard({
   }, [vendors]);
 
   const panelTypeOptions = useMemo(() => {
-    const base = panelTypes?.length ? panelTypes : PANEL_TYPES;
-    const map = new Map(base.map((panel) => [panel.id, panel]));
-    for (const item of draft.bucking) {
-      const key = item.unit_type;
-      if (!key || map.has(key)) continue;
-      map.set(key, { id: key, label: key, price: 0 });
-    }
-    return Array.from(map.values());
-  }, [panelTypes, draft.bucking]);
+    return panelTypes ?? [];
+  }, [panelTypes]);
 
   const computed = useMemo(
     () => computeEstimate(draft, panelTypeOptions),
@@ -662,12 +652,6 @@ export function EstimateBuilderCard({
               done={productStepComplete}
             />
 
-            <datalist id={vendorListId}>
-              {vendorOptions.map((vendor) => (
-                <option key={vendor.id} value={vendor.name} />
-              ))}
-            </datalist>
-
             <div className="grid gap-3 md:grid-cols-3">
               <div className="space-y-2">
                 <label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
@@ -684,6 +668,9 @@ export function EstimateBuilderCard({
                 />
               </div>
             </div>
+            {!vendorOptions.length ? (
+              <UnlockNotice message="No active vendors are configured for this team. Add vendors in Team Admin to use manual estimate dropdowns." />
+            ) : null}
 
             <div className="space-y-3">
               {draft.products.map((item, index) => {
@@ -692,6 +679,8 @@ export function EstimateBuilderCard({
                   ? toNumber(item.markup)
                   : toNumber(draft.calculator.product_markup_default);
                 const total = roundUp(price * (1 + markup));
+                const selectedVendor =
+                  vendorOptions.find((vendor) => vendor.name === item.name)?.id ?? "__none__";
                 return (
                   <div
                     key={item.id}
@@ -699,17 +688,29 @@ export function EstimateBuilderCard({
                   >
                     <div className="grid gap-3 lg:grid-cols-[1.8fr_0.8fr_0.8fr_auto]">
                       <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">Product</label>
-                        <Input
-                          className={inputSmClassName}
-                          value={item.name}
-                          onChange={(event) =>
-                            handleProductChange(index, { name: event.target.value })
-                          }
-                          placeholder="Vendor or product"
-                          list={vendorListId}
-                          disabled={Boolean(legacyValues)}
-                        />
+                        <label className="text-xs text-muted-foreground">Vendor</label>
+                        <Select
+                          value={selectedVendor}
+                          onValueChange={(value) => {
+                            const vendor = vendorOptions.find((entry) => entry.id === value);
+                            handleProductChange(index, {
+                              name: value === "__none__" ? "" : vendor?.name ?? "",
+                            });
+                          }}
+                          disabled={Boolean(legacyValues) || !vendorOptions.length}
+                        >
+                          <SelectTrigger className={inputSmClassName}>
+                            <SelectValue placeholder="Select vendor" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">Select vendor</SelectItem>
+                            {vendorOptions.map((vendor) => (
+                              <SelectItem key={vendor.id} value={vendor.id}>
+                                {vendor.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">Price</label>
@@ -781,7 +782,7 @@ export function EstimateBuilderCard({
                     ],
                   })
                 }
-                disabled={Boolean(legacyValues)}
+                disabled={Boolean(legacyValues) || !vendorOptions.length}
               >
                 <Plus className="h-4 w-4" />
                 Add product line
@@ -841,6 +842,9 @@ export function EstimateBuilderCard({
             </div>
 
             <div className="space-y-3">
+              {!panelTypeOptions.length ? (
+                <UnlockNotice message="No active unit types are configured for this team. Add unit types in Team Admin to use bucking dropdowns." />
+              ) : null}
               {draft.bucking.map((item, index) => {
                 const qty = toNumber(item.qty);
                 const sqft = toNumber(item.sqft);
@@ -854,16 +858,23 @@ export function EstimateBuilderCard({
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">Unit Type</label>
                         <Select
-                          value={item.unit_type}
-                          onValueChange={(value) =>
-                            handleBuckingChange(index, { unit_type: value })
+                          value={
+                            panelTypeOptions.some((panel) => panel.id === item.unit_type)
+                              ? item.unit_type
+                              : "__none__"
                           }
-                          disabled={Boolean(legacyValues)}
+                          onValueChange={(value) =>
+                            handleBuckingChange(index, {
+                              unit_type: value === "__none__" ? "" : value,
+                            })
+                          }
+                          disabled={Boolean(legacyValues) || !panelTypeOptions.length}
                         >
                           <SelectTrigger className={inputSmClassName}>
                             <SelectValue placeholder="Select unit type" />
                           </SelectTrigger>
                           <SelectContent>
+                            <SelectItem value="__none__">Select unit type</SelectItem>
                             {panelTypeOptions.map((panel) => (
                               <SelectItem key={panel.id} value={panel.id}>
                                 {panel.label}
@@ -965,7 +976,7 @@ export function EstimateBuilderCard({
                       ...draft.bucking,
                       {
                         id: createId("bucking"),
-                        unit_type: panelTypeOptions[0]?.id ?? "SH",
+                        unit_type: panelTypeOptions[0]?.id ?? "",
                         qty: "",
                         sqft: "",
                         replacement_qty: "",
@@ -974,7 +985,7 @@ export function EstimateBuilderCard({
                     ],
                   })
                 }
-                disabled={Boolean(legacyValues)}
+                disabled={Boolean(legacyValues) || !panelTypeOptions.length}
               >
                 <Plus className="h-4 w-4" />
                 Add line item
