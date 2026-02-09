@@ -35,6 +35,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { UploadedFile } from "@/lib/types";
@@ -1054,8 +1056,7 @@ export default function AdminPage() {
                     <label className="text-xs text-muted-foreground">
                       Template name
                     </label>
-                    <input
-                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                    <Input
                       value={templateName}
                       onChange={(event) => setTemplateName(event.target.value)}
                       placeholder="Cornerstone Proposal"
@@ -1065,8 +1066,7 @@ export default function AdminPage() {
                     <label className="text-xs text-muted-foreground">
                       Description
                     </label>
-                    <input
-                      className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                    <Input
                       value={templateDescription}
                       onChange={(event) =>
                         setTemplateDescription(event.target.value)
@@ -1213,8 +1213,7 @@ export default function AdminPage() {
                           <label className="text-xs text-muted-foreground">
                             Cell
                           </label>
-                          <input
-                            className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                          <Input
                             value={field.cell ?? ""}
                             onChange={(event) =>
                               updateMappingField(fieldName, {
@@ -1327,20 +1326,16 @@ export default function AdminPage() {
                       </p>
                       <div className="grid gap-2 text-xs text-muted-foreground">
                         <label className="flex items-center gap-2 text-foreground">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border border-border accent-accent"
+                          <Checkbox
                             checked={showGrid}
-                            onChange={(event) => setShowGrid(event.target.checked)}
+                            onCheckedChange={(checked) => setShowGrid(checked === true)}
                           />
                           Show grid
                         </label>
                         <label className="flex items-center gap-2 text-foreground">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 rounded border border-border accent-accent"
+                          <Checkbox
                             checked={snapToGrid}
-                            onChange={(event) => setSnapToGrid(event.target.checked)}
+                            onCheckedChange={(checked) => setSnapToGrid(checked === true)}
                           />
                           Snap to grid
                         </label>
@@ -1500,7 +1495,7 @@ export default function AdminPage() {
                                       })
                                     }
                                   >
-                                    <SelectTrigger className="w-full px-2">
+                                    <SelectTrigger className="w-full">
                                       <SelectValue placeholder="Alignment" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1522,7 +1517,7 @@ export default function AdminPage() {
                                       })
                                     }
                                   >
-                                    <SelectTrigger className="w-full px-2">
+                                    <SelectTrigger className="w-full">
                                       <SelectValue placeholder="Font" />
                                     </SelectTrigger>
                                     <SelectContent>
@@ -1538,8 +1533,8 @@ export default function AdminPage() {
                                   <label className="text-xs text-muted-foreground">
                                     Color
                                   </label>
-                                  <input
-                                    className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm"
+                                  <Input
+                                    uiSize="xs"
                                     value={field.color ?? "#111111"}
                                     onChange={(event) =>
                                       updateCoordField(pageKey, fieldName, {
@@ -1965,8 +1960,8 @@ function NumberField({
   return (
     <div className="space-y-2">
       <label className="text-xs text-muted-foreground">{label}</label>
-      <input
-        className="w-full rounded-md border border-border bg-background px-2 py-2 text-sm"
+      <Input
+        uiSize="xs"
         type="number"
         value={value ?? ""}
         onChange={(event) => onChange(Number(event.target.value))}

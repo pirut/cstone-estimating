@@ -20,6 +20,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { DEFAULT_UNIT_TYPES, DEFAULT_VENDORS } from "@/lib/catalog-defaults";
 import { db, instantAppId } from "@/lib/instant";
@@ -910,8 +912,7 @@ export default function TeamAdminPage() {
                   <label className="text-xs text-muted-foreground">
                     Team name
                   </label>
-                  <input
-                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                  <Input
                     value={subTeamName}
                     onChange={(event) => setSubTeamName(event.target.value)}
                     placeholder="Estimator Pod A"
@@ -1059,8 +1060,8 @@ export default function TeamAdminPage() {
                         Team settings
                       </p>
                       <div className="mt-3 flex flex-wrap items-center gap-3">
-                        <input
-                          className="min-w-[220px] flex-1 rounded-md border border-border bg-background px-3 py-2 text-sm"
+                        <Input
+                          className="min-w-[220px] flex-1"
                           value={teamNameDraft}
                           onChange={(event) => setTeamNameDraft(event.target.value)}
                           disabled={!hasTeamAdminAccess}
@@ -1247,19 +1248,17 @@ export default function TeamAdminPage() {
                             key={vendor.id ?? `vendor-${index}`}
                             className="grid grid-cols-[auto_2fr_1fr_auto] items-center gap-2 px-3 py-2 text-sm"
                           >
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 accent-foreground"
+                            <Checkbox
                               checked={vendor.isActive}
-                              onChange={(event) =>
+                              onCheckedChange={(checked) =>
                                 handleVendorChange(index, {
-                                  isActive: event.target.checked,
+                                  isActive: checked === true,
                                 })
                               }
                               disabled={!canEditCatalog}
                             />
-                            <input
-                              className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+                            <Input
+                              uiSize="xs"
                               value={vendor.name}
                               onChange={(event) =>
                                 handleVendorChange(index, { name: event.target.value })
@@ -1267,8 +1266,9 @@ export default function TeamAdminPage() {
                               placeholder="Vendor name"
                               disabled={!canEditCatalog}
                             />
-                            <input
-                              className="w-24 rounded-md border border-border bg-background px-2 py-1 text-sm"
+                            <Input
+                              uiSize="xs"
+                              className="w-24"
                               type="number"
                               value={vendor.sortOrder}
                               onChange={(event) =>
@@ -1371,19 +1371,17 @@ export default function TeamAdminPage() {
                             key={unit.id ?? `unit-${index}`}
                             className="grid grid-cols-[auto_1fr_1.6fr_1fr_0.6fr_auto] items-center gap-2 px-3 py-2 text-sm"
                           >
-                            <input
-                              type="checkbox"
-                              className="h-4 w-4 accent-foreground"
+                            <Checkbox
                               checked={unit.isActive}
-                              onChange={(event) =>
+                              onCheckedChange={(checked) =>
                                 handleUnitTypeChange(index, {
-                                  isActive: event.target.checked,
+                                  isActive: checked === true,
                                 })
                               }
                               disabled={!canEditCatalog}
                             />
-                            <input
-                              className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+                            <Input
+                              uiSize="xs"
                               value={unit.code}
                               onChange={(event) =>
                                 handleUnitTypeChange(index, {
@@ -1393,8 +1391,8 @@ export default function TeamAdminPage() {
                               placeholder="SH"
                               disabled={!canEditCatalog}
                             />
-                            <input
-                              className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+                            <Input
+                              uiSize="xs"
                               value={unit.label}
                               onChange={(event) =>
                                 handleUnitTypeChange(index, {
@@ -1404,8 +1402,8 @@ export default function TeamAdminPage() {
                               placeholder="Single Hung"
                               disabled={!canEditCatalog}
                             />
-                            <input
-                              className="rounded-md border border-border bg-background px-2 py-1 text-sm"
+                            <Input
+                              uiSize="xs"
                               value={unit.price}
                               onChange={(event) =>
                                 handleUnitTypeChange(index, {
@@ -1416,8 +1414,9 @@ export default function TeamAdminPage() {
                               placeholder="0"
                               disabled={!canEditCatalog}
                             />
-                            <input
-                              className="w-20 rounded-md border border-border bg-background px-2 py-1 text-sm"
+                            <Input
+                              uiSize="xs"
+                              className="w-20"
                               type="number"
                               value={unit.sortOrder}
                               onChange={(event) =>

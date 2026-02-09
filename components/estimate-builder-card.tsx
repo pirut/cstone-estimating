@@ -5,7 +5,6 @@ import estimateFields from "@/config/estimate-fields.json";
 import { uploadFiles } from "@/components/uploadthing";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import {
   Card,
   CardContent,
@@ -13,7 +12,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Input, inputVariants } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
@@ -39,7 +39,6 @@ import {
 import { cn } from "@/lib/utils";
 import {
   CheckCircle2,
-  CalendarDays,
   CircleDashed,
   Loader2,
   LockKeyhole,
@@ -53,10 +52,8 @@ import {
 import { DEFAULT_VENDORS } from "@/lib/catalog-defaults";
 
 const EMPTY_VALUES: Record<string, string | number> = {};
-const inputClassName =
-  "h-11 w-full rounded-xl border border-border/70 bg-background px-3 text-sm text-foreground transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
-const inputSmClassName =
-  "h-10 w-full rounded-lg border border-border/70 bg-background px-3 text-sm text-foreground transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring";
+const inputClassName = inputVariants({ uiSize: "default" });
+const inputSmClassName = inputVariants({ uiSize: "sm" });
 
 const REQUIRED_INFO_FIELDS: Array<keyof EstimateDraft["info"]> = [
   "prepared_for",
@@ -585,7 +582,7 @@ export function EstimateBuilderCard({
             <label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
               Estimate name
             </label>
-            <input
+            <Input
               className={inputClassName}
               value={name}
               onChange={(event) => {
@@ -629,14 +626,14 @@ export function EstimateBuilderCard({
                       ) : null}
                     </label>
                     {isDate ? (
-                      <DatePickerField
+                      <DatePicker
                         value={String(fieldValue)}
                         onChange={(value) => handleInfoChange(field.key, value)}
                         placeholder={field.placeholder ?? "Pick a date"}
                         disabled={Boolean(legacyValues)}
                       />
                     ) : (
-                      <input
+                      <Input
                         className={inputClassName}
                         type="text"
                         placeholder={field.placeholder ?? ""}
@@ -676,7 +673,7 @@ export function EstimateBuilderCard({
                 <label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                   Default product markup
                 </label>
-                <input
+                <Input
                   className={inputClassName}
                   value={draft.calculator.product_markup_default}
                   onChange={(event) =>
@@ -703,7 +700,7 @@ export function EstimateBuilderCard({
                     <div className="grid gap-3 lg:grid-cols-[1.8fr_0.8fr_0.8fr_auto]">
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">Product</label>
-                        <input
+                        <Input
                           className={inputSmClassName}
                           value={item.name}
                           onChange={(event) =>
@@ -716,7 +713,7 @@ export function EstimateBuilderCard({
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">Price</label>
-                        <input
+                        <Input
                           className={inputSmClassName}
                           value={item.price}
                           onChange={(event) =>
@@ -729,7 +726,7 @@ export function EstimateBuilderCard({
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">Markup</label>
-                        <input
+                        <Input
                           className={inputSmClassName}
                           value={item.markup}
                           onChange={(event) =>
@@ -877,7 +874,7 @@ export function EstimateBuilderCard({
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">Qty</label>
-                        <input
+                        <Input
                           className={inputSmClassName}
                           value={item.qty}
                           onChange={(event) =>
@@ -890,7 +887,7 @@ export function EstimateBuilderCard({
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">SqFt</label>
-                        <input
+                        <Input
                           className={inputSmClassName}
                           value={item.sqft}
                           onChange={(event) =>
@@ -903,7 +900,7 @@ export function EstimateBuilderCard({
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">Replacement</label>
-                        <input
+                        <Input
                           className={inputSmClassName}
                           value={item.replacement_qty}
                           onChange={(event) =>
@@ -918,7 +915,7 @@ export function EstimateBuilderCard({
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">Clerestory</label>
-                        <input
+                        <Input
                           className={inputSmClassName}
                           value={item.clerestory_qty}
                           onChange={(event) =>
@@ -1250,70 +1247,6 @@ function UnlockNotice({ message }: { message: string }) {
   );
 }
 
-function DatePickerField({
-  value,
-  onChange,
-  placeholder,
-  disabled,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  disabled?: boolean;
-}) {
-  const selectedDate = parseIsoDate(value);
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="outline"
-          disabled={disabled}
-          className={cn(
-            inputClassName,
-            "justify-start border-border/70 px-3 text-left font-normal",
-            !selectedDate && "text-muted-foreground",
-            disabled && "opacity-50"
-          )}
-        >
-          <CalendarDays className="h-4 w-4 text-muted-foreground" />
-          {selectedDate
-            ? selectedDate.toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })
-            : placeholder || "Pick a date"}
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent className="w-auto p-3" align="start">
-        <Calendar
-          mode="single"
-          selected={selectedDate}
-          onSelect={(date) => {
-            if (!date) {
-              onChange("");
-              return;
-            }
-            onChange(formatIsoDate(date));
-          }}
-          initialFocus
-        />
-        {selectedDate ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="mt-2 w-full text-xs"
-            onClick={() => onChange("")}
-          >
-            Clear date
-          </Button>
-        ) : null}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 function RateField({
   label,
   value,
@@ -1332,7 +1265,7 @@ function RateField({
       <label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
         {label}
       </label>
-      <input
+      <Input
         className={inputClassName}
         value={value}
         onChange={(event) => onChange(event.target.value)}
@@ -1349,30 +1282,6 @@ function formatCurrency(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-}
-
-function parseIsoDate(value: string): Date | undefined {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) return undefined;
-  const year = Number(match[1]);
-  const month = Number(match[2]);
-  const day = Number(match[3]);
-  const date = new Date(year, month - 1, day);
-  if (
-    date.getFullYear() !== year ||
-    date.getMonth() !== month - 1 ||
-    date.getDate() !== day
-  ) {
-    return undefined;
-  }
-  return date;
-}
-
-function formatIsoDate(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }
 
 function stripJsonExtension(name: string) {
