@@ -24,10 +24,13 @@ const _schema = i.schema({
       status: i.string().indexed().optional(),
       createdAt: i.number().indexed(),
       updatedAt: i.number().indexed(),
+      version: i.number().indexed().optional(),
+      lastGeneratedAt: i.number().indexed().optional(),
       templateName: i.string().optional(),
       templateUrl: i.string().optional(),
       payload: i.json(),
       totals: i.json().optional(),
+      versionHistory: i.json().optional(),
     }),
     vendors: i.entity({
       name: i.string(),
