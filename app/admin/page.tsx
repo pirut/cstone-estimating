@@ -155,6 +155,7 @@ const adminDropzoneAppearance = {
 };
 
 export default function AdminPage() {
+  const [isEmbedded, setIsEmbedded] = useState(false);
   const { isLoaded: authLoaded, isSignedIn } = useOptionalAuth();
   const { user } = useOptionalUser();
   const { isLoading: instantLoading, user: instantUser, error: instantAuthError } =
@@ -212,6 +213,12 @@ export default function AdminPage() {
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const embedded = new URLSearchParams(window.location.search).get("embedded");
+    setIsEmbedded(embedded === "1");
+  }, []);
 
   const emailAddress = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? "";
   const emailDomain = emailAddress.split("@")[1] ?? "";
@@ -718,7 +725,27 @@ export default function AdminPage() {
     updateCoordField(previewPage, selectedField, { x: nextX, y: nextY });
   };
 
-  const pageKeys = useMemo(() => getSortedPageKeys(coordsConfig), [coordsConfig]);
+  const configuredPageKeys = useMemo(
+    () => getSortedPageKeys(coordsConfig),
+    [coordsConfig]
+  );
+  const templatePageKeys = useMemo(() => {
+    if (!templatePageCount || templatePageCount < 1) return [];
+    return Array.from({ length: templatePageCount }, (_, index) =>
+      toPageKey(index + 1)
+    );
+  }, [templatePageCount]);
+  const pageKeys = useMemo(() => {
+    const merged = new Set<string>([
+      ...configuredPageKeys,
+      ...templatePageKeys,
+    ]);
+    return Array.from(merged).sort((left, right) => {
+      const leftPage = parsePageKey(left) ?? 0;
+      const rightPage = parsePageKey(right) ?? 0;
+      return leftPage - rightPage;
+    });
+  }, [configuredPageKeys, templatePageKeys]);
   const previewPageFields = useMemo(
     () =>
       ((coordsConfig[previewPage] as Record<string, CoordField> | undefined) ??
@@ -1005,12 +1032,14 @@ export default function AdminPage() {
               </Badge>
               <h1 className="text-4xl font-serif">Calibration & File Manager</h1>
             </div>
-            <Button asChild variant="outline">
-              <Link href="/">
-                <ArrowLeft className="h-4 w-4" />
-                Back to generator
-              </Link>
-            </Button>
+            {!isEmbedded ? (
+              <Button asChild variant="outline">
+                <Link href="/">
+                  <ArrowLeft className="h-4 w-4" />
+                  Back to generator
+                </Link>
+              </Button>
+            ) : null}
           </div>
 
           {instantSetupError ? (
@@ -1050,12 +1079,14 @@ export default function AdminPage() {
                 configurations.
               </p>
             </div>
-            <Button asChild variant="outline">
-              <Link href="/">
-                <ArrowLeft className="h-4 w-4" />
-                Back to generator
-              </Link>
-            </Button>
+            {!isEmbedded ? (
+              <Button asChild variant="outline">
+                <Link href="/">
+                  <ArrowLeft className="h-4 w-4" />
+                  Back to generator
+                </Link>
+              </Button>
+            ) : null}
           </div>
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
             <div className="rounded-2xl border border-border/60 bg-background/70 px-4 py-3">
@@ -1251,7 +1282,7 @@ export default function AdminPage() {
                     Uses: {templateFile?.name ?? "no PDF selected"}
                   </span>
                   <span>•</span>
-                  <span>{pageKeys.length} configured page(s)</span>
+                  <span>{configuredPageKeys.length} configured page(s)</span>
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <Button

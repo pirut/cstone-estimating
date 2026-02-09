@@ -66,9 +66,9 @@ DOWNLOAD_ALLOWLIST_SUFFIXES=uploadthing.com,utfs.io,ufs.sh
 ALLOW_PRIVATE_DOWNLOADS=false
 ```
 
-Admin portal access is controlled by Clerk + InstantDB team roles. Only users
-with `owner` or `admin` membership on the org team can access `/admin` and
-`/team-admin`.
+Admin access is controlled by Clerk + InstantDB team roles. Only users with
+`owner` or `admin` membership on the org team can access `/team-admin` (team
+management + calibration dashboard tab).
 
 ## Run locally
 

@@ -23,6 +23,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DEFAULT_UNIT_TYPES, DEFAULT_VENDORS } from "@/lib/catalog-defaults";
 import { db, instantAppId } from "@/lib/instant";
 import {
@@ -51,6 +52,9 @@ type UnitTypeDraft = {
 };
 
 export default function TeamAdminPage() {
+  const [dashboardTab, setDashboardTabState] = useState<
+    "calibration" | "organization"
+  >("organization");
   const { isLoaded: authLoaded, isSignedIn } = useOptionalAuth();
   const { user } = useOptionalUser();
   const { isLoading: instantLoading, user: instantUser, error: instantAuthError } =
@@ -63,6 +67,12 @@ export default function TeamAdminPage() {
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [memberActionError, setMemberActionError] = useState<string | null>(null);
   const [memberActionLoading, setMemberActionLoading] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    setDashboardTabState(tab === "calibration" ? "calibration" : "organization");
+  }, []);
 
   const emailAddress = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? "";
   const emailDomain = emailAddress.split("@")[1] ?? "";
@@ -437,7 +447,44 @@ export default function TeamAdminPage() {
     }
   };
 
+  const handleSetMemberRole = async (
+    membershipId?: string,
+    role?: "admin" | "member"
+  ) => {
+    setMemberActionError(null);
+    if (!isOrgOwner) {
+      setMemberActionError("Only organization owners can change member roles.");
+      return;
+    }
+    if (!membershipId || !role || !selectedTeam) return;
+    setMemberActionLoading(true);
+    try {
+      await db.transact(db.tx.memberships[membershipId].update({ role }));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setMemberActionError(message);
+    } finally {
+      setMemberActionLoading(false);
+    }
+  };
+
   const canEditCatalog = Boolean(hasTeamAdminAccess && catalogTeam);
+  const setDashboardTab = (value: string) => {
+    const nextTab = value === "calibration" ? "calibration" : "organization";
+    setDashboardTabState(nextTab);
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (nextTab === "calibration") {
+      params.set("tab", "calibration");
+    } else {
+      params.delete("tab");
+    }
+    const query = params.toString();
+    const nextUrl = query
+      ? `${window.location.pathname}?${query}`
+      : window.location.pathname;
+    window.history.replaceState(null, "", nextUrl);
+  };
 
   const handleVendorChange = (index: number, patch: Partial<VendorDraft>) => {
     setVendorDrafts((prev) =>
@@ -849,7 +896,17 @@ export default function TeamAdminPage() {
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+          <Tabs
+            value={dashboardTab}
+            onValueChange={setDashboardTab}
+            className="space-y-6"
+          >
+            <TabsList className="grid w-full max-w-md grid-cols-2">
+              <TabsTrigger value="organization">Organization</TabsTrigger>
+              <TabsTrigger value="calibration">Calibration</TabsTrigger>
+            </TabsList>
+            <TabsContent value="organization" className="space-y-6">
+              <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
             <Card className="border-border/60 bg-card/80 shadow-elevated">
               <CardHeader>
                 <CardTitle className="text-2xl font-serif">
@@ -1165,6 +1222,25 @@ export default function TeamAdminPage() {
                                     Make owner
                                   </Button>
                                 ) : null}
+                                {!isOwner && selectedTeam.isPrimary ? (
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                      handleSetMemberRole(
+                                        membership.id,
+                                        membership.role === "admin"
+                                          ? "member"
+                                          : "admin"
+                                      )
+                                    }
+                                    disabled={memberActionLoading || !isOrgOwner}
+                                  >
+                                    {membership.role === "admin"
+                                      ? "Make member"
+                                      : "Make admin"}
+                                  </Button>
+                                ) : null}
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -1189,6 +1265,12 @@ export default function TeamAdminPage() {
                         No members yet.
                       </div>
                     )}
+                    {selectedTeam.isPrimary ? (
+                      <p className="text-xs text-muted-foreground">
+                        Admins on the org workspace can edit teams and org
+                        settings.
+                      </p>
+                    ) : null}
                   </div>
                 )}
               </CardContent>
@@ -1484,6 +1566,30 @@ export default function TeamAdminPage() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+        <TabsContent value="calibration" className="space-y-6">
+          <Card className="border-border/60 bg-card/80 shadow-elevated">
+            <CardHeader>
+              <CardTitle className="text-2xl font-serif">
+                Calibration Dashboard
+              </CardTitle>
+              <CardDescription>
+                Full template calibration and file manager, embedded in the org
+                owner dashboard.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="rounded-lg border border-border/70 bg-background/70 p-2">
+                <iframe
+                  src="/admin?embedded=1"
+                  title="Calibration Dashboard"
+                  className="h-[85vh] min-h-[1200px] w-full rounded-md border-0 bg-background"
+                />
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
         )}
 
         <Separator className="my-10" />

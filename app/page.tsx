@@ -1621,7 +1621,7 @@ export default function HomePage() {
                       </Badge>
                       {hasTeamAdminAccess ? (
                         <Button asChild variant="outline" size="sm">
-                          <Link href="/team-admin">Manage teams</Link>
+                          <Link href="/team-admin">Org owner dashboard</Link>
                         </Button>
                       ) : null}
                     </div>
@@ -2112,8 +2112,11 @@ export default function HomePage() {
           </span>
           <div className="flex items-center gap-4">
             {hasTeamAdminAccess ? (
-              <Link className="hover:text-foreground" href="/admin">
-                Admin portal
+              <Link
+                className="hover:text-foreground"
+                href="/team-admin?tab=calibration"
+              >
+                Calibration dashboard
               </Link>
             ) : null}
             <span>Cornerstone Proposal Generator · v{APP_VERSION}</span>

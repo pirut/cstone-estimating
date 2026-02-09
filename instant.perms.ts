@@ -17,6 +17,8 @@ const isPrimaryOwner = normalizedPrimaryOwnerEmail
 const isTeammate = "auth.id in data.ref('memberships.team.memberships.user.id')";
 const isTeamMember = "auth.id in data.ref('team.memberships.user.id')";
 const isTeamOwner = "auth.id == data.ref('team.ownerId')";
+const isWorkspaceAdmin =
+  "('owner' in auth.ref('$user.memberships.role')) || ('admin' in auth.ref('$user.memberships.role'))";
 
 const perms = {
   $users: {
@@ -31,13 +33,14 @@ const perms = {
       isMember: "auth.id in data.ref('memberships.user.id')",
       isOwner: "auth.id == data.ownerId",
       isPrimaryOwner,
+      isWorkspaceAdmin,
     },
     allow: {
       view: "isDomainUser || isMember",
       create:
-        "isPrimaryOwner || (isDomainUser && data.isPrimary == true) || (isDomainUser && data.parentTeamId != null)",
-      update: "isOwner || isPrimaryOwner",
-      delete: "(isOwner || isPrimaryOwner) && data.isPrimary != true",
+        "isPrimaryOwner || (isDomainUser && data.isPrimary == true) || (isWorkspaceAdmin && data.parentTeamId != null)",
+      update: "isWorkspaceAdmin || isPrimaryOwner",
+      delete: "(isWorkspaceAdmin || isPrimaryOwner) && data.isPrimary != true",
     },
   },
   memberships: {
@@ -48,12 +51,13 @@ const perms = {
       isTeamOwner: "auth.id in data.ref('team.ownerId')",
       isPrimaryOwner,
       isOrgTeam: "true in data.ref('team.isPrimary')",
+      isWorkspaceAdmin,
     },
     allow: {
       view: "isDomainUser",
       create: "isDomainUser",
-      update: "isDomainUser && (isTeamOwner || isPrimaryOwner)",
-      delete: "isDomainUser && (isSelf || isTeamOwner || isPrimaryOwner)",
+      update: "isDomainUser && (isWorkspaceAdmin || isPrimaryOwner)",
+      delete: "isDomainUser && (isSelf || isWorkspaceAdmin || isPrimaryOwner)",
     },
   },
   estimates: {
@@ -72,12 +76,13 @@ const perms = {
       isTeamMember,
       isTeamOwner,
       isPrimaryOwner,
+      isWorkspaceAdmin,
     },
     allow: {
       view: "isTeamMember",
-      create: "isTeamOwner || isPrimaryOwner",
-      update: "isTeamOwner || isPrimaryOwner",
-      delete: "isTeamOwner || isPrimaryOwner",
+      create: "isWorkspaceAdmin || isTeamOwner || isPrimaryOwner",
+      update: "isWorkspaceAdmin || isTeamOwner || isPrimaryOwner",
+      delete: "isWorkspaceAdmin || isTeamOwner || isPrimaryOwner",
     },
   },
   unitTypes: {
@@ -85,12 +90,13 @@ const perms = {
       isTeamMember,
       isTeamOwner,
       isPrimaryOwner,
+      isWorkspaceAdmin,
     },
     allow: {
       view: "isTeamMember",
-      create: "isTeamOwner || isPrimaryOwner",
-      update: "isTeamOwner || isPrimaryOwner",
-      delete: "isTeamOwner || isPrimaryOwner",
+      create: "isWorkspaceAdmin || isTeamOwner || isPrimaryOwner",
+      update: "isWorkspaceAdmin || isTeamOwner || isPrimaryOwner",
+      delete: "isWorkspaceAdmin || isTeamOwner || isPrimaryOwner",
     },
   },
 };
