@@ -61,8 +61,8 @@ Optional limits and security:
 ```
 MAX_DOWNLOAD_MB=50
 DOWNLOAD_TIMEOUT_MS=15000
-DOWNLOAD_ALLOWLIST=uploadthing.com,utfs.io
-DOWNLOAD_ALLOWLIST_SUFFIXES=uploadthing.com,utfs.io
+DOWNLOAD_ALLOWLIST=uploadthing.com,utfs.io,ufs.sh
+DOWNLOAD_ALLOWLIST_SUFFIXES=uploadthing.com,utfs.io,ufs.sh
 ALLOW_PRIVATE_DOWNLOADS=false
 ADMIN_TOKEN=your-secret
 

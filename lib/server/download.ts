@@ -5,8 +5,8 @@ type DownloadOptions = {
 
 const DEFAULT_MAX_DOWNLOAD_MB = 50;
 const DEFAULT_TIMEOUT_MS = 15000;
-const DEFAULT_ALLOWED_HOSTS = ["uploadthing.com", "utfs.io"];
-const DEFAULT_ALLOWED_SUFFIXES = ["uploadthing.com", "utfs.io"];
+const DEFAULT_ALLOWED_HOSTS = ["uploadthing.com", "utfs.io", "ufs.sh"];
+const DEFAULT_ALLOWED_SUFFIXES = ["uploadthing.com", "utfs.io", "ufs.sh"];
 
 const MAX_DOWNLOAD_MB = parsePositiveNumber(
   process.env.MAX_DOWNLOAD_MB,
