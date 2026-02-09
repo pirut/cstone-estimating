@@ -40,6 +40,14 @@ import type {
   UploadState,
 } from "@/lib/types";
 import { db, instantAppId } from "@/lib/instant";
+import {
+  appendEstimateVersion,
+  createBaselineEstimateVersion,
+  getCurrentEstimateVersion,
+  getEstimateVersionActionLabel,
+  normalizeEstimateVersionHistory,
+  type EstimateVersionEntry,
+} from "@/lib/estimate-versioning";
 import { InstantAuthSync } from "@/components/instant-auth-sync";
 import { cn } from "@/lib/utils";
 import { APP_VERSION } from "@/lib/version";
@@ -51,6 +59,7 @@ import {
   FileDown,
   FileSpreadsheet,
   FileText,
+  History,
   LayoutTemplate,
   Loader2,
   Sparkles,
@@ -107,6 +116,9 @@ export default function HomePage() {
   const [knownOrgTeamDomain, setKnownOrgTeamDomain] = useState<string | null>(null);
   const [knownOrgLookupLoaded, setKnownOrgLookupLoaded] = useState(false);
   const [editingEstimateId, setEditingEstimateId] = useState<string | null>(null);
+  const [historyEstimateId, setHistoryEstimateId] = useState<string | null>(null);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyActionId, setHistoryActionId] = useState<string | null>(null);
   const [loadedEstimatePayload, setLoadedEstimatePayload] = useState<Record<
     string,
     any
@@ -222,6 +234,83 @@ export default function HomePage() {
       (a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)
     );
   }, [activeTeam?.estimates]);
+  const buildLegacyBaselineVersion = useCallback((estimate: any) => {
+    if (!estimate || typeof estimate !== "object") return null;
+    const payload =
+      estimate.payload && typeof estimate.payload === "object"
+        ? estimate.payload
+        : null;
+    if (!payload) return null;
+
+    const baseline = createBaselineEstimateVersion({
+      version: getCurrentEstimateVersion(estimate),
+      createdAt: estimate.createdAt ?? estimate.updatedAt ?? Date.now(),
+      title: String(estimate.title ?? "").trim() || "Untitled Estimate",
+      payload,
+      totals:
+        estimate.totals && typeof estimate.totals === "object"
+          ? estimate.totals
+          : null,
+      templateName:
+        typeof estimate.templateName === "string" ? estimate.templateName : undefined,
+      templateUrl:
+        typeof estimate.templateUrl === "string" ? estimate.templateUrl : undefined,
+      createdByUserId:
+        typeof estimate.owner?.id === "string" ? estimate.owner.id : null,
+    });
+    return {
+      ...baseline,
+      id: `${String(estimate.id ?? "estimate")}-baseline`,
+    };
+  }, []);
+  const getPersistedEstimateHistory = useCallback(
+    (estimate: any) => {
+      const existing = normalizeEstimateVersionHistory(estimate?.versionHistory);
+      if (existing.length) return existing;
+      const baseline = buildLegacyBaselineVersion(estimate);
+      return baseline ? [baseline] : [];
+    },
+    [buildLegacyBaselineVersion]
+  );
+  const getEstimateHistoryForDisplay = useCallback(
+    (estimate: any) => {
+      const history = getPersistedEstimateHistory(estimate);
+      return history
+        .slice()
+        .sort((a, b) =>
+          a.version === b.version ? b.createdAt - a.createdAt : b.version - a.version
+        );
+    },
+    [getPersistedEstimateHistory]
+  );
+  const getCurrentVersionForEstimate = useCallback(
+    (estimate: any) =>
+      getCurrentEstimateVersion({
+        version: estimate?.version,
+        versionHistory: getPersistedEstimateHistory(estimate),
+      }),
+    [getPersistedEstimateHistory]
+  );
+  const findTeamEstimateById = useCallback(
+    (estimateId: string) =>
+      teamEstimates.find((estimate) => estimate.id === estimateId) ?? null,
+    [teamEstimates]
+  );
+  const selectedHistoryEstimate = useMemo(
+    () =>
+      historyEstimateId ? findTeamEstimateById(historyEstimateId) : null,
+    [findTeamEstimateById, historyEstimateId]
+  );
+  const selectedHistoryEntries = useMemo(
+    () =>
+      selectedHistoryEstimate
+        ? getEstimateHistoryForDisplay(selectedHistoryEstimate)
+        : [],
+    [getEstimateHistoryForDisplay, selectedHistoryEstimate]
+  );
+  const selectedHistoryCurrentVersion = selectedHistoryEstimate
+    ? getCurrentVersionForEstimate(selectedHistoryEstimate)
+    : null;
 
   const vendorOptions = useMemo(
     () => catalogTeam?.vendors ?? [],
@@ -305,6 +394,15 @@ export default function HomePage() {
       }
     }
   }, [activeTeamId, memberTeams, orgTeam?.id]);
+
+  useEffect(() => {
+    if (!historyEstimateId) return;
+    if (teamEstimates.some((estimate) => estimate.id === historyEstimateId)) {
+      return;
+    }
+    setHistoryEstimateId(null);
+    setHistoryError(null);
+  }, [historyEstimateId, teamEstimates]);
 
   useEffect(() => {
     if (!estimatePayload) {
@@ -537,6 +635,113 @@ export default function HomePage() {
       100
   );
 
+  const buildCurrentEstimateSnapshot = useCallback(() => {
+    const payload =
+      estimatePayload ??
+      (Object.keys(estimateValues).length ? { values: estimateValues } : null);
+    const title = estimateName.trim() || "Untitled Estimate";
+    const totals =
+      payload &&
+      typeof payload === "object" &&
+      payload.totals &&
+      typeof payload.totals === "object"
+        ? payload.totals
+        : null;
+    return {
+      title,
+      payload,
+      totals,
+      templateName: templateConfig?.name,
+      templateUrl: templateConfig?.templatePdf?.url,
+    };
+  }, [
+    estimateName,
+    estimatePayload,
+    estimateValues,
+    templateConfig?.name,
+    templateConfig?.templatePdf?.url,
+  ]);
+
+  const persistGeneratedEstimateVersion = useCallback(async () => {
+    if (!instantAppId || !instantUser || !activeTeam || !activeMembership) return;
+    const snapshot = buildCurrentEstimateSnapshot();
+    if (!snapshot.payload) return;
+
+    const now = Date.now();
+    if (editingEstimateId) {
+      const existingEstimate = findTeamEstimateById(editingEstimateId);
+      const history = existingEstimate
+        ? getPersistedEstimateHistory(existingEstimate)
+        : [];
+      const versioned = appendEstimateVersion(history, {
+        action: "generated",
+        createdAt: now,
+        title: snapshot.title,
+        payload: snapshot.payload,
+        totals: snapshot.totals,
+        templateName: snapshot.templateName,
+        templateUrl: snapshot.templateUrl,
+        createdByUserId: instantUser.id,
+      });
+      await db.transact(
+        db.tx.estimates[editingEstimateId]
+          .update({
+            title: snapshot.title,
+            status: "generated",
+            updatedAt: now,
+            lastGeneratedAt: now,
+            templateName: snapshot.templateName,
+            templateUrl: snapshot.templateUrl,
+            payload: snapshot.payload,
+            totals: snapshot.totals,
+            version: versioned.currentVersion,
+            versionHistory: versioned.history,
+          })
+          .link({ team: activeTeam.id, owner: instantUser.id })
+      );
+      return;
+    }
+
+    const estimateId = id();
+    const versioned = appendEstimateVersion([], {
+      action: "generated",
+      createdAt: now,
+      title: snapshot.title,
+      payload: snapshot.payload,
+      totals: snapshot.totals,
+      templateName: snapshot.templateName,
+      templateUrl: snapshot.templateUrl,
+      createdByUserId: instantUser.id,
+    });
+    await db.transact(
+      db.tx.estimates[estimateId]
+        .create({
+          title: snapshot.title,
+          status: "generated",
+          createdAt: now,
+          updatedAt: now,
+          lastGeneratedAt: now,
+          templateName: snapshot.templateName,
+          templateUrl: snapshot.templateUrl,
+          payload: snapshot.payload,
+          totals: snapshot.totals,
+          version: versioned.currentVersion,
+          versionHistory: versioned.history,
+        })
+        .link({ team: activeTeam.id, owner: instantUser.id })
+    );
+    setEditingEstimateId(estimateId);
+  }, [
+    activeMembership,
+    activeTeam,
+    buildCurrentEstimateSnapshot,
+    editingEstimateId,
+    findTeamEstimateById,
+    getPersistedEstimateHistory,
+    instantAppId,
+    instantUser,
+  ]);
+
   const handleGenerate = async () => {
     setError(null);
     if (!templateConfig?.templatePdf?.url) {
@@ -603,6 +808,18 @@ export default function HomePage() {
       window.URL.revokeObjectURL(url);
       setProgress(1);
       setProgressLabel("Download ready");
+
+      if (estimateMode === "estimate") {
+        try {
+          await persistGeneratedEstimateVersion();
+        } catch (historyErr) {
+          const message =
+            historyErr instanceof Error
+              ? historyErr.message
+              : "Unable to save generated version.";
+          setError(`PDF downloaded, but version history update failed: ${message}`);
+        }
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setError(message);
@@ -633,41 +850,77 @@ export default function HomePage() {
     const now = Date.now();
     const payload = estimatePayload ?? { values: estimateValues };
     const title = estimateName.trim() || "Untitled Estimate";
-    const totals = payload?.totals ?? null;
+    const totals =
+      payload.totals && typeof payload.totals === "object" ? payload.totals : null;
+    const templateName = templateConfig?.name;
+    const templateUrl = templateConfig?.templatePdf?.url;
 
-    if (editingEstimateId) {
+    try {
+      if (editingEstimateId) {
+        const existingEstimate = findTeamEstimateById(editingEstimateId);
+        const history = existingEstimate
+          ? getPersistedEstimateHistory(existingEstimate)
+          : [];
+        const versioned = appendEstimateVersion(history, {
+          action: "updated",
+          createdAt: now,
+          title,
+          payload,
+          totals,
+          templateName,
+          templateUrl,
+          createdByUserId: instantUser.id,
+        });
+        await db.transact(
+          db.tx.estimates[editingEstimateId]
+            .update({
+              title,
+              status: "draft",
+              updatedAt: now,
+              templateName,
+              templateUrl,
+              payload,
+              totals,
+              version: versioned.currentVersion,
+              versionHistory: versioned.history,
+            })
+            .link({ team: activeTeam.id, owner: instantUser.id })
+        );
+        return;
+      }
+
+      const estimateId = id();
+      const versioned = appendEstimateVersion([], {
+        action: "created",
+        createdAt: now,
+        title,
+        payload,
+        totals,
+        templateName,
+        templateUrl,
+        createdByUserId: instantUser.id,
+      });
       await db.transact(
-        db.tx.estimates[editingEstimateId]
-          .update({
+        db.tx.estimates[estimateId]
+          .create({
             title,
             status: "draft",
+            createdAt: now,
             updatedAt: now,
-            templateName: templateConfig?.name,
-            templateUrl: templateConfig?.templatePdf?.url,
+            templateName,
+            templateUrl,
             payload,
             totals,
+            version: versioned.currentVersion,
+            versionHistory: versioned.history,
           })
           .link({ team: activeTeam.id, owner: instantUser.id })
       );
-      return;
+      setEditingEstimateId(estimateId);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setError(message);
     }
-
-    const estimateId = id();
-    await db.transact(
-      db.tx.estimates[estimateId]
-        .create({
-          title,
-          status: "draft",
-          createdAt: now,
-          updatedAt: now,
-          templateName: templateConfig?.name,
-          templateUrl: templateConfig?.templatePdf?.url,
-          payload,
-          totals,
-        })
-        .link({ team: activeTeam.id, owner: instantUser.id })
-    );
-    setEditingEstimateId(estimateId);
   };
 
   const handleCreateTeam = async () => {
@@ -787,9 +1040,96 @@ export default function HomePage() {
   const handleLoadTeamEstimate = (estimate: any) => {
     setEstimateMode("estimate");
     setError(null);
+    setHistoryError(null);
     setEstimateName(estimate?.title ?? "");
     setLoadedEstimatePayload(estimate?.payload ?? null);
     setEditingEstimateId(estimate?.id ?? null);
+    setHistoryEstimateId(estimate?.id ?? null);
+  };
+
+  const handleRevertTeamEstimateVersion = async (
+    estimate: any,
+    revision: EstimateVersionEntry
+  ) => {
+    setHistoryError(null);
+    setError(null);
+    if (!instantAppId) {
+      setHistoryError("InstantDB is not configured yet.");
+      return;
+    }
+    if (!instantUser) {
+      setHistoryError("Sign in to revert estimate versions.");
+      return;
+    }
+    if (!activeTeam || !activeMembership) {
+      setHistoryError("Select a team to revert versions.");
+      return;
+    }
+    if (!revision.payload) {
+      setHistoryError("This version does not include a payload to restore.");
+      return;
+    }
+
+    const actionId = `${estimate.id}:${revision.id}`;
+    setHistoryActionId(actionId);
+    try {
+      const now = Date.now();
+      const history = getPersistedEstimateHistory(estimate);
+      const versioned = appendEstimateVersion(history, {
+        action: "reverted",
+        createdAt: now,
+        title: revision.title,
+        payload: revision.payload,
+        totals: revision.totals ?? null,
+        templateName:
+          revision.templateName ??
+          (typeof estimate?.templateName === "string"
+            ? estimate.templateName
+            : undefined),
+        templateUrl:
+          revision.templateUrl ??
+          (typeof estimate?.templateUrl === "string"
+            ? estimate.templateUrl
+            : undefined),
+        createdByUserId: instantUser.id,
+        sourceVersion: revision.version,
+      });
+
+      await db.transact(
+        db.tx.estimates[estimate.id]
+          .update({
+            title: revision.title,
+            status: "draft",
+            updatedAt: now,
+            templateName:
+              revision.templateName ??
+              (typeof estimate?.templateName === "string"
+                ? estimate.templateName
+                : undefined),
+            templateUrl:
+              revision.templateUrl ??
+              (typeof estimate?.templateUrl === "string"
+                ? estimate.templateUrl
+                : undefined),
+            payload: revision.payload,
+            totals: revision.totals ?? null,
+            version: versioned.currentVersion,
+            versionHistory: versioned.history,
+          })
+          .link({ team: activeTeam.id, owner: instantUser.id })
+      );
+
+      setEstimateMode("estimate");
+      setEstimateName(revision.title);
+      setLoadedEstimatePayload(revision.payload);
+      setEditingEstimateId(estimate.id);
+      setHistoryEstimateId(estimate.id);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setHistoryError(message);
+    } finally {
+      setHistoryActionId(null);
+    }
   };
 
   const loadLibrary = async (type: LibraryType) => {
@@ -1355,30 +1695,54 @@ export default function HomePage() {
                 ) : teamEstimates.length ? (
                   <ScrollArea className="h-56 rounded-lg border border-border/70 bg-background/70">
                     <div className="divide-y divide-border/60">
-                      {teamEstimates.map((estimate) => (
-                        <div
-                          key={estimate.id}
-                          className="flex items-center justify-between gap-4 px-4 py-3"
-                        >
-                          <div>
-                            <p className="text-sm font-medium text-foreground">
-                              {estimate.title ?? "Untitled"}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              {estimate.updatedAt
-                                ? new Date(estimate.updatedAt).toLocaleString()
-                                : "No timestamp"}
-                            </p>
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => handleLoadTeamEstimate(estimate)}
+                      {teamEstimates.map((estimate) => {
+                        const currentVersion = getCurrentVersionForEstimate(estimate);
+                        const historyOpen = historyEstimateId === estimate.id;
+                        return (
+                          <div
+                            key={estimate.id}
+                            className="flex items-center justify-between gap-4 px-4 py-3"
                           >
-                            Load
-                          </Button>
-                        </div>
-                      ))}
+                            <div className="space-y-1">
+                              <p className="text-sm font-medium text-foreground">
+                                {estimate.title ?? "Untitled"}
+                              </p>
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <Badge variant="outline" className="bg-background/80">
+                                  v{currentVersion}
+                                </Badge>
+                                <span>
+                                  {estimate.updatedAt
+                                    ? new Date(estimate.updatedAt).toLocaleString()
+                                    : "No timestamp"}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleLoadTeamEstimate(estimate)}
+                              >
+                                Load
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setHistoryError(null);
+                                  setHistoryEstimateId((current) =>
+                                    current === estimate.id ? null : estimate.id
+                                  );
+                                }}
+                              >
+                                <History className="h-3.5 w-3.5" />
+                                {historyOpen ? "Hide history" : "History"}
+                              </Button>
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
                   </ScrollArea>
                 ) : (
@@ -1386,6 +1750,88 @@ export default function HomePage() {
                     No shared estimates yet.
                   </div>
                 )}
+                {historyError ? (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {historyError}
+                  </div>
+                ) : null}
+                {selectedHistoryEstimate ? (
+                  <div className="space-y-2 rounded-lg border border-border/60 bg-background/70 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">
+                          Version history:{" "}
+                          {selectedHistoryEstimate.title ?? "Untitled"}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Reverting creates a new version and keeps the full timeline.
+                        </p>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setHistoryEstimateId(null)}
+                      >
+                        Close
+                      </Button>
+                    </div>
+                    {selectedHistoryEntries.length ? (
+                      <ScrollArea className="h-52 rounded-md border border-border/60 bg-background/70">
+                        <div className="divide-y divide-border/60">
+                          {selectedHistoryEntries.map((entry) => {
+                            const actionId = `${selectedHistoryEstimate.id}:${entry.id}`;
+                            const reverting = historyActionId === actionId;
+                            const isCurrent =
+                              selectedHistoryCurrentVersion === entry.version;
+                            return (
+                              <div
+                                key={entry.id}
+                                className="flex items-center justify-between gap-4 px-3 py-2"
+                              >
+                                <div>
+                                  <p className="text-xs font-medium text-foreground">
+                                    v{entry.version} ·{" "}
+                                    {getEstimateVersionActionLabel(entry.action)}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {new Date(entry.createdAt).toLocaleString()}
+                                  </p>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {isCurrent ? (
+                                    <Badge variant="outline" className="bg-background/80">
+                                      Current
+                                    </Badge>
+                                  ) : null}
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() =>
+                                      void handleRevertTeamEstimateVersion(
+                                        selectedHistoryEstimate,
+                                        entry
+                                      )
+                                    }
+                                    disabled={reverting || isCurrent || !entry.payload}
+                                  >
+                                    {reverting ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : null}
+                                    Revert
+                                  </Button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </ScrollArea>
+                    ) : (
+                      <div className="text-xs text-muted-foreground">
+                        No versions recorded yet.
+                      </div>
+                    )}
+                  </div>
+                ) : null}
                 {editingEstimateId ? (
                   <div className="text-xs text-muted-foreground">
                     Editing a shared estimate. Use “Save to team” to update it.
@@ -1496,6 +1942,8 @@ export default function HomePage() {
                       onClick={() => {
                         setLoadedEstimatePayload(null);
                         setEditingEstimateId(null);
+                        setHistoryEstimateId(null);
+                        setHistoryError(null);
                         setEstimateName("");
                         setEstimateValues({});
                         setEstimatePayload(null);
@@ -1637,6 +2085,8 @@ export default function HomePage() {
                     setEstimatePayload(null);
                     setLoadedEstimatePayload(null);
                     setEditingEstimateId(null);
+                    setHistoryEstimateId(null);
+                    setHistoryError(null);
                   }}
                   disabled={isGenerating}
                 >
