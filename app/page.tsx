@@ -30,7 +30,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
   LibraryItem,
   LibraryState,
@@ -57,7 +56,6 @@ import {
   CheckCircle2,
   CircleDashed,
   FileDown,
-  FileSpreadsheet,
   FileText,
   History,
   LayoutTemplate,
@@ -90,8 +88,10 @@ export default function HomePage() {
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [estimateMode, setEstimateMode] = useState<"workbook" | "estimate">(
-    "workbook"
+    "estimate"
   );
+  const [showWorkbookImport, setShowWorkbookImport] = useState(false);
+  const [isPlanningLinesLoading, setIsPlanningLinesLoading] = useState(false);
   const [estimateValues, setEstimateValues] = useState<
     Record<string, string | number>
   >({});
@@ -347,6 +347,7 @@ export default function HomePage() {
     templateConfig?.templatePdf?.url &&
       (estimateMode === "workbook" ? uploads.workbook : hasEstimateValues)
   );
+  const canDownloadPlanningLines = Boolean(uploads.workbook?.url);
   const progressSteps = useMemo(
     () => [
       {
@@ -741,6 +742,60 @@ export default function HomePage() {
     instantAppId,
     instantUser,
   ]);
+
+  const parseDownloadFilename = (contentDisposition: string | null) => {
+    if (!contentDisposition) return null;
+    const match = contentDisposition.match(
+      /filename\*=(?:UTF-8''([^;]+))|filename="?([^\";]+)"?/i
+    );
+    const raw = match?.[1] ?? match?.[2];
+    if (!raw) return null;
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return raw;
+    }
+  };
+
+  const handleDownloadPlanningLines = async () => {
+    setError(null);
+    if (!uploads.workbook?.url) {
+      setError("Upload a workbook before exporting planning lines.");
+      return;
+    }
+
+    setIsPlanningLinesLoading(true);
+    try {
+      const response = await fetch("/api/planning-lines", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workbookUrl: uploads.workbook.url,
+          format: "csv",
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || "Failed to generate planning lines.");
+      }
+
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download =
+        parseDownloadFilename(response.headers.get("content-disposition")) ??
+        "Project Planning_SYNC.csv";
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setError(message);
+    } finally {
+      setIsPlanningLinesLoading(false);
+    }
+  };
 
   const handleGenerate = async () => {
     setError(null);
@@ -1844,10 +1899,7 @@ export default function HomePage() {
 
         <section
           id="step-input"
-          className={cn(
-            "mt-12 grid gap-6",
-            estimateMode === "estimate" ? "" : "lg:grid-cols-2"
-          )}
+          className="mt-12 grid gap-6 lg:grid-cols-2"
         >
           <div className="space-y-6">
             <div className="rounded-2xl border border-border/60 bg-card/80 p-4">
@@ -1860,113 +1912,147 @@ export default function HomePage() {
                     Choose Input Source
                   </h2>
                   <p className="text-sm text-muted-foreground">
-                    Start with either a workbook upload or a manual estimate.
+                    Manual estimate is the primary workflow. Workbook import is
+                    available in advanced tools.
                   </p>
                 </div>
                 <Badge variant="outline" className="bg-background/80">
-                  {estimateMode === "estimate" ? "Manual estimate" : "Excel workbook"}
+                  {estimateMode === "estimate"
+                    ? "Manual estimate active"
+                    : "Workbook import active"}
                 </Badge>
               </div>
             </div>
-            <Tabs
-              value={estimateMode}
-              onValueChange={(value) =>
-                setEstimateMode(value as "workbook" | "estimate")
-              }
-              className="space-y-4"
-            >
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="workbook" className="gap-2">
-                  <FileSpreadsheet className="h-4 w-4" />
-                  Excel Workbook
-                </TabsTrigger>
-                <TabsTrigger value="estimate" className="gap-2">
-                  <FileText className="h-4 w-4" />
-                  Manual Estimate
-                </TabsTrigger>
-              </TabsList>
-              <TabsContent value="workbook">
-                <UploadCard
-                  title="Excel Workbook"
-                  description="Job info + bid sheet values (.xlsx)."
-                  endpoint="workbook"
-                  tag="Required"
-                  selected={uploads.workbook}
-                  allowedContent=".xlsx only"
-                  uploadLabel="Drop the workbook here or browse"
-                  library={library.workbook}
-                  onUpload={(file) => {
-                    setError(null);
-                    setUploads((prev) => ({ ...prev, workbook: file }));
-                    setEstimateMode("workbook");
-                    void loadLibrary("workbook");
+            <EstimateBuilderCard
+              values={estimateValues}
+              onValuesChange={setEstimateValues}
+              name={estimateName}
+              onNameChange={setEstimateName}
+              selectedEstimate={selectedEstimate}
+              onSelectEstimate={setSelectedEstimate}
+              onEstimatePayloadChange={setEstimatePayload}
+              loadPayload={loadedEstimatePayload}
+              vendors={vendorOptions}
+              panelTypes={panelTypeOptions}
+              onActivate={() => {
+                setEstimateMode("estimate");
+                setError(null);
+              }}
+            />
+            <div className="mt-4 flex flex-wrap gap-3">
+              <Button
+                variant="secondary"
+                onClick={() => void handleSaveEstimateToDb()}
+                disabled={!isSignedIn || !teamReady}
+              >
+                {editingEstimateId ? "Update team estimate" : "Save to team"}
+              </Button>
+              {editingEstimateId ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setLoadedEstimatePayload(null);
+                    setEditingEstimateId(null);
+                    setHistoryEstimateId(null);
+                    setHistoryError(null);
+                    setEstimateName("");
+                    setEstimateValues({});
+                    setEstimatePayload(null);
                   }}
-                  onError={setError}
-                  onSelectLibrary={(item) => {
-                    handleLibrarySelect("workbook", item);
-                    setEstimateMode("workbook");
-                  }}
-                  onRefreshLibrary={() => loadLibrary("workbook")}
-                  onDeleteLibrary={() => handleLibraryDeleteAll("workbook")}
-                />
-              </TabsContent>
-              <TabsContent value="estimate">
-                <EstimateBuilderCard
-                  values={estimateValues}
-                  onValuesChange={setEstimateValues}
-                  name={estimateName}
-                  onNameChange={setEstimateName}
-                  selectedEstimate={selectedEstimate}
-                  onSelectEstimate={setSelectedEstimate}
-                  onEstimatePayloadChange={setEstimatePayload}
-                  loadPayload={loadedEstimatePayload}
-                  vendors={vendorOptions}
-                  panelTypes={panelTypeOptions}
-                  onActivate={() => {
-                    setEstimateMode("estimate");
-                    setError(null);
-                  }}
-                />
-                <div className="mt-4 flex flex-wrap gap-3">
-                  <Button
-                    variant="secondary"
-                    onClick={() => void handleSaveEstimateToDb()}
-                    disabled={!isSignedIn || !teamReady}
-                  >
-                    {editingEstimateId ? "Update team estimate" : "Save to team"}
-                  </Button>
-                  {editingEstimateId ? (
+                >
+                  New estimate
+                </Button>
+              ) : null}
+              {!clerkEnabled ? (
+                <span className="text-xs text-muted-foreground">
+                  Configure Clerk + InstantDB to enable team saving.
+                </span>
+              ) : !activeMembership ? (
+                <span className="text-xs text-muted-foreground">
+                  Select a team to save estimates.
+                </span>
+              ) : null}
+            </div>
+            <Card className="rounded-3xl border-border/60 bg-card/80 shadow-elevated">
+              <CardHeader>
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="space-y-1">
+                    <Badge variant="muted" className="bg-muted/80 text-[10px]">
+                      Advanced
+                    </Badge>
+                    <CardTitle className="text-xl font-serif">
+                      Workbook Import
+                    </CardTitle>
+                    <CardDescription>
+                      Optional fallback for legacy workbook-driven jobs.
+                    </CardDescription>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => {
-                        setLoadedEstimatePayload(null);
-                        setEditingEstimateId(null);
-                        setHistoryEstimateId(null);
-                        setHistoryError(null);
-                        setEstimateName("");
-                        setEstimateValues({});
-                        setEstimatePayload(null);
-                      }}
+                      onClick={() => setShowWorkbookImport((prev) => !prev)}
                     >
-                      New estimate
+                      {showWorkbookImport
+                        ? "Hide workbook tools"
+                        : "Show workbook tools"}
                     </Button>
-                  ) : null}
-                  {!clerkEnabled ? (
-                    <span className="text-xs text-muted-foreground">
-                      Configure Clerk + InstantDB to enable team saving.
-                    </span>
-                  ) : !activeMembership ? (
-                    <span className="text-xs text-muted-foreground">
-                      Select a team to save estimates.
-                    </span>
-                  ) : null}
+                    {estimateMode === "workbook" ? (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => setEstimateMode("estimate")}
+                      >
+                        Use manual estimate
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
-              </TabsContent>
-            </Tabs>
-            {estimateMode === "estimate" ? templateCard : null}
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {showWorkbookImport ? (
+                  <UploadCard
+                    title="Excel Workbook"
+                    description="Job info + bid sheet values (.xlsx)."
+                    endpoint="workbook"
+                    tag="Optional"
+                    selected={uploads.workbook}
+                    allowedContent=".xlsx only"
+                    uploadLabel="Drop the workbook here or browse"
+                    library={library.workbook}
+                    onUpload={(file) => {
+                      setError(null);
+                      setUploads((prev) => ({ ...prev, workbook: file }));
+                      setEstimateMode("workbook");
+                      setShowWorkbookImport(true);
+                      void loadLibrary("workbook");
+                    }}
+                    onError={setError}
+                    onSelectLibrary={(item) => {
+                      handleLibrarySelect("workbook", item);
+                      setEstimateMode("workbook");
+                      setShowWorkbookImport(true);
+                    }}
+                    onRefreshLibrary={() => loadLibrary("workbook")}
+                    onDeleteLibrary={() => handleLibraryDeleteAll("workbook")}
+                  />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Workbook upload is hidden by default to keep the primary
+                    workflow focused on manual estimates.
+                  </p>
+                )}
+                {uploads.workbook ? (
+                  <p className="text-xs text-muted-foreground">
+                    Current workbook:{" "}
+                    <span className="text-foreground">{uploads.workbook.name}</span>
+                  </p>
+                ) : null}
+              </CardContent>
+            </Card>
           </div>
-          {estimateMode === "estimate" ? null : templateCard}
+          {templateCard}
         </section>
 
         <section className="mt-10">
@@ -2074,6 +2160,22 @@ export default function HomePage() {
                   {isGenerating ? "Generating..." : "Generate Proposal PDF"}
                 </Button>
                 <Button
+                  variant="secondary"
+                  onClick={() => void handleDownloadPlanningLines()}
+                  disabled={
+                    !canDownloadPlanningLines || isPlanningLinesLoading || isGenerating
+                  }
+                >
+                  {isPlanningLinesLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileText className="h-4 w-4" />
+                  )}
+                  {isPlanningLinesLoading
+                    ? "Building planning lines..."
+                    : "Download _SYNC planning lines (CSV)"}
+                </Button>
+                <Button
                   variant="outline"
                   onClick={() => {
                     setUploads({});
@@ -2087,8 +2189,10 @@ export default function HomePage() {
                     setEditingEstimateId(null);
                     setHistoryEstimateId(null);
                     setHistoryError(null);
+                    setEstimateMode("estimate");
+                    setShowWorkbookImport(false);
                   }}
-                  disabled={isGenerating}
+                  disabled={isGenerating || isPlanningLinesLoading}
                 >
                   Clear inputs
                 </Button>
