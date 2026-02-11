@@ -8,6 +8,7 @@ type CensusMatch = {
   tigerLine?: { tigerLineId?: string };
   addressComponents?: {
     fromAddress?: string;
+    toAddress?: string;
     preDirection?: string;
     preType?: string;
     streetName?: string;
@@ -65,10 +66,17 @@ export async function GET(request: NextRequest) {
       ? data.result.addressMatches
       : [];
 
-    const suggestions = matches
-      .map((match, index) => mapMatchToSuggestion(match, index))
-      .filter((entry): entry is AddressSuggestion => entry !== null)
-      .slice(0, MAX_SUGGESTIONS);
+    const seen = new Set<string>();
+    const suggestions: AddressSuggestion[] = [];
+    for (let index = 0; index < matches.length; index += 1) {
+      const mapped = mapMatchToSuggestion(matches[index], index);
+      if (!mapped) continue;
+      const key = `${mapped.projectName}|${mapped.cityStateZip}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      suggestions.push(mapped);
+      if (suggestions.length >= MAX_SUGGESTIONS) break;
+    }
 
     return NextResponse.json({ suggestions });
   } catch (error) {
@@ -83,8 +91,8 @@ function mapMatchToSuggestion(
   index: number
 ): AddressSuggestion | null {
   const parts = match.addressComponents ?? {};
+  const parsedMatched = parseMatchedAddress(match.matchedAddress);
   const street = [
-    parts.fromAddress,
     parts.preDirection,
     parts.preType,
     parts.streetName,
@@ -98,24 +106,28 @@ function mapMatchToSuggestion(
   const city = titleCase(parts.city ?? "");
   const state = String(parts.state ?? "").trim().toUpperCase();
   const zip = String(parts.zip ?? "").trim();
-  const cityStateZip = [city, [state, zip].filter(Boolean).join(" ")]
+  const derivedCityStateZip = [city, [state, zip].filter(Boolean).join(" ")]
     .filter(Boolean)
     .join(", ");
+  const cityStateZip = derivedCityStateZip || parsedMatched.cityStateZip;
 
   const normalizedStreet = titleCase(street);
-  const fullAddress = [normalizedStreet, cityStateZip]
+  const rangedStreet = [parts.fromAddress, normalizedStreet]
     .filter(Boolean)
-    .join(", ");
-  const fallback = titleCase(String(match.matchedAddress ?? "").trim());
+    .join(" ");
 
-  const projectName = normalizedStreet || fallback;
+  const projectName = parsedMatched.street || rangedStreet || normalizedStreet;
   if (!projectName) return null;
+
+  const fullAddress =
+    parsedMatched.fullAddress ||
+    [projectName, cityStateZip].filter(Boolean).join(", ");
 
   return {
     id: `${match.tigerLine?.tigerLineId ?? "addr"}-${index}`,
     projectName,
     cityStateZip,
-    fullAddress: fullAddress || fallback || projectName,
+    fullAddress: fullAddress || projectName,
   };
 }
 
@@ -123,4 +135,29 @@ function titleCase(input: string) {
   const value = input.trim().toLowerCase();
   if (!value) return "";
   return value.replace(/\b([a-z])/g, (letter) => letter.toUpperCase());
+}
+
+function parseMatchedAddress(raw: string | undefined) {
+  const text = String(raw ?? "").trim();
+  if (!text) {
+    return { street: "", cityStateZip: "", fullAddress: "" };
+  }
+
+  const pieces = text
+    .split(",")
+    .map((piece) => piece.trim())
+    .filter(Boolean);
+
+  const street = titleCase(pieces[0] ?? "");
+  const city = titleCase(pieces[1] ?? "");
+  const state = String(pieces[2] ?? "")
+    .replace(/[^a-z]/gi, "")
+    .toUpperCase();
+  const zip = (pieces[3] ?? "").match(/\d{5}(?:-\d{4})?/)?.[0] ?? "";
+  const cityStateZip = [city, [state, zip].filter(Boolean).join(" ")]
+    .filter(Boolean)
+    .join(", ");
+  const fullAddress = [street, cityStateZip].filter(Boolean).join(", ");
+
+  return { street, cityStateZip, fullAddress };
 }
