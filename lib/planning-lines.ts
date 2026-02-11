@@ -31,13 +31,15 @@ type ProductAmounts = {
 type PlanningMappingEntry = {
   productCode: string;
   taskNo: string;
-  description: string;
+  fallbackDescription: string;
   type: string;
   lineType: string;
   percentage: number;
 };
 
-const SYNC_HEADERS = [
+const GL_ACCOUNT_NO = "42000";
+
+const FULL_HEADERS = [
   "Project No.",
   "Project Task No.",
   "Line Type",
@@ -59,6 +61,26 @@ const SYNC_HEADERS = [
   "Line No.",
 ] as const;
 
+const VISIBLE_HEADERS = [
+  "Project Task No.",
+  "Line Type",
+  "Planning Date",
+  "Planned Delivery Date",
+  "Document No.",
+  "Type",
+  "User ID",
+  "No.",
+  "Description",
+  "Quantity",
+  "Qty. to Assemble",
+  "Unit Cost",
+  "Total Cost",
+  "Unit Price",
+  "Line Amount",
+  "Qty. to Transfer to Journal",
+  "Invoiced Amount ($)",
+] as const;
+
 export function buildPlanningLinesFromWorkbookBuffer(
   workbookBuffer: Buffer
 ): PlanningLineRow[] {
@@ -76,11 +98,11 @@ export function buildPlanningLinesFromWorkbook(
   if (!mappingEntries.length) return [];
 
   const amountsByProduct = readAmountsByProduct(workbook);
+  const productNamesByCode = readProductNamesByCode(workbook);
+
   const projectNo =
     getCellString(workbook, "Project Planning_SYNC", "U2") || "PR00000";
-  const planningDate = formatDateForSync(
-    getCellValue(workbook, "Job Info", "C9")
-  );
+  const planningDate = formatDateForSync(getCellValue(workbook, "Job Info", "C9"));
   const plannedDeliveryDate = formatDateForSync(
     getCellValue(workbook, "Job Info", "C10")
   );
@@ -93,9 +115,14 @@ export function buildPlanningLinesFromWorkbook(
     const scaledCost = roundCurrency(amounts.cost * entry.percentage);
     const scaledPrice = roundCurrency(amounts.price * entry.percentage);
 
-    const useBudget = entry.lineType.toLowerCase() === "budget";
-    const principalValue = useBudget ? scaledCost : scaledPrice;
+    const isBudget = entry.lineType.toLowerCase() === "budget";
+    const principalValue = isBudget ? scaledCost : scaledPrice;
     if (Math.abs(principalValue) < 0.005) continue;
+
+    const displayName =
+      productNamesByCode.get(entry.productCode) || entry.fallbackDescription;
+    const description = buildDescription(displayName, entry, isBudget);
+    const no = isBudget ? entry.productCode : GL_ACCOUNT_NO;
 
     rows.push({
       projectNo,
@@ -106,14 +133,14 @@ export function buildPlanningLinesFromWorkbook(
       documentNo: "",
       type: entry.type,
       userId,
-      no: entry.productCode,
-      description: entry.description,
+      no,
+      description,
       quantity: "1",
       qtyToAssemble: "",
-      unitCost: useBudget ? formatMoney(scaledCost) : "",
-      totalCost: useBudget ? formatMoney(scaledCost) : "",
-      unitPrice: useBudget ? "" : formatMoney(scaledPrice),
-      lineAmount: useBudget ? "" : formatMoney(scaledPrice),
+      unitCost: isBudget ? formatMoney(scaledCost) : formatMoney(0),
+      totalCost: isBudget ? formatMoney(scaledCost) : formatMoney(0),
+      unitPrice: isBudget ? formatMoney(0) : formatMoney(scaledPrice),
+      lineAmount: isBudget ? formatMoney(0) : formatMoney(scaledPrice),
       qtyToTransferToJournal: "",
       invoicedAmount: "",
       lineNo: String(lineNo),
@@ -125,7 +152,27 @@ export function buildPlanningLinesFromWorkbook(
 }
 
 export function planningLinesToCsv(rows: PlanningLineRow[]) {
-  const lines = rows.map((row) =>
+  return serializeRows(rows, ",");
+}
+
+export function planningLinesToTsv(rows: PlanningLineRow[]) {
+  return serializeRows(rows, "\t");
+}
+
+function serializeRows(rows: PlanningLineRow[], delimiter: "," | "\t") {
+  const headers = VISIBLE_HEADERS;
+  const body = rows.map((row) => toVisibleColumns(row, delimiter).join(delimiter));
+  const headerRow = headers
+    .map((value) => escapeDelimitedValue(value, delimiter))
+    .join(delimiter);
+  return [headerRow, ...body].join("\r\n");
+}
+
+export function planningLinesToFullCsv(rows: PlanningLineRow[]) {
+  const headerRow = FULL_HEADERS.map((value) => escapeDelimitedValue(value, ",")).join(
+    ","
+  );
+  const body = rows.map((row) =>
     [
       row.projectNo,
       row.projectTaskNo,
@@ -147,11 +194,50 @@ export function planningLinesToCsv(rows: PlanningLineRow[]) {
       row.invoicedAmount,
       row.lineNo,
     ]
-      .map(csvEscape)
+      .map((value) => escapeDelimitedValue(value, ","))
       .join(",")
   );
 
-  return [SYNC_HEADERS.map(csvEscape).join(","), ...lines].join("\n");
+  return [headerRow, ...body].join("\r\n");
+}
+
+function toVisibleColumns(row: PlanningLineRow, delimiter: "," | "\t") {
+  return [
+    row.projectTaskNo,
+    row.lineType,
+    row.planningDate,
+    row.plannedDeliveryDate,
+    row.documentNo,
+    row.type,
+    row.userId,
+    row.no,
+    row.description,
+    row.quantity,
+    row.qtyToAssemble,
+    row.unitCost,
+    row.totalCost,
+    row.unitPrice,
+    row.lineAmount,
+    row.qtyToTransferToJournal,
+    row.invoicedAmount,
+  ].map((value) => escapeDelimitedValue(value, delimiter));
+}
+
+function buildDescription(
+  displayName: string,
+  entry: PlanningMappingEntry,
+  isBudget: boolean
+) {
+  const normalized = displayName.trim();
+  if (!normalized) return entry.productCode;
+  if (isBudget) return normalized;
+  if (entry.percentage >= 0.9995) return normalized;
+  return `${normalized} ${formatPercent(entry.percentage)}`;
+}
+
+function formatPercent(value: number) {
+  const pct = Math.round(value * 100);
+  return `${pct}%`;
 }
 
 function readPlanningMapping(workbook: XLSX.WorkBook): PlanningMappingEntry[] {
@@ -183,7 +269,7 @@ function readPlanningMapping(workbook: XLSX.WorkBook): PlanningMappingEntry[] {
     entries.push({
       productCode,
       taskNo,
-      description,
+      fallbackDescription: description,
       type: type || "Item",
       lineType: lineType || "Budget",
       percentage: percentageRaw || 1,
@@ -193,6 +279,24 @@ function readPlanningMapping(workbook: XLSX.WorkBook): PlanningMappingEntry[] {
   return entries;
 }
 
+function readProductNamesByCode(workbook: XLSX.WorkBook) {
+  const map = new Map<string, string>();
+  const sheetName = "Product Pricing";
+  const sheet = workbook.Sheets[sheetName];
+  const ref = sheet?.["!ref"];
+  if (!sheet || !ref) return map;
+
+  const range = XLSX.utils.decode_range(ref);
+  for (let row = 2; row <= Math.max(range.e.r + 1, 500); row += 1) {
+    const code = getCellString(workbook, sheetName, `E${row}`).toUpperCase();
+    const name = getCellString(workbook, sheetName, `A${row}`);
+    if (!code || !name) continue;
+    map.set(code, name);
+  }
+
+  return map;
+}
+
 function readAmountsByProduct(workbook: XLSX.WorkBook) {
   const amountsByProduct = new Map<string, ProductAmounts>();
   const pricingSheet = "Product Pricing";
@@ -200,7 +304,7 @@ function readAmountsByProduct(workbook: XLSX.WorkBook) {
 
   if (pricingSheetRef) {
     const range = XLSX.utils.decode_range(pricingSheetRef);
-    for (let row = 2; row <= Math.max(range.e.r + 1, 300); row += 1) {
+    for (let row = 2; row <= Math.max(range.e.r + 1, 500); row += 1) {
       const code = getCellString(workbook, pricingSheet, `E${row}`).toUpperCase();
       if (!code) continue;
       const cost = getCellNumber(workbook, pricingSheet, `B${row}`);
@@ -306,7 +410,7 @@ function roundCurrency(value: number) {
 }
 
 function formatMoney(value: number) {
-  if (!Number.isFinite(value)) return "";
+  if (!Number.isFinite(value)) return "0.00";
   return value.toFixed(2);
 }
 
@@ -319,12 +423,16 @@ function formatDateForSync(value: unknown) {
   return `${year}-${month}-${day}`;
 }
 
-function csvEscape(value: string) {
-  if (value.includes('"')) {
-    value = value.replace(/"/g, '""');
+function escapeDelimitedValue(value: string, delimiter: "," | "\t") {
+  const stringValue = value ?? "";
+  if (stringValue.includes('"')) {
+    value = stringValue.replace(/"/g, '""');
+  } else {
+    value = stringValue;
   }
-  if (value.includes(",") || value.includes("\n") || value.includes("\r")) {
-    return `"${value}"`;
-  }
-  return value;
+
+  const needsQuoting =
+    value.includes(delimiter) || value.includes("\n") || value.includes("\r");
+  if (!needsQuoting) return value;
+  return `"${value}"`;
 }

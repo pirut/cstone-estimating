@@ -92,6 +92,10 @@ export default function HomePage() {
   );
   const [showWorkbookImport, setShowWorkbookImport] = useState(false);
   const [isPlanningLinesLoading, setIsPlanningLinesLoading] = useState(false);
+  const [isPlanningLinesCopying, setIsPlanningLinesCopying] = useState(false);
+  const [planningLinesStatus, setPlanningLinesStatus] = useState<string | null>(
+    null
+  );
   const [estimateValues, setEstimateValues] = useState<
     Record<string, string | number>
   >({});
@@ -759,6 +763,7 @@ export default function HomePage() {
 
   const handleDownloadPlanningLines = async () => {
     setError(null);
+    setPlanningLinesStatus(null);
     if (!uploads.workbook?.url) {
       setError("Upload a workbook before exporting planning lines.");
       return;
@@ -794,6 +799,70 @@ export default function HomePage() {
       setError(message);
     } finally {
       setIsPlanningLinesLoading(false);
+    }
+  };
+
+  const copyTextToClipboard = async (text: string) => {
+    if (
+      typeof navigator !== "undefined" &&
+      navigator.clipboard &&
+      typeof navigator.clipboard.writeText === "function"
+    ) {
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+
+    if (typeof document === "undefined") {
+      throw new Error("Clipboard access is not available.");
+    }
+
+    const textarea = document.createElement("textarea");
+    textarea.value = text;
+    textarea.setAttribute("readonly", "true");
+    textarea.style.position = "fixed";
+    textarea.style.opacity = "0";
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    const success = document.execCommand("copy");
+    document.body.removeChild(textarea);
+    if (!success) {
+      throw new Error("Clipboard copy failed.");
+    }
+  };
+
+  const handleCopyPlanningLines = async () => {
+    setError(null);
+    setPlanningLinesStatus(null);
+    if (!uploads.workbook?.url) {
+      setError("Upload a workbook before copying planning lines.");
+      return;
+    }
+
+    setIsPlanningLinesCopying(true);
+    try {
+      const response = await fetch("/api/planning-lines", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          workbookUrl: uploads.workbook.url,
+          format: "tsv",
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => null);
+        throw new Error(data?.error || "Failed to build planning lines.");
+      }
+
+      const text = await response.text();
+      await copyTextToClipboard(text);
+      setPlanningLinesStatus("Planning lines copied to clipboard.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setError(message);
+    } finally {
+      setIsPlanningLinesCopying(false);
     }
   };
 
@@ -2163,7 +2232,10 @@ export default function HomePage() {
                   variant="secondary"
                   onClick={() => void handleDownloadPlanningLines()}
                   disabled={
-                    !canDownloadPlanningLines || isPlanningLinesLoading || isGenerating
+                    !canDownloadPlanningLines ||
+                    isPlanningLinesLoading ||
+                    isPlanningLinesCopying ||
+                    isGenerating
                   }
                 >
                   {isPlanningLinesLoading ? (
@@ -2174,6 +2246,25 @@ export default function HomePage() {
                   {isPlanningLinesLoading
                     ? "Building planning lines..."
                     : "Download _SYNC planning lines (CSV)"}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => void handleCopyPlanningLines()}
+                  disabled={
+                    !canDownloadPlanningLines ||
+                    isPlanningLinesCopying ||
+                    isPlanningLinesLoading ||
+                    isGenerating
+                  }
+                >
+                  {isPlanningLinesCopying ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileText className="h-4 w-4" />
+                  )}
+                  {isPlanningLinesCopying
+                    ? "Copying planning lines..."
+                    : "Copy _SYNC lines for paste"}
                 </Button>
                 <Button
                   variant="outline"
@@ -2191,12 +2282,18 @@ export default function HomePage() {
                     setHistoryError(null);
                     setEstimateMode("estimate");
                     setShowWorkbookImport(false);
+                    setPlanningLinesStatus(null);
                   }}
-                  disabled={isGenerating || isPlanningLinesLoading}
+                  disabled={
+                    isGenerating || isPlanningLinesLoading || isPlanningLinesCopying
+                  }
                 >
                   Clear inputs
                 </Button>
               </div>
+              {planningLinesStatus ? (
+                <p className="text-xs text-muted-foreground">{planningLinesStatus}</p>
+              ) : null}
               <p className="text-xs text-muted-foreground">
                 Generated PDFs are produced on demand and downloaded immediately.
               </p>

@@ -3,6 +3,7 @@ import { downloadBuffer } from "@/lib/server/download";
 import {
   buildPlanningLinesFromWorkbookBuffer,
   planningLinesToCsv,
+  planningLinesToTsv,
 } from "@/lib/planning-lines";
 
 export const runtime = "nodejs";
@@ -31,6 +32,19 @@ export async function POST(request: NextRequest) {
 
     if (format === "json") {
       return NextResponse.json({ lines });
+    }
+
+    if (format === "tsv") {
+      const tsv = planningLinesToTsv(lines);
+      return new NextResponse(tsv, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/tab-separated-values; charset=utf-8",
+          "Content-Disposition":
+            "attachment; filename=\"Project Planning_SYNC.tsv\"",
+          "Cache-Control": "no-store",
+        },
+      });
     }
 
     const csv = planningLinesToCsv(lines);
