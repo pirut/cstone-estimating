@@ -216,8 +216,10 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const embedded = new URLSearchParams(window.location.search).get("embedded");
-    setIsEmbedded(embedded === "1");
+    const embeddedParam = new URLSearchParams(window.location.search).get(
+      "embedded"
+    );
+    setIsEmbedded(embeddedParam === "1");
   }, []);
 
   const emailAddress = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? "";

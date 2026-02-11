@@ -1574,18 +1574,14 @@ export default function TeamAdminPage() {
                 Calibration Dashboard
               </CardTitle>
               <CardDescription>
-                Full template calibration and file manager, embedded in the org
-                owner dashboard.
+                Open calibration in the full page workspace (not embedded in a
+                window).
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="rounded-lg border border-border/70 bg-background/70 p-2">
-                <iframe
-                  src="/admin?embedded=1"
-                  title="Calibration Dashboard"
-                  className="h-[85vh] min-h-[1200px] w-full rounded-md border-0 bg-background"
-                />
-              </div>
+            <CardContent className="space-y-4">
+              <Button asChild variant="accent">
+                <Link href="/admin">Open full calibration page</Link>
+              </Button>
             </CardContent>
           </Card>
         </TabsContent>
