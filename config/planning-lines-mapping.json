@@ -1,0 +1,346 @@
+[
+  {
+    "productCode": "WD0002",
+    "taskNo": "1400",
+    "name": "ES Windows & Doors",
+    "type": "Item",
+    "lineType": "Budget",
+    "percentage": 1
+  },
+  {
+    "productCode": "WD0003",
+    "taskNo": "1400",
+    "name": "Viewscapes Luxury Aluminum Windows and Doors",
+    "type": "Item",
+    "lineType": "Budget",
+    "percentage": 1
+  },
+  {
+    "productCode": "WD0004",
+    "taskNo": "1400",
+    "name": "ES Garage Doors",
+    "type": "Item",
+    "lineType": "Budget",
+    "percentage": 1
+  },
+  {
+    "productCode": "WD0001",
+    "taskNo": "1400",
+    "name": "Brombal Steel Windows & Doors",
+    "type": "Item",
+    "lineType": "Budget",
+    "percentage": 1
+  },
+  {
+    "productCode": "WD0007",
+    "taskNo": "1400",
+    "name": "\u0113Wood Luxury Wood Windows and Doors",
+    "type": "Item",
+    "lineType": "Budget",
+    "percentage": 1
+  },
+  {
+    "productCode": "WD0005",
+    "taskNo": "1400",
+    "name": "Kolbe Windows and Doors",
+    "type": "Item",
+    "lineType": "Budget",
+    "percentage": 1
+  },
+  {
+    "productCode": "WD0006",
+    "taskNo": "1400",
+    "name": "Oikos Doors",
+    "type": "Item",
+    "lineType": "Budget",
+    "percentage": 1
+  },
+  {
+    "productCode": "SUB0001",
+    "taskNo": "2100",
+    "name": "Subcontractor Bucking",
+    "type": "Item",
+    "lineType": "Budget",
+    "percentage": 1
+  },
+  {
+    "productCode": "SUB0002",
+    "taskNo": "2200",
+    "name": "Subcontractor Waterproofing",
+    "type": "Item",
+    "lineType": "Budget",
+    "percentage": 1
+  },
+  {
+    "productCode": "SUB0003",
+    "taskNo": "2300",
+    "name": "Subcontractor Installation",
+    "type": "Item",
+    "lineType": "Budget",
+    "percentage": 1
+  },
+  {
+    "productCode": "SUB0004",
+    "taskNo": "2300",
+    "name": "Subcontractor Covers & Hardware",
+    "type": "Item",
+    "lineType": "Budget",
+    "percentage": 1
+  },
+  {
+    "productCode": "RENT0001",
+    "taskNo": "2300",
+    "name": "General Pre-planned Rental Equipment",
+    "type": "Item",
+    "lineType": "Budget",
+    "percentage": 1
+  },
+  {
+    "productCode": "SUB0005",
+    "taskNo": "2400",
+    "name": "Subcontractor Punch Out",
+    "type": "Item",
+    "lineType": "Budget",
+    "percentage": 1
+  },
+  {
+    "productCode": "WD0002",
+    "taskNo": "3100",
+    "name": "ES Windows & Doors",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.33
+  },
+  {
+    "productCode": "WD0003",
+    "taskNo": "3100",
+    "name": "Viewscapes Luxury Aluminum Windows and Doors",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.33
+  },
+  {
+    "productCode": "WD0004",
+    "taskNo": "3100",
+    "name": "ES Garage Doors",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.5
+  },
+  {
+    "productCode": "WD0001",
+    "taskNo": "3100",
+    "name": "Brombal Steel Windows & Doors",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.33
+  },
+  {
+    "productCode": "WD0007",
+    "taskNo": "3100",
+    "name": "\u0113Wood Luxury Wood Windows and Doors",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.33
+  },
+  {
+    "productCode": "WD0005",
+    "taskNo": "3100",
+    "name": "Kolbe Windows and Doors",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.33
+  },
+  {
+    "productCode": "WD0006",
+    "taskNo": "3100",
+    "name": "Oikos Doors",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.33
+  },
+  {
+    "productCode": "WD0002",
+    "taskNo": "3200",
+    "name": "ES Windows & Doors",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.33
+  },
+  {
+    "productCode": "WD0003",
+    "taskNo": "3200",
+    "name": "Viewscapes Luxury Aluminum Windows and Doors",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.33
+  },
+  {
+    "productCode": "WD0001",
+    "taskNo": "3200",
+    "name": "Brombal Steel Windows & Doors",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.33
+  },
+  {
+    "productCode": "WD0007",
+    "taskNo": "3200",
+    "name": "\u0113Wood Luxury Wood Windows and Doors",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.33
+  },
+  {
+    "productCode": "WD0005",
+    "taskNo": "3200",
+    "name": "Kolbe Windows and Doors",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.33
+  },
+  {
+    "productCode": "WD0006",
+    "taskNo": "3200",
+    "name": "Oikos Doors",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.33
+  },
+  {
+    "productCode": "WD0002",
+    "taskNo": "3300",
+    "name": "ES Windows & Doors",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.34
+  },
+  {
+    "productCode": "WD0003",
+    "taskNo": "3300",
+    "name": "Viewscapes Luxury Aluminum Windows and Doors",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.34
+  },
+  {
+    "productCode": "WD0004",
+    "taskNo": "3300",
+    "name": "ES Garage Doors",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.25
+  },
+  {
+    "productCode": "WD0001",
+    "taskNo": "3300",
+    "name": "Brombal Steel Windows & Doors",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.34
+  },
+  {
+    "productCode": "WD0007",
+    "taskNo": "3300",
+    "name": "\u0113Wood Luxury Wood Windows and Doors",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.34
+  },
+  {
+    "productCode": "WD0005",
+    "taskNo": "3300",
+    "name": "Kolbe Windows and Doors",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.34
+  },
+  {
+    "productCode": "WD0006",
+    "taskNo": "3300",
+    "name": "Oikos Doors",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.34
+  },
+  {
+    "productCode": "SUB0001",
+    "taskNo": "3400",
+    "name": "Subcontractor Bucking",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 1
+  },
+  {
+    "productCode": "SUB0002",
+    "taskNo": "3400",
+    "name": "Subcontractor Waterproofing",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 1
+  },
+  {
+    "productCode": "SUB0003",
+    "taskNo": "3400",
+    "name": "Subcontractor Installation",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.33
+  },
+  {
+    "productCode": "SUB0003",
+    "taskNo": "3500",
+    "name": "Subcontractor Installation",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.33
+  },
+  {
+    "productCode": "SUB0003",
+    "taskNo": "3600",
+    "name": "Subcontractor Installation",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.34
+  },
+  {
+    "productCode": "SUB0004",
+    "taskNo": "3600",
+    "name": "Subcontractor Covers & Hardware",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.34
+  },
+  {
+    "productCode": "WD0004",
+    "taskNo": "3700",
+    "name": "ES Garage Doors",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.25
+  },
+  {
+    "productCode": "SUB0005",
+    "taskNo": "3700",
+    "name": "Subcontractor Punch Out",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 1
+  },
+  {
+    "productCode": "SUB0004",
+    "taskNo": "3400",
+    "name": "Subcontractor Covers & Hardware",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.33
+  },
+  {
+    "productCode": "SUB0004",
+    "taskNo": "3500",
+    "name": "Subcontractor Covers & Hardware",
+    "type": "G/L Account",
+    "lineType": "Billable",
+    "percentage": 0.33
+  }
+]

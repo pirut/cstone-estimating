@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { downloadBuffer } from "@/lib/server/download";
 import {
+  buildPlanningLinesFromEstimate,
   buildPlanningLinesFromWorkbookBuffer,
   planningLinesRowsToTsv,
   planningLinesToCsv,
@@ -16,20 +17,27 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const workbookUrl = String(body.workbookUrl || "").trim();
+    const estimateData =
+      body.estimate && typeof body.estimate === "object" ? body.estimate : null;
     const format = String(body.format || "csv").trim().toLowerCase();
 
-    if (!workbookUrl) {
+    if (!workbookUrl && !estimateData) {
       return NextResponse.json(
-        { error: "workbookUrl is required." },
+        { error: "Either workbookUrl or estimate data is required." },
         { status: 400 }
       );
     }
 
-    const workbookBuffer = await downloadBuffer(workbookUrl, "Workbook", {
-      baseUrl: request.nextUrl.origin,
-      timeoutMs: DOWNLOAD_TIMEOUT_MS,
-    });
-    const lines = buildPlanningLinesFromWorkbookBuffer(workbookBuffer);
+    const omitUserId = format === "tsv" || format === "tsv_rows";
+    const lines = workbookUrl
+      ? buildPlanningLinesFromWorkbookBuffer(
+          await downloadBuffer(workbookUrl, "Workbook", {
+            baseUrl: request.nextUrl.origin,
+            timeoutMs: DOWNLOAD_TIMEOUT_MS,
+          }),
+          { omitUserId }
+        )
+      : buildPlanningLinesFromEstimate(estimateData, { omitUserId });
 
     if (format === "json") {
       return NextResponse.json({ lines });

@@ -352,7 +352,11 @@ export default function HomePage() {
     templateConfig?.templatePdf?.url &&
       (estimateMode === "workbook" ? uploads.workbook : hasEstimateValues)
   );
-  const canDownloadPlanningLines = Boolean(uploads.workbook?.url);
+  const canDownloadPlanningLines = Boolean(
+    uploads.workbook?.url ||
+      estimatePayload ||
+      Object.keys(estimateValues).length
+  );
   const progressSteps = useMemo(
     () => [
       {
@@ -762,23 +766,43 @@ export default function HomePage() {
     }
   };
 
+  const buildPlanningLinesRequestBody = (format: string) => {
+    if (uploads.workbook?.url) {
+      return {
+        workbookUrl: uploads.workbook.url,
+        format,
+      };
+    }
+
+    const estimateSource =
+      estimatePayload ??
+      (Object.keys(estimateValues).length
+        ? {
+            name: estimateName.trim(),
+            values: estimateValues,
+          }
+        : null);
+
+    if (!estimateSource) {
+      throw new Error("Upload a workbook or complete a manual estimate first.");
+    }
+
+    return {
+      estimate: estimateSource,
+      format,
+    };
+  };
+
   const handleDownloadPlanningLines = async () => {
     setError(null);
     setPlanningLinesStatus(null);
-    if (!uploads.workbook?.url) {
-      setError("Upload a workbook before exporting planning lines.");
-      return;
-    }
 
     setIsPlanningLinesLoading(true);
     try {
       const response = await fetch("/api/planning-lines", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workbookUrl: uploads.workbook.url,
-          format: "csv",
-        }),
+        body: JSON.stringify(buildPlanningLinesRequestBody("csv")),
       });
 
       if (!response.ok) {
@@ -804,17 +828,10 @@ export default function HomePage() {
   };
 
   const fetchPlanningLinesPasteRows = async () => {
-    if (!uploads.workbook?.url) {
-      throw new Error("Upload a workbook before building planning lines.");
-    }
-
     const response = await fetch("/api/planning-lines", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        workbookUrl: uploads.workbook.url,
-        format: "tsv_rows",
-      }),
+      body: JSON.stringify(buildPlanningLinesRequestBody("tsv_rows")),
     });
 
     if (!response.ok) {
@@ -857,10 +874,6 @@ export default function HomePage() {
   const handleCopyPlanningLines = async () => {
     setError(null);
     setPlanningLinesStatus(null);
-    if (!uploads.workbook?.url) {
-      setError("Upload a workbook before copying planning lines.");
-      return;
-    }
 
     setIsPlanningLinesCopying(true);
     try {
@@ -879,10 +892,6 @@ export default function HomePage() {
   const handlePreparePlanningLinesOutput = async () => {
     setError(null);
     setPlanningLinesStatus(null);
-    if (!uploads.workbook?.url) {
-      setError("Upload a workbook before building paste output.");
-      return;
-    }
 
     setIsPlanningLinesLoading(true);
     try {
