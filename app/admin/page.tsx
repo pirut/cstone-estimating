@@ -1038,7 +1038,7 @@ export default function AdminPage() {
               <Button asChild variant="outline">
                 <Link href="/team-admin">
                   <ArrowLeft className="h-4 w-4" />
-                  Back to admin page
+                  Team admin & estimates
                 </Link>
               </Button>
             ) : null}
@@ -1085,7 +1085,7 @@ export default function AdminPage() {
               <Button asChild variant="outline">
                 <Link href="/team-admin">
                   <ArrowLeft className="h-4 w-4" />
-                  Back to admin page
+                  Team admin & estimates
                 </Link>
               </Button>
             ) : null}

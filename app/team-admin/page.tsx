@@ -50,6 +50,17 @@ type UnitTypeDraft = {
   isActive: boolean;
 };
 
+type EstimateAdminDraft = {
+  id: string;
+  title: string;
+  status: string;
+  version: number | null;
+  createdAt: number | null;
+  updatedAt: number | null;
+  lastGeneratedAt: number | null;
+  ownerLabel: string;
+};
+
 export default function TeamAdminPage() {
   const { isLoaded: authLoaded, isSignedIn } = useOptionalAuth();
   const { user } = useOptionalUser();
@@ -105,6 +116,7 @@ export default function TeamAdminPage() {
             order: { createdAt: "desc" as const },
           },
           memberships: { user: {} },
+          estimates: { owner: {} },
           vendors: {},
           unitTypes: {},
         },
@@ -232,6 +244,10 @@ export default function TeamAdminPage() {
   const [unitTypeSaving, setUnitTypeSaving] = useState(false);
   const [unitTypeError, setUnitTypeError] = useState<string | null>(null);
   const [unitTypeStatus, setUnitTypeStatus] = useState<string | null>(null);
+  const [estimateDrafts, setEstimateDrafts] = useState<EstimateAdminDraft[]>([]);
+  const [estimateSavingId, setEstimateSavingId] = useState<string | null>(null);
+  const [estimateError, setEstimateError] = useState<string | null>(null);
+  const [estimateStatus, setEstimateStatus] = useState<string | null>(null);
 
   useEffect(() => {
     setTeamNameDraft(selectedTeam?.name ?? "");
@@ -264,6 +280,46 @@ export default function TeamAdminPage() {
     }));
     setUnitTypeDrafts(next);
   }, [unitTypeRecords]);
+
+  const estimateRecords = useMemo(() => {
+    const list = (selectedTeam?.estimates ?? []).slice();
+    return list.sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  }, [selectedTeam?.estimates]);
+
+  const estimateSourceById = useMemo(
+    () => new Map(estimateRecords.map((estimate) => [estimate.id, estimate])),
+    [estimateRecords]
+  );
+
+  useEffect(() => {
+    const next = estimateRecords.map((estimate) => {
+      const ownerName = String(estimate.owner?.name ?? "").trim();
+      const ownerEmail = String(estimate.owner?.email ?? "").trim();
+      return {
+        id: estimate.id,
+        title: String(estimate.title ?? ""),
+        status: String(estimate.status ?? "active"),
+        version: typeof estimate.version === "number" ? estimate.version : null,
+        createdAt:
+          typeof estimate.createdAt === "number" ? estimate.createdAt : null,
+        updatedAt:
+          typeof estimate.updatedAt === "number" ? estimate.updatedAt : null,
+        lastGeneratedAt:
+          typeof estimate.lastGeneratedAt === "number"
+            ? estimate.lastGeneratedAt
+            : null,
+        ownerLabel:
+          ownerName ||
+          ownerEmail ||
+          String(estimate.owner?.id ?? "").trim() ||
+          "Unknown owner",
+      };
+    });
+    setEstimateDrafts(next);
+    setEstimateError(null);
+    setEstimateStatus(null);
+    setEstimateSavingId(null);
+  }, [estimateRecords, selectedTeam?.id]);
 
   const handleCreateSubTeam = async () => {
     setTeamError(null);
@@ -780,6 +836,90 @@ export default function TeamAdminPage() {
     }
   };
 
+  const handleEstimateDraftChange = (
+    estimateId: string,
+    patch: Partial<EstimateAdminDraft>
+  ) => {
+    setEstimateDrafts((prev) =>
+      prev.map((estimate) =>
+        estimate.id === estimateId ? { ...estimate, ...patch } : estimate
+      )
+    );
+  };
+
+  const handleSaveEstimate = async (estimate: EstimateAdminDraft) => {
+    setEstimateError(null);
+    setEstimateStatus(null);
+    if (!hasTeamAdminAccess) {
+      setEstimateError("Only organization owners and admins can edit estimates.");
+      return;
+    }
+    if (!selectedTeam) {
+      setEstimateError("Select a team before editing estimates.");
+      return;
+    }
+    const title = estimate.title.trim();
+    if (!title) {
+      setEstimateError("Estimate title cannot be empty.");
+      return;
+    }
+
+    const now = Date.now();
+    setEstimateSavingId(estimate.id);
+    try {
+      await db.transact(
+        db.tx.estimates[estimate.id].update({
+          title,
+          updatedAt: now,
+        })
+      );
+      handleEstimateDraftChange(estimate.id, { title, updatedAt: now });
+      setEstimateStatus(`Saved "${title}".`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setEstimateError(message);
+    } finally {
+      setEstimateSavingId(null);
+    }
+  };
+
+  const handleDeleteEstimate = async (estimate: EstimateAdminDraft) => {
+    setEstimateError(null);
+    setEstimateStatus(null);
+    if (!hasTeamAdminAccess) {
+      setEstimateError("Only organization owners and admins can delete estimates.");
+      return;
+    }
+    if (!selectedTeam) {
+      setEstimateError("Select a team before deleting estimates.");
+      return;
+    }
+    if (!window.confirm(`Delete "${estimate.title || "Untitled Estimate"}"?`)) {
+      return;
+    }
+    setEstimateSavingId(estimate.id);
+    try {
+      await db.transact(db.tx.estimates[estimate.id].delete());
+      setEstimateDrafts((prev) => prev.filter((entry) => entry.id !== estimate.id));
+      setEstimateStatus(
+        `Deleted "${estimate.title || "Untitled Estimate"}".`
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setEstimateError(message);
+    } finally {
+      setEstimateSavingId(null);
+    }
+  };
+
+  const formatDateTime = (timestamp: number | null) => {
+    if (typeof timestamp !== "number") return "Not available";
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: "medium",
+      timeStyle: "short",
+    }).format(new Date(timestamp));
+  };
+
   const renderAuthGate = () => {
     if (!clerkEnabled) {
       return (
@@ -1240,6 +1380,109 @@ export default function TeamAdminPage() {
                         settings.
                       </p>
                     ) : null}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card
+              id="team-estimates"
+              className="border-border/60 bg-card/80 shadow-elevated lg:col-span-2"
+            >
+              <CardHeader>
+                <CardTitle className="text-2xl font-serif">
+                  Team estimates
+                </CardTitle>
+                <CardDescription>
+                  Review, rename, and remove estimates for the selected team.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {estimateError ? (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {estimateError}
+                  </div>
+                ) : null}
+                {estimateStatus ? (
+                  <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                    {estimateStatus}
+                  </div>
+                ) : null}
+                {!selectedTeam ? (
+                  <div className="text-sm text-muted-foreground">
+                    Select a team to manage estimates.
+                  </div>
+                ) : !estimateDrafts.length ? (
+                  <div className="rounded-lg border border-border/60 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
+                    No saved team estimates yet for {selectedTeam.name}.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {estimateDrafts.map((estimate) => {
+                      const sourceEstimate = estimateSourceById.get(estimate.id);
+                      const sourceTitle = String(sourceEstimate?.title ?? "").trim();
+                      const draftTitle = estimate.title.trim();
+                      const isBusy = estimateSavingId === estimate.id;
+                      const canSaveName =
+                        Boolean(draftTitle) && draftTitle !== sourceTitle;
+                      return (
+                        <div
+                          key={estimate.id}
+                          className="rounded-lg border border-border/60 bg-background/70 px-4 py-3"
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Input
+                              className="min-w-[280px] flex-1"
+                              value={estimate.title}
+                              onChange={(event) =>
+                                handleEstimateDraftChange(estimate.id, {
+                                  title: event.target.value,
+                                })
+                              }
+                              placeholder="Estimate title"
+                              disabled={!hasTeamAdminAccess || isBusy}
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => void handleSaveEstimate(estimate)}
+                              disabled={!hasTeamAdminAccess || isBusy || !canSaveName}
+                            >
+                              {isBusy ? (
+                                "Saving..."
+                              ) : (
+                                <>
+                                  <Save className="h-4 w-4" />
+                                  Save name
+                                </>
+                              )}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => void handleDeleteEstimate(estimate)}
+                              disabled={!hasTeamAdminAccess || isBusy}
+                            >
+                              Delete
+                            </Button>
+                          </div>
+                          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                            <Badge variant="outline" className="bg-background/80">
+                              Status: {estimate.status || "active"}
+                            </Badge>
+                            <Badge variant="outline" className="bg-background/80">
+                              Version: {estimate.version ?? 1}
+                            </Badge>
+                            <span>Owner: {estimate.ownerLabel}</span>
+                            <span>Created: {formatDateTime(estimate.createdAt)}</span>
+                            <span>Updated: {formatDateTime(estimate.updatedAt)}</span>
+                            <span>
+                              Last generated: {formatDateTime(estimate.lastGeneratedAt)}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </CardContent>
