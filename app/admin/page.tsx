@@ -1036,9 +1036,9 @@ export default function AdminPage() {
             </div>
             {!isEmbedded ? (
               <Button asChild variant="outline">
-                <Link href="/">
+                <Link href="/team-admin">
                   <ArrowLeft className="h-4 w-4" />
-                  Back to generator
+                  Back to admin page
                 </Link>
               </Button>
             ) : null}
@@ -1083,9 +1083,9 @@ export default function AdminPage() {
             </div>
             {!isEmbedded ? (
               <Button asChild variant="outline">
-                <Link href="/">
+                <Link href="/team-admin">
                   <ArrowLeft className="h-4 w-4" />
-                  Back to generator
+                  Back to admin page
                 </Link>
               </Button>
             ) : null}
