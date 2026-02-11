@@ -2114,7 +2114,7 @@ export default function HomePage() {
             {hasTeamAdminAccess ? (
               <Link
                 className="hover:text-foreground"
-                href="/team-admin?tab=calibration"
+                href="/admin"
               >
                 Calibration dashboard
               </Link>

@@ -23,7 +23,6 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DEFAULT_UNIT_TYPES, DEFAULT_VENDORS } from "@/lib/catalog-defaults";
 import { db, instantAppId } from "@/lib/instant";
 import {
@@ -52,9 +51,6 @@ type UnitTypeDraft = {
 };
 
 export default function TeamAdminPage() {
-  const [dashboardTab, setDashboardTabState] = useState<
-    "calibration" | "organization"
-  >("organization");
   const { isLoaded: authLoaded, isSignedIn } = useOptionalAuth();
   const { user } = useOptionalUser();
   const { isLoading: instantLoading, user: instantUser, error: instantAuthError } =
@@ -67,12 +63,6 @@ export default function TeamAdminPage() {
   const [selectedMemberId, setSelectedMemberId] = useState<string | null>(null);
   const [memberActionError, setMemberActionError] = useState<string | null>(null);
   const [memberActionLoading, setMemberActionLoading] = useState(false);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const tab = new URLSearchParams(window.location.search).get("tab");
-    setDashboardTabState(tab === "calibration" ? "calibration" : "organization");
-  }, []);
 
   const emailAddress = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? "";
   const emailDomain = emailAddress.split("@")[1] ?? "";
@@ -469,22 +459,6 @@ export default function TeamAdminPage() {
   };
 
   const canEditCatalog = Boolean(hasTeamAdminAccess && catalogTeam);
-  const setDashboardTab = (value: string) => {
-    const nextTab = value === "calibration" ? "calibration" : "organization";
-    setDashboardTabState(nextTab);
-    if (typeof window === "undefined") return;
-    const params = new URLSearchParams(window.location.search);
-    if (nextTab === "calibration") {
-      params.set("tab", "calibration");
-    } else {
-      params.delete("tab");
-    }
-    const query = params.toString();
-    const nextUrl = query
-      ? `${window.location.pathname}?${query}`
-      : window.location.pathname;
-    window.history.replaceState(null, "", nextUrl);
-  };
 
   const handleVendorChange = (index: number, patch: Partial<VendorDraft>) => {
     setVendorDrafts((prev) =>
@@ -860,9 +834,14 @@ export default function TeamAdminPage() {
               Manage organization teams and memberships.
             </p>
           </div>
-          <Button asChild variant="outline" size="sm">
-            <Link href="/">Back to workspace</Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="accent" size="sm">
+              <Link href="/admin">Open calibration dashboard</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link href="/">Back to workspace</Link>
+            </Button>
+          </div>
         </div>
 
         {instantSetupError ? (
@@ -896,17 +875,7 @@ export default function TeamAdminPage() {
             </CardContent>
           </Card>
         ) : (
-          <Tabs
-            value={dashboardTab}
-            onValueChange={setDashboardTab}
-            className="space-y-6"
-          >
-            <TabsList className="grid w-full max-w-md grid-cols-2">
-              <TabsTrigger value="organization">Organization</TabsTrigger>
-              <TabsTrigger value="calibration">Calibration</TabsTrigger>
-            </TabsList>
-            <TabsContent value="organization" className="space-y-6">
-              <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
             <Card className="border-border/60 bg-card/80 shadow-elevated">
               <CardHeader>
                 <CardTitle className="text-2xl font-serif">
@@ -1566,26 +1535,6 @@ export default function TeamAdminPage() {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
-        <TabsContent value="calibration" className="space-y-6">
-          <Card className="border-border/60 bg-card/80 shadow-elevated">
-            <CardHeader>
-              <CardTitle className="text-2xl font-serif">
-                Calibration Dashboard
-              </CardTitle>
-              <CardDescription>
-                Open calibration in the full page workspace (not embedded in a
-                window).
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <Button asChild variant="accent">
-                <Link href="/admin">Open full calibration page</Link>
-              </Button>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
         )}
 
         <Separator className="my-10" />
