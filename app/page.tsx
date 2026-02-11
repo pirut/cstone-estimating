@@ -1899,7 +1899,7 @@ export default function HomePage() {
 
         <section
           id="step-input"
-          className="mt-12 grid gap-6 lg:grid-cols-2"
+          className="mt-12 space-y-6"
         >
           <div className="space-y-6">
             <div className="rounded-2xl border border-border/60 bg-card/80 p-4">
