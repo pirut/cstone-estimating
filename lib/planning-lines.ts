@@ -152,16 +152,26 @@ export function buildPlanningLinesFromWorkbook(
 }
 
 export function planningLinesToCsv(rows: PlanningLineRow[]) {
-  return serializeRows(rows, ",");
+  return serializeRows(rows, ",", true);
 }
 
 export function planningLinesToTsv(rows: PlanningLineRow[]) {
-  return serializeRows(rows, "\t");
+  return serializeRows(rows, "\t", true);
 }
 
-function serializeRows(rows: PlanningLineRow[], delimiter: "," | "\t") {
+export function planningLinesRowsToTsv(rows: PlanningLineRow[]) {
+  return serializeRows(rows, "\t", false);
+}
+
+function serializeRows(
+  rows: PlanningLineRow[],
+  delimiter: "," | "\t",
+  includeHeaders: boolean
+) {
   const headers = VISIBLE_HEADERS;
   const body = rows.map((row) => toVisibleColumns(row, delimiter).join(delimiter));
+  if (!includeHeaders) return body.join("\r\n");
+
   const headerRow = headers
     .map((value) => escapeDelimitedValue(value, delimiter))
     .join(delimiter);

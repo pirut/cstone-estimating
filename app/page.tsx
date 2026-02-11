@@ -96,6 +96,7 @@ export default function HomePage() {
   const [planningLinesStatus, setPlanningLinesStatus] = useState<string | null>(
     null
   );
+  const [planningLinesPasteOutput, setPlanningLinesPasteOutput] = useState("");
   const [estimateValues, setEstimateValues] = useState<
     Record<string, string | number>
   >({});
@@ -802,6 +803,28 @@ export default function HomePage() {
     }
   };
 
+  const fetchPlanningLinesPasteRows = async () => {
+    if (!uploads.workbook?.url) {
+      throw new Error("Upload a workbook before building planning lines.");
+    }
+
+    const response = await fetch("/api/planning-lines", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        workbookUrl: uploads.workbook.url,
+        format: "tsv_rows",
+      }),
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      throw new Error(data?.error || "Failed to build planning lines.");
+    }
+
+    return response.text();
+  };
+
   const copyTextToClipboard = async (text: string) => {
     if (
       typeof navigator !== "undefined" &&
@@ -841,21 +864,8 @@ export default function HomePage() {
 
     setIsPlanningLinesCopying(true);
     try {
-      const response = await fetch("/api/planning-lines", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          workbookUrl: uploads.workbook.url,
-          format: "tsv",
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json().catch(() => null);
-        throw new Error(data?.error || "Failed to build planning lines.");
-      }
-
-      const text = await response.text();
+      const text = await fetchPlanningLinesPasteRows();
+      setPlanningLinesPasteOutput(text);
       await copyTextToClipboard(text);
       setPlanningLinesStatus("Planning lines copied to clipboard.");
     } catch (err) {
@@ -863,6 +873,29 @@ export default function HomePage() {
       setError(message);
     } finally {
       setIsPlanningLinesCopying(false);
+    }
+  };
+
+  const handlePreparePlanningLinesOutput = async () => {
+    setError(null);
+    setPlanningLinesStatus(null);
+    if (!uploads.workbook?.url) {
+      setError("Upload a workbook before building paste output.");
+      return;
+    }
+
+    setIsPlanningLinesLoading(true);
+    try {
+      const text = await fetchPlanningLinesPasteRows();
+      setPlanningLinesPasteOutput(text);
+      setPlanningLinesStatus(
+        "Paste output is ready. Copy from the box below or use copy."
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setError(message);
+    } finally {
+      setIsPlanningLinesLoading(false);
     }
   };
 
@@ -2248,6 +2281,25 @@ export default function HomePage() {
                     : "Download _SYNC planning lines (CSV)"}
                 </Button>
                 <Button
+                  variant="secondary"
+                  onClick={() => void handlePreparePlanningLinesOutput()}
+                  disabled={
+                    !canDownloadPlanningLines ||
+                    isPlanningLinesLoading ||
+                    isPlanningLinesCopying ||
+                    isGenerating
+                  }
+                >
+                  {isPlanningLinesLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <FileText className="h-4 w-4" />
+                  )}
+                  {isPlanningLinesLoading
+                    ? "Building paste output..."
+                    : "Prepare _SYNC paste output"}
+                </Button>
+                <Button
                   variant="outline"
                   onClick={() => void handleCopyPlanningLines()}
                   disabled={
@@ -2264,7 +2316,7 @@ export default function HomePage() {
                   )}
                   {isPlanningLinesCopying
                     ? "Copying planning lines..."
-                    : "Copy _SYNC lines for paste"}
+                    : "Copy _SYNC rows now"}
                 </Button>
                 <Button
                   variant="outline"
@@ -2283,6 +2335,7 @@ export default function HomePage() {
                     setEstimateMode("estimate");
                     setShowWorkbookImport(false);
                     setPlanningLinesStatus(null);
+                    setPlanningLinesPasteOutput("");
                   }}
                   disabled={
                     isGenerating || isPlanningLinesLoading || isPlanningLinesCopying
@@ -2291,6 +2344,32 @@ export default function HomePage() {
                   Clear inputs
                 </Button>
               </div>
+              {planningLinesPasteOutput ? (
+                <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted-foreground">
+                      _SYNC Paste Output
+                    </p>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => void handleCopyPlanningLines()}
+                      disabled={isPlanningLinesCopying || isPlanningLinesLoading}
+                    >
+                      {isPlanningLinesCopying ? "Copying..." : "Copy rows"}
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Rows-only, tab-delimited output for pasting into
+                    `Project Planning_SYNC` row 2.
+                  </p>
+                  <textarea
+                    readOnly
+                    value={planningLinesPasteOutput}
+                    className="h-52 w-full resize-y rounded-md border border-border/70 bg-background px-3 py-2 font-mono text-xs text-foreground"
+                  />
+                </div>
+              ) : null}
               {planningLinesStatus ? (
                 <p className="text-xs text-muted-foreground">{planningLinesStatus}</p>
               ) : null}

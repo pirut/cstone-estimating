@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { downloadBuffer } from "@/lib/server/download";
 import {
   buildPlanningLinesFromWorkbookBuffer,
+  planningLinesRowsToTsv,
   planningLinesToCsv,
   planningLinesToTsv,
 } from "@/lib/planning-lines";
@@ -42,6 +43,19 @@ export async function POST(request: NextRequest) {
           "Content-Type": "text/tab-separated-values; charset=utf-8",
           "Content-Disposition":
             "attachment; filename=\"Project Planning_SYNC.tsv\"",
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+
+    if (format === "tsv_rows") {
+      const tsvRows = planningLinesRowsToTsv(lines);
+      return new NextResponse(tsvRows, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/tab-separated-values; charset=utf-8",
+          "Content-Disposition":
+            "attachment; filename=\"Project Planning_SYNC.rows.tsv\"",
           "Cache-Control": "no-store",
         },
       });
