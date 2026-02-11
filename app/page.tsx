@@ -71,6 +71,74 @@ import {
 } from "@/lib/clerk";
 import { id } from "@instantdb/react";
 
+type EstimateSnapshot = {
+  title: string;
+  payload: Record<string, any> | null;
+  totals: Record<string, any> | null;
+  templateName?: string;
+  templateUrl?: string;
+};
+
+function normalizeForComparison(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((entry) => normalizeForComparison(entry));
+  }
+  if (value && typeof value === "object") {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, entryValue]) => entryValue !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b));
+    const normalized: Record<string, unknown> = {};
+    for (const [key, entryValue] of entries) {
+      normalized[key] = normalizeForComparison(entryValue);
+    }
+    return normalized;
+  }
+  return value;
+}
+
+function toComparableEstimateSnapshot(
+  snapshot: EstimateSnapshot
+): EstimateSnapshot {
+  return {
+    title: snapshot.title.trim() || "Untitled Estimate",
+    payload:
+      snapshot.payload && typeof snapshot.payload === "object"
+        ? (normalizeForComparison(snapshot.payload) as Record<string, any>)
+        : null,
+    totals:
+      snapshot.totals && typeof snapshot.totals === "object"
+        ? (normalizeForComparison(snapshot.totals) as Record<string, any>)
+        : null,
+    templateName: snapshot.templateName?.trim() || undefined,
+    templateUrl: snapshot.templateUrl?.trim() || undefined,
+  };
+}
+
+function hasEstimateSnapshotChanges(existingEstimate: any, snapshot: EstimateSnapshot) {
+  if (!existingEstimate) return true;
+  const currentSnapshot = toComparableEstimateSnapshot({
+    title: String(existingEstimate.title ?? ""),
+    payload:
+      existingEstimate.payload && typeof existingEstimate.payload === "object"
+        ? existingEstimate.payload
+        : null,
+    totals:
+      existingEstimate.totals && typeof existingEstimate.totals === "object"
+        ? existingEstimate.totals
+        : null,
+    templateName:
+      typeof existingEstimate.templateName === "string"
+        ? existingEstimate.templateName
+        : undefined,
+    templateUrl:
+      typeof existingEstimate.templateUrl === "string"
+        ? existingEstimate.templateUrl
+        : undefined,
+  });
+  const nextSnapshot = toComparableEstimateSnapshot(snapshot);
+  return JSON.stringify(currentSnapshot) !== JSON.stringify(nextSnapshot);
+}
+
 export default function HomePage() {
   const { isLoaded: authLoaded, isSignedIn } = useOptionalAuth();
   const { user } = useOptionalUser();
@@ -640,7 +708,7 @@ export default function HomePage() {
       100
   );
 
-  const buildCurrentEstimateSnapshot = useCallback(() => {
+  const buildCurrentEstimateSnapshot = useCallback((): EstimateSnapshot => {
     const payload =
       estimatePayload ??
       (Object.keys(estimateValues).length ? { values: estimateValues } : null);
@@ -675,6 +743,24 @@ export default function HomePage() {
     const now = Date.now();
     if (editingEstimateId) {
       const existingEstimate = findTeamEstimateById(editingEstimateId);
+      const shouldCreateNewVersion = hasEstimateSnapshotChanges(
+        existingEstimate,
+        snapshot
+      );
+      if (!shouldCreateNewVersion) {
+        await db.transact(
+          db.tx.estimates[editingEstimateId]
+            .update({
+              status: "generated",
+              updatedAt: now,
+              lastGeneratedAt: now,
+              templateName: snapshot.templateName,
+              templateUrl: snapshot.templateUrl,
+            })
+            .link({ team: activeTeam.id, owner: instantUser.id })
+        );
+        return;
+      }
       const history = existingEstimate
         ? getPersistedEstimateHistory(existingEstimate)
         : [];
