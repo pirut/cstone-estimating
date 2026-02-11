@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import estimateFields from "@/config/estimate-fields.json";
 import { uploadFiles } from "@/components/uploadthing";
 import { Badge } from "@/components/ui/badge";
@@ -96,6 +96,13 @@ type EstimateFilePayload = {
   updatedAt: string;
 };
 
+type AddressSuggestion = {
+  id: string;
+  projectName: string;
+  cityStateZip: string;
+  fullAddress: string;
+};
+
 export function EstimateBuilderCard({
   values: _values,
   onValuesChange,
@@ -122,6 +129,13 @@ export function EstimateBuilderCard({
   const [legacyValues, setLegacyValues] = useState<
     Record<string, string | number> | null
   >(null);
+  const [addressSuggestions, setAddressSuggestions] = useState<
+    AddressSuggestion[]
+  >([]);
+  const [isAddressLookupLoading, setIsAddressLookupLoading] = useState(false);
+  const [addressLookupError, setAddressLookupError] = useState<string | null>(null);
+  const [addressLookupOpen, setAddressLookupOpen] = useState(false);
+  const addressLookupRequestRef = useRef(0);
 
   const groupList = useMemo(() => estimateFields.groups ?? [], []);
 
@@ -150,6 +164,7 @@ export function EstimateBuilderCard({
     () => computeEstimate(draft, panelTypeOptions),
     [draft, panelTypeOptions]
   );
+  const projectNameValue = String(draft.info.project_name ?? "").trim();
 
   useEffect(() => {
     if (legacyValues) {
@@ -202,6 +217,58 @@ export function EstimateBuilderCard({
     setDraft(nextDraft);
   }, [loadPayload]);
 
+  useEffect(() => {
+    if (legacyValues || !addressLookupOpen) {
+      setAddressSuggestions([]);
+      setIsAddressLookupLoading(false);
+      setAddressLookupError(null);
+      return;
+    }
+
+    if (projectNameValue.length < 4) {
+      setAddressSuggestions([]);
+      setIsAddressLookupLoading(false);
+      setAddressLookupError(null);
+      return;
+    }
+
+    const requestId = ++addressLookupRequestRef.current;
+    const lookupTimeout = window.setTimeout(async () => {
+      setIsAddressLookupLoading(true);
+      setAddressLookupError(null);
+
+      try {
+        const response = await fetch(
+          `/api/address-autofill?q=${encodeURIComponent(projectNameValue)}`,
+          { cache: "no-store" }
+        );
+        if (!response.ok) {
+          const data = await response.json().catch(() => null);
+          throw new Error(data?.error || "Address lookup failed.");
+        }
+        const data = (await response.json()) as {
+          suggestions?: AddressSuggestion[];
+        };
+        if (addressLookupRequestRef.current !== requestId) return;
+        setAddressSuggestions(
+          Array.isArray(data.suggestions) ? data.suggestions : []
+        );
+      } catch (err) {
+        if (addressLookupRequestRef.current !== requestId) return;
+        const message =
+          err instanceof Error ? err.message : "Address lookup failed.";
+        setAddressSuggestions([]);
+        setAddressLookupError(message);
+      } finally {
+        if (addressLookupRequestRef.current === requestId) {
+          setIsAddressLookupLoading(false);
+        }
+      }
+    }, 250);
+
+    return () => window.clearTimeout(lookupTimeout);
+  }, [legacyValues, projectNameValue, addressLookupOpen]);
+
   const loadLibrary = async () => {
     setLibrary((prev) => ({ ...prev, loading: true, error: null }));
     try {
@@ -244,6 +311,23 @@ export function EstimateBuilderCard({
         [field]: value,
       },
     });
+  };
+
+  const handleSelectAddressSuggestion = (suggestion: AddressSuggestion) => {
+    handleDraftChange({
+      ...draft,
+      info: {
+        ...draft.info,
+        project_name: suggestion.projectName,
+        city_state_zip: suggestion.cityStateZip,
+      },
+    });
+    if (!name.trim()) {
+      onNameChange(suggestion.projectName);
+    }
+    setAddressSuggestions([]);
+    setAddressLookupError(null);
+    setAddressLookupOpen(false);
   };
 
   const handleProductChange = (index: number, patch: Partial<ProductItem>) => {
@@ -399,6 +483,10 @@ export function EstimateBuilderCard({
   const handleClear = () => {
     setDraft(DEFAULT_DRAFT);
     setLegacyValues(null);
+    setAddressSuggestions([]);
+    setIsAddressLookupLoading(false);
+    setAddressLookupError(null);
+    setAddressLookupOpen(false);
     onValuesChange(EMPTY_VALUES);
     onNameChange("");
     onSelectEstimate?.(null);
@@ -604,6 +692,8 @@ export function EstimateBuilderCard({
                 const isRequired = REQUIRED_INFO_FIELDS.includes(
                   field.key as keyof EstimateDraft["info"]
                 );
+                const isProjectNameField = field.key === "project_name";
+                const isCityStateZipField = field.key === "city_state_zip";
 
                 return (
                   <div key={field.key} className="space-y-2">
@@ -623,16 +713,90 @@ export function EstimateBuilderCard({
                         disabled={Boolean(legacyValues)}
                       />
                     ) : (
-                      <Input
-                        className={inputClassName}
-                        type="text"
-                        placeholder={field.placeholder ?? ""}
-                        value={fieldValue}
-                        onChange={(event) =>
-                          handleInfoChange(field.key, event.target.value)
-                        }
-                        disabled={Boolean(legacyValues)}
-                      />
+                      <div className="space-y-2">
+                        <Input
+                          className={inputClassName}
+                          type="text"
+                          placeholder={field.placeholder ?? ""}
+                          value={fieldValue}
+                          autoComplete={
+                            isProjectNameField
+                              ? "organization"
+                              : isCityStateZipField
+                                ? "postal-code"
+                                : undefined
+                          }
+                          onFocus={() => {
+                            if (isProjectNameField) {
+                              setAddressLookupOpen(true);
+                            }
+                          }}
+                          onBlur={() => {
+                            if (isProjectNameField) {
+                              window.setTimeout(
+                                () => setAddressLookupOpen(false),
+                                120
+                              );
+                            }
+                          }}
+                          onChange={(event) => {
+                            handleInfoChange(field.key, event.target.value);
+                            if (isProjectNameField) {
+                              setAddressLookupOpen(true);
+                              setAddressLookupError(null);
+                            }
+                          }}
+                          disabled={Boolean(legacyValues)}
+                        />
+                        {isProjectNameField ? (
+                          <div className="space-y-2">
+                            <p className="text-xs text-muted-foreground">
+                              Type a project address to autofill the city/state/zip.
+                            </p>
+                            {isAddressLookupLoading ? (
+                              <p className="text-xs text-muted-foreground">
+                                Looking up addresses...
+                              </p>
+                            ) : null}
+                            {addressLookupError ? (
+                              <p className="text-xs text-destructive">
+                                {addressLookupError}
+                              </p>
+                            ) : null}
+                            {addressLookupOpen && addressSuggestions.length ? (
+                              <div className="max-h-48 overflow-auto rounded-lg border border-border/60 bg-card/90">
+                                {addressSuggestions.map((suggestion) => (
+                                  <button
+                                    key={suggestion.id}
+                                    type="button"
+                                    className="block w-full border-b border-border/60 px-3 py-2 text-left last:border-b-0 hover:bg-muted/40"
+                                    onMouseDown={(event) => event.preventDefault()}
+                                    onClick={() =>
+                                      handleSelectAddressSuggestion(suggestion)
+                                    }
+                                  >
+                                    <p className="text-sm font-medium text-foreground">
+                                      {suggestion.projectName}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {suggestion.cityStateZip || suggestion.fullAddress}
+                                    </p>
+                                  </button>
+                                ))}
+                              </div>
+                            ) : null}
+                            {addressLookupOpen &&
+                            !isAddressLookupLoading &&
+                            !addressLookupError &&
+                            projectNameValue.length >= 4 &&
+                            !addressSuggestions.length ? (
+                              <p className="text-xs text-muted-foreground">
+                                No address matches found.
+                              </p>
+                            ) : null}
+                          </div>
+                        ) : null}
+                      </div>
                     )}
                   </div>
                 );

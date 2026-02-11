@@ -6,7 +6,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ComponentType,
 } from "react";
 import Link from "next/link";
 import { BrandMark } from "@/components/brand-mark";
@@ -52,15 +51,12 @@ import { cn } from "@/lib/utils";
 import { APP_VERSION } from "@/lib/version";
 import {
   ArrowDownToLine,
-  ArrowRight,
   CheckCircle2,
   CircleDashed,
-  FileDown,
   FileText,
   History,
   LayoutTemplate,
   Loader2,
-  Sparkles,
 } from "lucide-react";
 import {
   SignInButton,
@@ -153,6 +149,7 @@ export default function HomePage() {
   const [templateConfigError, setTemplateConfigError] = useState<string | null>(null);
   const [templateConfigLoading, setTemplateConfigLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showProgress, setShowProgress] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [estimateMode, setEstimateMode] = useState<"workbook" | "estimate">(
@@ -191,6 +188,7 @@ export default function HomePage() {
     string,
     any
   > | null>(null);
+  const progressResetTimeoutRef = useRef<number | null>(null);
   const [library, setLibrary] = useState<LibraryState>({
     workbook: { items: [], loading: false, error: null },
     template: { items: [], loading: false, error: null },
@@ -622,14 +620,18 @@ export default function HomePage() {
   }, [teamError, teamReady, teamSetupPending]);
 
   useEffect(() => {
-    if (!isGenerating) {
-      setProgress(0);
-      setProgressLabel(null);
-      return;
-    }
+    return () => {
+      if (progressResetTimeoutRef.current !== null) {
+        window.clearTimeout(progressResetTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isGenerating) return;
 
     let stepIndex = 0;
-    setProgress(progressSteps[0].value);
+    setProgress((prev) => Math.max(prev, progressSteps[0].value));
     setProgressLabel(progressSteps[0].label);
 
     const interval = window.setInterval(() => {
@@ -638,7 +640,7 @@ export default function HomePage() {
         window.clearInterval(interval);
         return;
       }
-      setProgress(progressSteps[stepIndex].value);
+      setProgress((prev) => Math.max(prev, progressSteps[stepIndex].value));
       setProgressLabel(progressSteps[stepIndex].label);
     }, 900);
 
@@ -649,7 +651,7 @@ export default function HomePage() {
     if (isGenerating) {
       return {
         label: "Generating PDF",
-        helper: "Stamping pages and merging overlays.",
+        helper: "Building and stamping the proposal PDF.",
         tone: "loading" as const,
       };
     }
@@ -658,7 +660,7 @@ export default function HomePage() {
       const inputLabel = estimateMode === "estimate" ? "Estimate" : "Workbook";
       return {
         label: "Ready to generate",
-        helper: `${inputLabel} and template are ready.`,
+        helper: `${inputLabel} and template are selected.`,
         tone: "ready" as const,
       };
     }
@@ -667,8 +669,8 @@ export default function HomePage() {
       label: estimateMode === "estimate" ? "Awaiting estimate" : "Awaiting uploads",
       helper:
         estimateMode === "estimate"
-          ? "Enter estimate values and select a template to begin."
-          : "Upload the workbook and select a template to begin.",
+          ? "Enter estimate details and select a template."
+          : "Upload a workbook and select a template.",
       tone: "idle" as const,
     };
   }, [isGenerating, canGenerate, estimateMode]);
@@ -707,6 +709,7 @@ export default function HomePage() {
       workflowMilestones.length) *
       100
   );
+  const progressPercent = Math.max(0, Math.min(Math.round(progress * 100), 100));
 
   const buildCurrentEstimateSnapshot = useCallback((): EstimateSnapshot => {
     const payload =
@@ -936,7 +939,13 @@ export default function HomePage() {
 
     const mappingOverride = templateConfig?.mapping;
     const coordsOverride = templateConfig?.coords;
+    let generationSucceeded = false;
 
+    if (progressResetTimeoutRef.current !== null) {
+      window.clearTimeout(progressResetTimeoutRef.current);
+      progressResetTimeoutRef.current = null;
+    }
+    setShowProgress(true);
     setIsGenerating(true);
     setProgress(0.1);
     setProgressLabel("Starting generation");
@@ -985,6 +994,7 @@ export default function HomePage() {
       window.URL.revokeObjectURL(url);
       setProgress(1);
       setProgressLabel("Download ready");
+      generationSucceeded = true;
 
       if (estimateMode === "estimate") {
         try {
@@ -1000,8 +1010,15 @@ export default function HomePage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setError(message);
+      setProgressLabel("Generation failed");
     } finally {
       setIsGenerating(false);
+      progressResetTimeoutRef.current = window.setTimeout(() => {
+        setShowProgress(false);
+        setProgress(0);
+        setProgressLabel(null);
+        progressResetTimeoutRef.current = null;
+      }, generationSucceeded ? 1200 : 300);
     }
   };
 
@@ -1610,47 +1627,22 @@ export default function HomePage() {
                 </Badge>
                 <div className="space-y-3">
                   <h1 className="text-4xl font-serif tracking-tight md:text-5xl">
-                    New Construction Proposal Studio
+                    Cornerstone Proposal Generator
                   </h1>
                   <p className="max-w-xl text-base text-white/70">
-                    Convert Excel-driven bids into finished Cornerstone proposals
-                    with calibrated PDF stamping and branded outputs in minutes.
+                    Build an estimate, select a template, and download the proposal PDF.
                   </p>
                 </div>
               </div>
               <div className="flex flex-wrap gap-3">
                 <Button asChild variant="accent" size="sm">
-                  <a href="#step-input">
-                    Start workflow
-                    <ArrowRight className="h-4 w-4" />
-                  </a>
+                  <a href="#step-input">Start</a>
                 </Button>
-                <Button
-                  asChild
-                  variant="outline"
-                  size="sm"
-                  className="border-white/20 bg-white/5 text-white hover:bg-white/10"
-                >
-                  <a href="#step-generate">Jump to generate</a>
-                </Button>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-3">
-                <Metric
-                  icon={FileText}
-                  label="Inputs"
-                  value="Workbook or Estimate"
-                />
-                <Metric icon={FileDown} label="Output" value="6-page PDF" />
-                <Metric
-                  icon={Sparkles}
-                  label="Automation"
-                  value="Precise stamping"
-                />
               </div>
             </div>
             <Card className="border-white/10 bg-white/10 text-white shadow-none backdrop-blur-sm">
               <CardHeader>
-                <CardTitle className="text-xl text-white">Readiness</CardTitle>
+                <CardTitle className="text-xl text-white">Checklist</CardTitle>
                 <CardDescription className="text-white/60">
                   {status.helper}
                 </CardDescription>
@@ -2222,15 +2214,16 @@ export default function HomePage() {
                   </div>
                 ))}
               </div>
-              {isGenerating ? (
+              {showProgress ? (
                 <div className="space-y-2 rounded-lg border border-border/60 bg-muted/40 px-4 py-3">
-                  <div className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
-                    {progressLabel ?? "Working..."}
+                  <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+                    <span>{progressLabel ?? "Working..."}</span>
+                    <span>{progressPercent}%</span>
                   </div>
                   <div className="h-2 w-full overflow-hidden rounded-full bg-border/60">
                     <div
                       className="h-full rounded-full bg-accent transition-all duration-500"
-                      style={{ width: `${Math.min(progress * 100, 100)}%` }}
+                      style={{ width: `${progressPercent}%` }}
                     />
                   </div>
                 </div>
@@ -2331,29 +2324,5 @@ export default function HomePage() {
         </footer>
       </div>
     </main>
-  );
-}
-
-function Metric({
-  icon: Icon,
-  label,
-  value,
-}: {
-  icon: ComponentType<{ className?: string }>;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div className="flex items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
-      <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/20">
-        <Icon className="h-5 w-5 text-white" />
-      </div>
-      <div>
-        <p className="text-[11px] uppercase tracking-[0.3em] text-white/50">
-          {label}
-        </p>
-        <p className="text-sm font-semibold text-white">{value}</p>
-      </div>
-    </div>
   );
 }
