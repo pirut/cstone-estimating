@@ -66,22 +66,35 @@ export async function GET(request: NextRequest) {
 async function hydrateTemplateNames(items: LibraryItem[]) {
   const next = await Promise.all(
     items.map(async (item) => {
-      const templateName = await readTemplateName(item.url);
-      if (!templateName) return item;
-      return { ...item, name: templateName };
+      const metadata = await readTemplateMetadata(item.url);
+      if (!metadata?.name) return item;
+      const versionLabel =
+        typeof metadata.templateVersion === "number"
+          ? ` (v${metadata.templateVersion})`
+          : "";
+      return { ...item, name: `${metadata.name}${versionLabel}` };
     })
   );
   return next;
 }
 
-async function readTemplateName(url: string) {
+async function readTemplateMetadata(url: string) {
   if (!url) return null;
   try {
     const response = await fetch(url, { cache: "no-store" });
     if (!response.ok) return null;
-    const data = (await response.json()) as { name?: unknown };
+    const data = (await response.json()) as {
+      name?: unknown;
+      templateVersion?: unknown;
+    };
     const value = typeof data?.name === "string" ? data.name.trim() : "";
-    return value || null;
+    if (!value) return null;
+    const version = Number(data?.templateVersion);
+    return {
+      name: value,
+      templateVersion:
+        Number.isFinite(version) && version > 0 ? Math.trunc(version) : undefined,
+    };
   } catch {
     return null;
   }

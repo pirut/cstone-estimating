@@ -206,8 +206,10 @@ export default function AdminPage() {
   const [pageNumberToAdd, setPageNumberToAdd] = useState("");
   const [fieldToAdd, setFieldToAdd] = useState("");
   const [customFieldToAdd, setCustomFieldToAdd] = useState("");
+  const [fieldSearch, setFieldSearch] = useState("");
   const [coordsEditorError, setCoordsEditorError] = useState<string | null>(null);
   const [templateName, setTemplateName] = useState("");
+  const [templateVersion, setTemplateVersion] = useState(1);
   const [templateDescription, setTemplateDescription] = useState("");
   const [selectedTemplateKey, setSelectedTemplateKey] = useState("");
   const [editingTemplateKey, setEditingTemplateKey] = useState<string | null>(
@@ -270,6 +272,7 @@ export default function AdminPage() {
             order: { createdAt: "desc" as const },
           },
           memberships: { user: {} },
+          vendors: {},
         },
       }
     : { teams: { $: { where: { domain: "__none__" } } } };
@@ -307,6 +310,25 @@ export default function AdminPage() {
       orgRole === "owner"
   );
   const hasTeamAdminAccess = Boolean(isOrgOwner || orgRole === "admin");
+  const vendorRuleOptions = useMemo(() => {
+    const source = orgTeam?.vendors ?? [];
+    return source
+      .filter((vendor) => vendor?.isActive !== false && vendor?.name)
+      .map((vendor, index) => ({
+        id:
+          typeof vendor.id === "string" && vendor.id.trim()
+            ? vendor.id
+            : `${vendor.name}-${index + 1}`,
+        name: String(vendor.name),
+        sortOrder: typeof vendor.sortOrder === "number" ? vendor.sortOrder : index,
+      }))
+      .sort((left, right) => {
+        if (left.sortOrder !== right.sortOrder) {
+          return left.sortOrder - right.sortOrder;
+        }
+        return left.name.localeCompare(right.name);
+      });
+  }, [orgTeam?.vendors]);
 
   const progressSteps = useMemo(
     () => [
@@ -465,6 +487,12 @@ export default function AdminPage() {
     }
   }, [templateFile?.url]);
 
+  useEffect(() => {
+    if (!editingTemplateKey) {
+      setTemplateVersion(1);
+    }
+  }, [editingTemplateKey, templateFile?.url]);
+
   const previewLabelMap = useMemo(() => {
     const map: Record<string, string> = {};
     const preparedByMap = mappingConfig.prepared_by_map ?? {};
@@ -592,6 +620,9 @@ export default function AdminPage() {
       );
       return;
     }
+    const nextTemplateVersion = options?.replaceKey
+      ? Math.max(templateVersion + 1, 2)
+      : 1;
 
     setTemplateSaving(true);
     try {
@@ -600,6 +631,7 @@ export default function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: templateName.trim(),
+          templateVersion: nextTemplateVersion,
           description: templateDescription.trim() || undefined,
           templatePdf: hasTemplatePdf ? templateFile : undefined,
           masterTemplate: hasMasterPages ? masterTemplate : undefined,
@@ -622,8 +654,11 @@ export default function AdminPage() {
         setEditingTemplateKey(savedKey);
         setSelectedTemplateKey(savedKey);
       }
+      setTemplateVersion(nextTemplateVersion);
       setTemplateSaveStatus(
-        replaceKey ? "Template updated in library." : "Template saved to library."
+        replaceKey
+          ? `Template updated to v${nextTemplateVersion}.`
+          : "Template saved as v1."
       );
       setTemplateDescription("");
       void loadLibrary("template_config");
@@ -646,6 +681,7 @@ export default function AdminPage() {
       }
       const data = (await response.json()) as {
         name?: string;
+        templateVersion?: number;
         description?: string;
         templatePdf?: { name?: string; url?: string };
         masterTemplate?: MasterTemplateConfig;
@@ -659,6 +695,12 @@ export default function AdminPage() {
         throw new Error("Template configuration is incomplete.");
       }
       setTemplateName(data.name ?? "");
+      setTemplateVersion(
+        Number.isFinite(Number(data.templateVersion)) &&
+          Number(data.templateVersion) > 0
+          ? Math.trunc(Number(data.templateVersion))
+          : 1
+      );
       setTemplateDescription(data.description ?? "");
       setTemplateFile(
         data.templatePdf?.url
@@ -869,6 +911,13 @@ export default function AdminPage() {
     });
     return result;
   }, [coordsConfig, mappingConfig.fields, pageKeys]);
+  const filteredFieldCatalog = useMemo(() => {
+    const query = fieldSearch.trim().toLowerCase();
+    if (!query) return availableStampFields;
+    return availableStampFields.filter((fieldName) =>
+      fieldName.toLowerCase().includes(query)
+    );
+  }, [availableStampFields, fieldSearch]);
 
   const addPage = (pageNumber: number) => {
     const pageKey = toPageKey(pageNumber);
@@ -954,7 +1003,10 @@ export default function AdminPage() {
     });
   };
 
-  const addFieldToCurrentPage = (fieldName: string) => {
+  const addFieldToCurrentPage = (
+    fieldName: string,
+    placement?: { x: number; y: number }
+  ) => {
     const nextField = String(fieldName ?? "").trim();
     if (!nextField) {
       setCoordsEditorError("Enter or select a field key to add.");
@@ -968,14 +1020,27 @@ export default function AdminPage() {
       const page =
         (prev[activeCoordsPageKey] as Record<string, CoordField> | undefined) ??
         {};
-      if (page[nextField]) return prev;
+      if (page[nextField]) {
+        if (!placement) return prev;
+        return {
+          ...prev,
+          [activeCoordsPageKey]: {
+            ...page,
+            [nextField]: {
+              ...page[nextField],
+              x: placement.x,
+              y: placement.y,
+            },
+          },
+        };
+      }
       return {
         ...prev,
         [activeCoordsPageKey]: {
           ...page,
           [nextField]: {
-            x: 36,
-            y: 36,
+            x: placement?.x ?? 36,
+            y: placement?.y ?? 36,
             size: 10,
             align: "left",
             font: "WorkSans",
@@ -1387,6 +1452,11 @@ export default function AdminPage() {
                   Save your master template stack with coordinates, rules, and
                   data mapping as a reusable template.
                 </CardDescription>
+                <div className="pt-1">
+                  <Badge variant="outline" className="bg-background/80">
+                    Version v{templateVersion}
+                  </Badge>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid gap-4 md:grid-cols-2">
@@ -1481,6 +1551,8 @@ export default function AdminPage() {
                   <span>
                     Base PDF: {templateFile?.name ?? "none selected"}
                   </span>
+                  <span>•</span>
+                  <span>Template version: v{templateVersion}</span>
                   <span>•</span>
                   <span>{masterTemplatePages.length} master page(s)</span>
                   <span>•</span>
@@ -1752,15 +1824,51 @@ export default function AdminPage() {
                               <label className="text-xs text-muted-foreground">
                                 Condition value
                               </label>
-                              <Input
-                                value={activeMasterPage.conditionValue ?? ""}
-                                onChange={(event) =>
-                                  updateMasterTemplatePage(activeMasterPage.id, {
-                                    conditionValue: event.target.value,
-                                  })
-                                }
-                                placeholder="ex: Simonton, impact windows, true"
-                              />
+                              {activeMasterPage.inclusionMode === "vendor" &&
+                              vendorRuleOptions.length ? (
+                                <Select
+                                  value={activeMasterPage.conditionValue ?? "__none__"}
+                                  onValueChange={(value) => {
+                                    if (value === "__none__") {
+                                      updateMasterTemplatePage(activeMasterPage.id, {
+                                        conditionValue: "",
+                                        vendorKey: "",
+                                      });
+                                      return;
+                                    }
+                                    const vendor = vendorRuleOptions.find(
+                                      (entry) => entry.id === value
+                                    );
+                                    if (!vendor) return;
+                                    updateMasterTemplatePage(activeMasterPage.id, {
+                                      conditionValue: vendor.name,
+                                      vendorKey: vendor.id,
+                                    });
+                                  }}
+                                >
+                                  <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Select vendor" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__none__">Select vendor</SelectItem>
+                                    {vendorRuleOptions.map((vendor) => (
+                                      <SelectItem key={vendor.id} value={vendor.id}>
+                                        {vendor.name}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              ) : (
+                                <Input
+                                  value={activeMasterPage.conditionValue ?? ""}
+                                  onChange={(event) =>
+                                    updateMasterTemplatePage(activeMasterPage.id, {
+                                      conditionValue: event.target.value,
+                                    })
+                                  }
+                                  placeholder="ex: Simonton, impact windows, true"
+                                />
+                              )}
                             </div>
                           ) : null}
                           {activeMasterPage.inclusionMode === "field" ? (
@@ -1779,20 +1887,22 @@ export default function AdminPage() {
                               />
                             </div>
                           ) : null}
-                          <div className="space-y-2">
-                            <label className="text-xs text-muted-foreground">
-                              Vendor key (optional)
-                            </label>
-                            <Input
-                              value={activeMasterPage.vendorKey ?? ""}
-                              onChange={(event) =>
-                                updateMasterTemplatePage(activeMasterPage.id, {
-                                  vendorKey: event.target.value,
-                                })
-                              }
-                              placeholder="Vendor code"
-                            />
-                          </div>
+                          {activeMasterPage.inclusionMode !== "vendor" ? (
+                            <div className="space-y-2">
+                              <label className="text-xs text-muted-foreground">
+                                Vendor key (optional)
+                              </label>
+                              <Input
+                                value={activeMasterPage.vendorKey ?? ""}
+                                onChange={(event) =>
+                                  updateMasterTemplatePage(activeMasterPage.id, {
+                                    vendorKey: event.target.value,
+                                  })
+                                }
+                                placeholder="Vendor code"
+                              />
+                            </div>
+                          ) : null}
                           <div className="space-y-2 md:col-span-2">
                             <label className="text-xs text-muted-foreground">
                               Data bindings (comma-separated)
@@ -1819,6 +1929,9 @@ export default function AdminPage() {
                           onSelectField={setSelectedField}
                           onChangeCoord={(field, x, y) =>
                             updateCoordField(activeCoordsPageKey, field, { x, y })
+                          }
+                          onDropField={(field, x, y) =>
+                            addFieldToCurrentPage(field, { x, y })
                           }
                           onDocumentInfo={handlePdfDocumentInfo}
                           showGrid={showGrid}
@@ -1915,7 +2028,7 @@ export default function AdminPage() {
                     </div>
                     <div className="space-y-2">
                       <label className="text-xs text-muted-foreground">
-                        Field to place
+                        Linked fields on this page
                       </label>
                       <Select
                         value={selectedField ?? "__none__"}
@@ -1924,10 +2037,10 @@ export default function AdminPage() {
                         }
                       >
                         <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Select field" />
+                          <SelectValue placeholder="Select linked field" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="__none__">Select field</SelectItem>
+                          <SelectItem value="__none__">Select linked field</SelectItem>
                           {Object.keys(previewPageFields).map((fieldName) => (
                             <SelectItem key={fieldName} value={fieldName}>
                               {formatFieldLabel(fieldName)}
@@ -1935,47 +2048,6 @@ export default function AdminPage() {
                           ))}
                         </SelectContent>
                       </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <label className="text-xs text-muted-foreground">
-                        Add field to current page
-                      </label>
-                      <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                        <Select
-                          value={fieldToAdd || "__none__"}
-                          onValueChange={(value) =>
-                            setFieldToAdd(value === "__none__" ? "" : value)
-                          }
-                        >
-                          <SelectTrigger className="w-full">
-                            <SelectValue placeholder="Choose field key" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">Choose field key</SelectItem>
-                            {availableStampFields.map((fieldName) => (
-                              <SelectItem key={fieldName} value={fieldName}>
-                                {fieldName}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={() =>
-                            addFieldToCurrentPage(customFieldToAdd || fieldToAdd)
-                          }
-                          disabled={!parsePageKey(activeCoordsPageKey)}
-                        >
-                          Add
-                        </Button>
-                      </div>
-                      <Input
-                        uiSize="xs"
-                        placeholder="Custom field key"
-                        value={customFieldToAdd}
-                        onChange={(event) => setCustomFieldToAdd(event.target.value)}
-                      />
                       <Button
                         variant="outline"
                         size="sm"
@@ -1984,6 +2056,57 @@ export default function AdminPage() {
                       >
                         Remove selected field
                       </Button>
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs text-muted-foreground">
+                        Estimate fields (drag onto template)
+                      </label>
+                      <Input
+                        uiSize="xs"
+                        placeholder="Search fields"
+                        value={fieldSearch}
+                        onChange={(event) => setFieldSearch(event.target.value)}
+                      />
+                      <ScrollArea className="h-48 rounded-lg border border-border/60 bg-background/80">
+                        <div className="space-y-1 p-2">
+                          {filteredFieldCatalog.map((fieldName) => {
+                            const isPlaced = Boolean(previewPageFields[fieldName]);
+                            return (
+                              <button
+                                key={fieldName}
+                                type="button"
+                                draggable
+                                onDragStart={(event) => {
+                                  event.dataTransfer.setData(
+                                    "application/x-calibration-field",
+                                    fieldName
+                                  );
+                                  event.dataTransfer.setData("text/plain", fieldName);
+                                  event.dataTransfer.effectAllowed = "copy";
+                                }}
+                                onDoubleClick={() => addFieldToCurrentPage(fieldName)}
+                                onClick={() => setSelectedField(fieldName)}
+                                className={cn(
+                                  "flex w-full items-center justify-between rounded-md border px-2 py-1 text-left text-xs transition",
+                                  isPlaced
+                                    ? "border-accent/60 bg-accent/10 text-foreground"
+                                    : "border-border/60 bg-background hover:border-accent/40"
+                                )}
+                              >
+                                <span className="truncate">{fieldName}</span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  {isPlaced ? "linked" : "drag"}
+                                </span>
+                              </button>
+                            );
+                          })}
+                          {!filteredFieldCatalog.length ? (
+                            <p className="px-1 py-2 text-xs text-muted-foreground">
+                              No matching fields.
+                            </p>
+                          ) : null}
+                        </div>
+                      </ScrollArea>
                     </div>
                     <div className="grid gap-2 text-xs text-muted-foreground">
                       <label className="flex items-center gap-2 text-foreground">

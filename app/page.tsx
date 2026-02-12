@@ -1670,6 +1670,9 @@ export default function HomePage() {
             Selected template:{" "}
             <span className="text-foreground">
               {templateConfig?.name ?? "None"}
+              {templateConfig?.templateVersion
+                ? ` (v${templateConfig.templateVersion})`
+                : ""}
             </span>
           </span>
           {templateConfig ? (
@@ -2404,6 +2407,9 @@ export default function HomePage() {
                   <span className="text-muted-foreground">Template</span>
                   <span className="text-right font-medium text-foreground">
                     {templateConfig?.name ?? "Not selected"}
+                    {templateConfig?.templateVersion
+                      ? ` (v${templateConfig.templateVersion})`
+                      : ""}
                   </span>
                 </div>
               </div>

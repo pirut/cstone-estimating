@@ -67,6 +67,7 @@ export type TemplateConfig = {
   version: number;
   id: string;
   name: string;
+  templateVersion?: number;
   description?: string;
   templatePdf?: { name: string; url: string };
   masterTemplate?: MasterTemplateConfig;

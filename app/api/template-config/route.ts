@@ -13,6 +13,7 @@ const utapi = new UTApi();
 
 type TemplatePayload = {
   name?: string;
+  templateVersion?: unknown;
   description?: string;
   templatePdf?: { name?: string; url?: string };
   masterTemplate?: unknown;
@@ -24,6 +25,7 @@ type TemplateConfig = {
   version: number;
   id: string;
   name: string;
+  templateVersion: number;
   description?: string;
   templatePdf?: { name: string; url: string };
   masterTemplate?: MasterTemplateConfig;
@@ -66,11 +68,13 @@ export async function POST(request: NextRequest) {
     const mapping =
       body.mapping && typeof body.mapping === "object" ? body.mapping : undefined;
     const description = String(body.description ?? "").trim();
+    const templateVersion = normalizeTemplateVersion(body.templateVersion);
     const id = slugify(name);
     const config: TemplateConfig = {
       version: hasMasterTemplatePages ? 2 : 1,
       id,
       name,
+      templateVersion,
       description: description || undefined,
       templatePdf: hasTemplatePdf
         ? {
@@ -113,6 +117,12 @@ function slugify(value: string) {
     .replace(/(^-|-$)+/g, "")
     .slice(0, 48);
   return safe || "template";
+}
+
+function normalizeTemplateVersion(value: unknown) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) return 1;
+  return Math.trunc(parsed);
 }
 
 function normalizeMasterTemplate(value: unknown): MasterTemplateConfig {

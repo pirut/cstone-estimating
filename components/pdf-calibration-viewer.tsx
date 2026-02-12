@@ -28,6 +28,7 @@ type ViewerProps = {
   selectedField?: string | null;
   onSelectField: (field: string) => void;
   onChangeCoord: (field: string, x: number, y: number) => void;
+  onDropField?: (field: string, x: number, y: number) => void;
   snapToGrid?: boolean;
   gridSize?: number;
   showGrid?: boolean;
@@ -55,6 +56,7 @@ export function PdfCalibrationViewer({
   selectedField,
   onSelectField,
   onChangeCoord,
+  onDropField,
   snapToGrid = false,
   gridSize = 0,
   showGrid = false,
@@ -75,6 +77,7 @@ export function PdfCalibrationViewer({
   const [pageSize, setPageSize] = useState<{ width: number; height: number } | null>(null);
   const [scale, setScale] = useState(1);
   const [isDragging, setIsDragging] = useState<string | null>(null);
+  const [isDropTarget, setIsDropTarget] = useState(false);
   const renderTokenRef = useRef(0);
   const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
   const gridPixelSize = useMemo(() => {
@@ -286,17 +289,51 @@ export function PdfCalibrationViewer({
     setIsDragging(null);
   };
 
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!onDropField) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "copy";
+    setIsDropTarget(true);
+  };
+
+  const handleDragLeave = () => {
+    setIsDropTarget(false);
+  };
+
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!onDropField || !viewportRef.current) return;
+    event.preventDefault();
+    const fieldName =
+      event.dataTransfer.getData("application/x-calibration-field") ||
+      event.dataTransfer.getData("text/plain");
+    const normalizedField = String(fieldName ?? "").trim();
+    if (!normalizedField) {
+      setIsDropTarget(false);
+      return;
+    }
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX - bounds.left;
+    const y = event.clientY - bounds.top;
+    const [pdfX, pdfY] = viewportRef.current.convertToPdfPoint(x, y);
+    onDropField(normalizedField, snapValue(pdfX), snapValue(pdfY));
+    setIsDropTarget(false);
+  };
+
   return (
     <div
       ref={containerRef}
       className={cn(
-        "relative overflow-hidden rounded-xl border border-border/70 bg-muted/30",
+        "relative overflow-hidden rounded-xl border border-border/70 bg-muted/30 transition",
+        isDropTarget && "border-accent/70 bg-accent/5",
         className
       )}
       onClick={handleClick}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerLeave={handlePointerUp}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
     >
       {pdfState.loading ? (
         <div className="flex items-center justify-center p-8 text-sm text-muted-foreground">

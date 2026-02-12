@@ -449,6 +449,8 @@ function shouldIncludeMasterTemplatePage(
     if (!vendorQuery) return true;
     return products.some((product) => {
       const vendorTokens = [
+        product.vendorId,
+        product.name,
         product.vendor,
         product.manufacturer,
         product.supplier,
