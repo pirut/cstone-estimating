@@ -65,6 +65,8 @@ type ProductFeatureOptionDraft = {
   isActive: boolean;
 };
 
+const FEATURE_SCOPE_ALL_PRODUCTS = "__all_products__";
+
 type EstimateAdminDraft = {
   id: string;
   title: string;
@@ -284,6 +286,9 @@ export default function TeamAdminPage() {
   const [productFeatureOptionStatus, setProductFeatureOptionStatus] = useState<
     string | null
   >(null);
+  const [featureEditorVendorId, setFeatureEditorVendorId] = useState<string>(
+    FEATURE_SCOPE_ALL_PRODUCTS
+  );
   const [estimateDrafts, setEstimateDrafts] = useState<EstimateAdminDraft[]>([]);
   const [estimateSavingId, setEstimateSavingId] = useState<string | null>(null);
   const [estimateError, setEstimateError] = useState<string | null>(null);
@@ -337,6 +342,16 @@ export default function TeamAdminPage() {
     }));
     setProductFeatureOptionDrafts(next);
   }, [productFeatureOptionRecords]);
+
+  useEffect(() => {
+    if (featureEditorVendorId === FEATURE_SCOPE_ALL_PRODUCTS) return;
+    const hasSelectedVendor = vendorRecords.some(
+      (vendor) => vendor.id === featureEditorVendorId
+    );
+    if (!hasSelectedVendor) {
+      setFeatureEditorVendorId(FEATURE_SCOPE_ALL_PRODUCTS);
+    }
+  }, [featureEditorVendorId, vendorRecords]);
 
   const estimateRecords = useMemo(() => {
     const list = (selectedTeam?.estimates ?? []).slice();
@@ -900,6 +915,42 @@ export default function TeamAdminPage() {
     }
   };
 
+  const scopedFeatureVendorId =
+    featureEditorVendorId === FEATURE_SCOPE_ALL_PRODUCTS
+      ? ""
+      : featureEditorVendorId;
+  const scopedFeatureVendorLabel =
+    featureEditorVendorId === FEATURE_SCOPE_ALL_PRODUCTS
+      ? "All products (default options)"
+      : vendorRecords.find((vendor) => vendor.id === featureEditorVendorId)?.name ??
+        "Selected vendor";
+
+  const featureOptionsByCategory = useMemo(
+    () =>
+      PRODUCT_FEATURE_CATEGORIES.map((category) => {
+        const entries = productFeatureOptionDrafts
+          .map((option, index) => ({ option, index }))
+          .filter(
+            ({ option }) =>
+              option.category === category.id &&
+              (option.vendorId || "") === scopedFeatureVendorId
+          )
+          .sort((a, b) => {
+            if (a.option.sortOrder !== b.option.sortOrder) {
+              return a.option.sortOrder - b.option.sortOrder;
+            }
+            return a.option.label.localeCompare(b.option.label);
+          });
+        return { category, entries };
+      }),
+    [productFeatureOptionDrafts, scopedFeatureVendorId]
+  );
+
+  const scopedFeatureOptionCount = featureOptionsByCategory.reduce(
+    (total, group) => total + group.entries.length,
+    0
+  );
+
   const handleProductFeatureOptionChange = (
     index: number,
     patch: Partial<ProductFeatureOptionDraft>
@@ -911,17 +962,23 @@ export default function TeamAdminPage() {
     );
   };
 
-  const handleAddProductFeatureOption = () => {
+  const handleAddProductFeatureOption = (categoryId?: string) => {
+    const category = categoryId ?? PRODUCT_FEATURE_CATEGORIES[0]?.id ?? "";
     const nextOrder =
       productFeatureOptionDrafts.reduce(
-        (max, option) => Math.max(max, option.sortOrder || 0),
+        (max, option) => {
+          const sameCategory = option.category === category;
+          const sameScope = (option.vendorId || "") === scopedFeatureVendorId;
+          if (!sameCategory || !sameScope) return max;
+          return Math.max(max, option.sortOrder || 0);
+        },
         0
       ) + 1;
     setProductFeatureOptionDrafts((prev) => [
       ...prev,
       {
-        category: PRODUCT_FEATURE_CATEGORIES[0]?.id ?? "",
-        vendorId: "",
+        category,
+        vendorId: scopedFeatureVendorId,
         label: "",
         sortOrder: nextOrder,
         isActive: true,
@@ -2009,8 +2066,9 @@ export default function TeamAdminPage() {
                       Product feature options
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Dropdown values for the product Features list. Set a product
-                      (vendor) to scope options, or leave as All products.
+                      Organize dropdown values by vendor and feature type. Pick a
+                      vendor scope, then edit glass, frame color, and hardware
+                      options in separate lists.
                     </p>
                   </div>
                   {productFeatureOptionError ? (
@@ -2023,126 +2081,124 @@ export default function TeamAdminPage() {
                       {productFeatureOptionStatus}
                     </div>
                   ) : null}
-                  <div className="rounded-lg border border-border/70 bg-background/70 overflow-x-auto">
-                    <div className="min-w-[1080px]">
-                      <div className="grid grid-cols-[auto_1.3fr_1.5fr_2fr_0.8fr_auto] gap-2 border-b border-border/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
-                        <span>Active</span>
-                        <span>Feature type</span>
-                        <span>Product</span>
-                        <span>Option label</span>
-                        <span>Order</span>
-                        <span></span>
+                  <div className="rounded-lg border border-border/70 bg-background/70 p-3">
+                    <div className="grid gap-3 md:grid-cols-[2fr_auto] md:items-end">
+                      <div className="space-y-2">
+                        <label className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                          Editing scope
+                        </label>
+                        <Select
+                          value={featureEditorVendorId}
+                          onValueChange={setFeatureEditorVendorId}
+                          disabled={!canEditCatalog}
+                        >
+                          <SelectTrigger className="max-w-xl">
+                            <SelectValue placeholder="Select product scope" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={FEATURE_SCOPE_ALL_PRODUCTS}>
+                              All products (default options)
+                            </SelectItem>
+                            {vendorRecords.map((vendor) => (
+                              <SelectItem key={vendor.id} value={vendor.id}>
+                                {vendor.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       </div>
-                      <div className="divide-y divide-border/60">
-                        {productFeatureOptionDrafts.map((option, index) => (
-                          <div
-                            key={option.id ?? `feature-option-${index}`}
-                            className="grid grid-cols-[auto_1.3fr_1.5fr_2fr_0.8fr_auto] items-center gap-2 px-3 py-2 text-sm"
-                          >
-                            <Checkbox
-                              checked={option.isActive}
-                              onCheckedChange={(checked) =>
-                                handleProductFeatureOptionChange(index, {
-                                  isActive: checked === true,
-                                })
-                              }
-                              disabled={!canEditCatalog}
-                            />
-                            <Select
-                              value={option.category || "__none__"}
-                              onValueChange={(value) =>
-                                handleProductFeatureOptionChange(index, {
-                                  category: value === "__none__" ? "" : value,
-                                })
-                              }
-                              disabled={!canEditCatalog}
-                            >
-                              <SelectTrigger className="h-8">
-                                <SelectValue placeholder="Select feature type" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__none__">
-                                  Select feature type
-                                </SelectItem>
-                                {PRODUCT_FEATURE_CATEGORIES.map((category) => (
-                                  <SelectItem key={category.id} value={category.id}>
-                                    {category.label}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Select
-                              value={option.vendorId || "__all__"}
-                              onValueChange={(value) =>
-                                handleProductFeatureOptionChange(index, {
-                                  vendorId: value === "__all__" ? "" : value,
-                                })
-                              }
-                              disabled={!canEditCatalog}
-                            >
-                              <SelectTrigger className="h-8">
-                                <SelectValue placeholder="All products" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="__all__">All products</SelectItem>
-                                {vendorRecords.map((vendor) => (
-                                  <SelectItem key={vendor.id} value={vendor.id}>
-                                    {vendor.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                            <Input
-                              uiSize="xs"
-                              value={option.label}
-                              onChange={(event) =>
-                                handleProductFeatureOptionChange(index, {
-                                  label: event.target.value,
-                                })
-                              }
-                              placeholder="Option label"
-                              disabled={!canEditCatalog}
-                            />
-                            <Input
-                              uiSize="xs"
-                              className="w-20"
-                              type="number"
-                              value={option.sortOrder}
-                              onChange={(event) =>
-                                handleProductFeatureOptionChange(index, {
-                                  sortOrder: Number(event.target.value || 0),
-                                })
-                              }
-                              disabled={!canEditCatalog}
-                            />
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              onClick={() => handleDeleteProductFeatureOption(option)}
-                              disabled={!canEditCatalog || productFeatureOptionSaving}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ))}
-                        {!productFeatureOptionDrafts.length ? (
-                          <div className="px-3 py-3 text-sm text-muted-foreground">
-                            No feature options yet.
-                          </div>
-                        ) : null}
+                      <div className="text-xs text-muted-foreground">
+                        Scope: {scopedFeatureVendorLabel} · {scopedFeatureOptionCount} option
+                        {scopedFeatureOptionCount === 1 ? "" : "s"}
                       </div>
                     </div>
                   </div>
+
+                  <div className="space-y-3">
+                    {featureOptionsByCategory.map(({ category, entries }) => (
+                      <div
+                        key={`${featureEditorVendorId}-${category.id}`}
+                        className="rounded-lg border border-border/70 bg-background/70 p-3"
+                      >
+                        <div className="mb-2 flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-foreground">
+                              {category.label}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              {entries.length} option{entries.length === 1 ? "" : "s"}
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => handleAddProductFeatureOption(category.id)}
+                            disabled={!canEditCatalog}
+                          >
+                            <Plus className="h-4 w-4" />
+                            Add {category.label.toLowerCase()}
+                          </Button>
+                        </div>
+                        <div className="space-y-2">
+                          {entries.map(({ option, index }) => (
+                            <div
+                              key={option.id ?? `feature-option-${category.id}-${index}`}
+                              className="grid grid-cols-[auto_2fr_0.7fr_auto] items-center gap-2 rounded-lg border border-border/60 px-2 py-2 text-sm"
+                            >
+                              <Checkbox
+                                checked={option.isActive}
+                                onCheckedChange={(checked) =>
+                                  handleProductFeatureOptionChange(index, {
+                                    isActive: checked === true,
+                                  })
+                                }
+                                disabled={!canEditCatalog}
+                              />
+                              <Input
+                                uiSize="xs"
+                                value={option.label}
+                                onChange={(event) =>
+                                  handleProductFeatureOptionChange(index, {
+                                    label: event.target.value,
+                                  })
+                                }
+                                placeholder={`Add ${category.label.toLowerCase()} option`}
+                                disabled={!canEditCatalog}
+                              />
+                              <Input
+                                uiSize="xs"
+                                className="w-20"
+                                type="number"
+                                value={option.sortOrder}
+                                onChange={(event) =>
+                                  handleProductFeatureOptionChange(index, {
+                                    sortOrder: Number(event.target.value || 0),
+                                  })
+                                }
+                                disabled={!canEditCatalog}
+                              />
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleDeleteProductFeatureOption(option)}
+                                disabled={!canEditCatalog || productFeatureOptionSaving}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                          {!entries.length ? (
+                            <div className="rounded-lg border border-dashed border-border/60 px-3 py-2 text-xs text-muted-foreground">
+                              No options yet for {category.label.toLowerCase()} in this
+                              scope.
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
                   <div className="flex flex-wrap gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleAddProductFeatureOption}
-                      disabled={!canEditCatalog}
-                    >
-                      <Plus className="h-4 w-4" />
-                      Add feature option
-                    </Button>
                     <Button
                       variant="accent"
                       size="sm"
