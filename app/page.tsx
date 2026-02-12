@@ -195,6 +195,21 @@ export default function HomePage() {
     template_config: { items: [], loading: false, error: null },
     estimate: { items: [], loading: false, error: null },
   });
+  const preparedByName = useMemo(() => {
+    const fullName = user?.fullName?.trim();
+    if (fullName) return fullName;
+    const firstLast = [user?.firstName, user?.lastName]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    if (firstLast) return firstLast;
+    const username = user?.username?.trim();
+    if (username) return username;
+    const emailName = user?.primaryEmailAddress?.emailAddress
+      ?.split("@")[0]
+      ?.trim();
+    return emailName ?? "";
+  }, [user]);
 
   const emailAddress = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? "";
   const emailDomain = emailAddress.split("@")[1] ?? "";
@@ -2042,6 +2057,7 @@ export default function HomePage() {
               onValuesChange={setEstimateValues}
               name={estimateName}
               onNameChange={setEstimateName}
+              preparedByName={preparedByName}
               selectedEstimate={selectedEstimate}
               onSelectEstimate={setSelectedEstimate}
               onEstimatePayloadChange={setEstimatePayload}

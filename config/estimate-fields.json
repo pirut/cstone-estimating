@@ -37,9 +37,9 @@
         },
         {
           "key": "prepared_by",
-          "label": "Prepared By (Initials)",
+          "label": "Prepared By",
           "type": "text",
-          "placeholder": "VB"
+          "placeholder": "Auto-filled from signed-in user"
         }
       ]
     }

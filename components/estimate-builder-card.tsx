@@ -64,6 +64,7 @@ type EstimateBuilderCardProps = {
   onValuesChange: (values: Record<string, string | number>) => void;
   name: string;
   onNameChange: (name: string) => void;
+  preparedByName?: string;
   selectedEstimate?: UploadedFile | null;
   onSelectEstimate?: (estimate: UploadedFile | null) => void;
   onEstimatePayloadChange?: (payload: Record<string, any> | null) => void;
@@ -108,6 +109,7 @@ export function EstimateBuilderCard({
   onValuesChange,
   name,
   onNameChange,
+  preparedByName,
   selectedEstimate,
   onSelectEstimate,
   onEstimatePayloadChange,
@@ -136,6 +138,7 @@ export function EstimateBuilderCard({
   const [addressLookupError, setAddressLookupError] = useState<string | null>(null);
   const [addressLookupOpen, setAddressLookupOpen] = useState(false);
   const addressLookupRequestRef = useRef(0);
+  const normalizedPreparedByName = preparedByName?.trim() ?? "";
 
   const groupList = useMemo(() => estimateFields.groups ?? [], []);
 
@@ -216,6 +219,24 @@ export function EstimateBuilderCard({
     setLegacyValues(null);
     setDraft(nextDraft);
   }, [loadPayload]);
+
+  useEffect(() => {
+    if (legacyValues || !normalizedPreparedByName) return;
+    setDraft((prev) => {
+      if (
+        String(prev.info.prepared_by ?? "").trim() === normalizedPreparedByName
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        info: {
+          ...prev.info,
+          prepared_by: normalizedPreparedByName,
+        },
+      };
+    });
+  }, [legacyValues, normalizedPreparedByName]);
 
   useEffect(() => {
     if (legacyValues || !addressLookupOpen) {
@@ -694,6 +715,11 @@ export function EstimateBuilderCard({
                 );
                 const isProjectNameField = field.key === "project_name";
                 const isCityStateZipField = field.key === "city_state_zip";
+                const isPreparedByField = field.key === "prepared_by";
+                const displayedValue =
+                  isPreparedByField && normalizedPreparedByName
+                    ? normalizedPreparedByName
+                    : fieldValue;
 
                 return (
                   <div key={field.key} className="space-y-2">
@@ -718,7 +744,7 @@ export function EstimateBuilderCard({
                           className={inputClassName}
                           type="text"
                           placeholder={field.placeholder ?? ""}
-                          value={fieldValue}
+                          value={displayedValue}
                           autoComplete={
                             isProjectNameField
                               ? "organization"
@@ -746,7 +772,10 @@ export function EstimateBuilderCard({
                               setAddressLookupError(null);
                             }
                           }}
-                          disabled={Boolean(legacyValues)}
+                          disabled={
+                            Boolean(legacyValues) ||
+                            (isPreparedByField && Boolean(normalizedPreparedByName))
+                          }
                         />
                         {isProjectNameField ? (
                           <div className="space-y-2">
