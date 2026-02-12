@@ -846,6 +846,9 @@ export default function AdminPage() {
       {}) as Record<string, CoordField>,
     [coordsConfig, activeCoordsPageKey]
   );
+  const selectedFieldSpec = selectedField
+    ? previewPageFields[selectedField]
+    : undefined;
   const availableStampFields = useMemo(() => {
     const result: string[] = [];
     const seen = new Set<string>();
@@ -884,6 +887,19 @@ export default function AdminPage() {
     pageId: string,
     updates: Partial<MasterTemplatePageDraft>
   ) => {
+    const nextCoordsPageKey =
+      typeof updates.coordsPageKey === "string"
+        ? updates.coordsPageKey.trim()
+        : "";
+    if (nextCoordsPageKey && parsePageKey(nextCoordsPageKey)) {
+      setCoordsConfig((prev) => {
+        if (prev[nextCoordsPageKey]) return prev;
+        return {
+          ...prev,
+          [nextCoordsPageKey]: {},
+        };
+      });
+    }
     setMasterTemplatePages((prev) =>
       prev.map((page) => {
         if (page.id !== pageId) return page;
@@ -1048,10 +1064,11 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!activeMasterPage?.coordsPageKey) return;
+    if (!pageKeys.includes(activeMasterPage.coordsPageKey)) return;
     if (previewPage !== activeMasterPage.coordsPageKey) {
       setPreviewPage(activeMasterPage.coordsPageKey);
     }
-  }, [activeMasterPage?.coordsPageKey, previewPage]);
+  }, [activeMasterPage?.coordsPageKey, previewPage, pageKeys]);
 
   useEffect(() => {
     const fieldNames = Object.keys(previewPageFields);
@@ -1819,219 +1836,59 @@ export default function AdminPage() {
                     )}
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-border/60 bg-card/80 shadow-elevated">
-              <CardHeader>
-                <CardTitle className="text-2xl font-serif">
-                  Mapping Builder
-                </CardTitle>
-                <CardDescription>
-                  Assign Excel cells to proposal fields.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex flex-wrap items-center gap-3">
-                  <Button
-                    variant="secondary"
-                    onClick={() =>
-                      setMappingConfig(cloneJson(mappingDefault as MappingConfig))
-                    }
-                  >
-                    Reset to default
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      handleDownloadJson(mappingConfig, "mapping.override.json")
-                    }
-                  >
-                    <FileDown className="h-4 w-4" />
-                    Download mapping JSON
-                  </Button>
-                </div>
-                {workbookError ? (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
-                    {workbookError}
-                  </div>
-                ) : workbookLoading ? (
-                  <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                    Reading workbook...
-                  </div>
-                ) : workbookLoaded ? (
-                  <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                    Workbook loaded with {sheetNames.length} sheet
-                    {sheetNames.length === 1 ? "" : "s"}.
-                  </div>
-                ) : null}
                 <Separator />
-                <div className="space-y-4">
-                  {Object.entries(mappingConfig.fields).map(
-                    ([fieldName, field]) => (
-                      <div
-                        key={fieldName}
-                        className="grid gap-3 rounded-xl border border-border/60 bg-background/80 p-4 md:grid-cols-[1.2fr_1fr_0.8fr]"
-                      >
-                        <div>
-                          <p className="text-sm font-semibold text-foreground">
-                            {formatFieldLabel(fieldName)}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            {field.format ?? "text"}
-                          </p>
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-xs text-muted-foreground">
-                            Sheet
-                          </label>
-                          <Select
-                            value={field.sheet || "__none__"}
-                            onValueChange={(value) =>
-                              updateMappingField(fieldName, {
-                                sheet: value === "__none__" ? "" : value,
-                              })
-                            }
-                          >
-                            <SelectTrigger className="w-full">
-                              <SelectValue placeholder="Select sheet" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__none__">Select sheet</SelectItem>
-                              {sheetNames.map((sheet) => (
-                                <SelectItem key={sheet} value={sheet}>
-                                  {sheet}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <label className="text-xs text-muted-foreground">
-                            Cell
-                          </label>
-                          <Input
-                            value={field.cell ?? ""}
-                            onChange={(event) =>
-                              updateMappingField(fieldName, {
-                                cell: event.target.value.toUpperCase(),
-                              })
-                            }
-                            placeholder="C1"
-                          />
-                          <p className="text-xs text-muted-foreground">
-                            {getCellPreview(
-                              cellPreviews,
-                              fieldName,
-                              workbookLoading,
-                              workbookError
-                            )}
-                          </p>
-                        </div>
-                      </div>
-                    )
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="border-border/60 bg-card/80 shadow-elevated">
-              <CardHeader>
-                <CardTitle className="text-2xl font-serif">
-                  Coordinates Editor
-                </CardTitle>
-                <CardDescription>
-                  Adjust placement, size, and alignment for each field.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex flex-wrap items-center gap-3">
-                  <Button
-                    variant="secondary"
-                    onClick={() =>
-                      setCoordsConfig(cloneJson(coordinatesDefault as CoordsConfig))
-                    }
-                  >
-                    Reset to default
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() =>
-                      handleDownloadJson(coordsConfig, "coordinates.override.json")
-                    }
-                  >
-                    <FileDown className="h-4 w-4" />
-                    Download coordinates JSON
-                  </Button>
-                  <Button variant="outline" onClick={handleCalibrationPdf}>
-                    <ArrowDownToLine className="h-4 w-4" />
-                    Download calibration PDF
-                  </Button>
-                </div>
-                <Separator />
-                <div className="grid gap-4 lg:grid-cols-[0.6fr_1.4fr]">
+                <div className="grid gap-4 xl:grid-cols-[0.7fr_1.3fr]">
                   <div className="space-y-3 rounded-xl border border-border/60 bg-background/70 p-4">
-                    <div className="space-y-2">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                        Page setup
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        Template pages detected:{" "}
-                        {templatePageCount > 0 ? templatePageCount : "Not loaded"}
-                      </p>
-                      <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                        <Input
-                          uiSize="xs"
-                          type="number"
-                          min={1}
-                          placeholder="Page number"
-                          value={pageNumberToAdd}
-                          onChange={(event) =>
-                            setPageNumberToAdd(event.target.value)
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                      Placement tools
+                    </p>
+                    <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                      <Input
+                        uiSize="xs"
+                        type="number"
+                        min={1}
+                        placeholder="Page number"
+                        value={pageNumberToAdd}
+                        onChange={(event) => setPageNumberToAdd(event.target.value)}
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const pageNumber = Number(pageNumberToAdd);
+                          if (!Number.isInteger(pageNumber) || pageNumber < 1) {
+                            setCoordsEditorError(
+                              "Enter a valid page number (1 or greater)."
+                            );
+                            return;
                           }
-                        />
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            const pageNumber = Number(pageNumberToAdd);
-                            if (!Number.isInteger(pageNumber) || pageNumber < 1) {
-                              setCoordsEditorError(
-                                "Enter a valid page number (1 or greater)."
-                              );
-                              return;
-                            }
-                            addPage(pageNumber);
-                            setPageNumberToAdd("");
-                          }}
-                        >
-                          Add page
-                        </Button>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={addAllTemplatePages}
-                          disabled={!templatePageCount}
-                        >
-                          Add all template pages
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={removeCurrentPage}
-                          disabled={!parsePageKey(activeCoordsPageKey)}
-                        >
-                          Remove current page
-                        </Button>
-                      </div>
+                          addPage(pageNumber);
+                          setPageNumberToAdd("");
+                        }}
+                      >
+                        Add page
+                      </Button>
                     </div>
-                    <Separator />
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={addAllTemplatePages}
+                        disabled={!templatePageCount}
+                      >
+                        Add all template pages
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={removeCurrentPage}
+                        disabled={!parsePageKey(activeCoordsPageKey)}
+                      >
+                        Remove current page
+                      </Button>
+                    </div>
                     <div className="space-y-2">
-                      <label className="text-xs text-muted-foreground">
-                        Preview page
-                      </label>
+                      <label className="text-xs text-muted-foreground">Preview page</label>
                       <Select
                         value={pageKeys.includes(previewPage) ? previewPage : "__none__"}
                         onValueChange={(value) => {
@@ -2083,31 +1940,25 @@ export default function AdminPage() {
                       <label className="text-xs text-muted-foreground">
                         Add field to current page
                       </label>
-                      <Select
-                        value={fieldToAdd || "__none__"}
-                        onValueChange={(value) =>
-                          setFieldToAdd(value === "__none__" ? "" : value)
-                        }
-                      >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Choose field key" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__none__">Choose field key</SelectItem>
-                          {availableStampFields.map((fieldName) => (
-                            <SelectItem key={fieldName} value={fieldName}>
-                              {fieldName}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <Input
-                        uiSize="xs"
-                        placeholder="Or enter custom field key"
-                        value={customFieldToAdd}
-                        onChange={(event) => setCustomFieldToAdd(event.target.value)}
-                      />
-                      <div className="flex flex-wrap gap-2">
+                      <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+                        <Select
+                          value={fieldToAdd || "__none__"}
+                          onValueChange={(value) =>
+                            setFieldToAdd(value === "__none__" ? "" : value)
+                          }
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Choose field key" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">Choose field key</SelectItem>
+                            {availableStampFields.map((fieldName) => (
+                              <SelectItem key={fieldName} value={fieldName}>
+                                {fieldName}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                         <Button
                           variant="secondary"
                           size="sm"
@@ -2116,289 +1967,268 @@ export default function AdminPage() {
                           }
                           disabled={!parsePageKey(activeCoordsPageKey)}
                         >
-                          Add field
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={removeSelectedField}
-                          disabled={!selectedField}
-                        >
-                          Remove selected
+                          Add
                         </Button>
                       </div>
+                      <Input
+                        uiSize="xs"
+                        placeholder="Custom field key"
+                        value={customFieldToAdd}
+                        onChange={(event) => setCustomFieldToAdd(event.target.value)}
+                      />
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={removeSelectedField}
+                        disabled={!selectedField}
+                      >
+                        Remove selected field
+                      </Button>
+                    </div>
+                    <div className="grid gap-2 text-xs text-muted-foreground">
+                      <label className="flex items-center gap-2 text-foreground">
+                        <Checkbox
+                          checked={showGrid}
+                          onCheckedChange={(checked) => setShowGrid(checked === true)}
+                        />
+                        Show grid
+                      </label>
+                      <label className="flex items-center gap-2 text-foreground">
+                        <Checkbox
+                          checked={snapToGrid}
+                          onCheckedChange={(checked) => setSnapToGrid(checked === true)}
+                        />
+                        Snap to grid
+                      </label>
+                    </div>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <NumberField
+                        label="Grid size (pt)"
+                        value={gridSize}
+                        onChange={(value) =>
+                          setGridSize(Number.isFinite(value) ? Math.max(value, 0) : 0)
+                        }
+                      />
+                      <NumberField
+                        label="Nudge (pt)"
+                        value={nudgeStep}
+                        onChange={(value) =>
+                          setNudgeStep(Number.isFinite(value) ? Math.max(value, 0) : 0)
+                        }
+                      />
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => nudgeSelectedField(-nudgeStep, 0)}
+                        disabled={!selectedField}
+                        aria-label="Nudge left"
+                      >
+                        <ArrowLeft className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => nudgeSelectedField(0, nudgeStep)}
+                        disabled={!selectedField}
+                        aria-label="Nudge up"
+                      >
+                        <ArrowUp className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => nudgeSelectedField(0, -nudgeStep)}
+                        disabled={!selectedField}
+                        aria-label="Nudge down"
+                      >
+                        <ArrowDown className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={() => nudgeSelectedField(nudgeStep, 0)}
+                        disabled={!selectedField}
+                        aria-label="Nudge right"
+                      >
+                        <ArrowRight className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={snapSelectedField}
+                        disabled={!selectedField || gridSize <= 0}
+                      >
+                        Snap
+                      </Button>
                     </div>
                     {coordsEditorError ? (
                       <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
                         {coordsEditorError}
                       </div>
                     ) : null}
-                    <Separator />
-                    <div className="space-y-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-                        Placement tools
-                      </p>
-                      <div className="grid gap-2 text-xs text-muted-foreground">
-                        <label className="flex items-center gap-2 text-foreground">
-                          <Checkbox
-                            checked={showGrid}
-                            onCheckedChange={(checked) => setShowGrid(checked === true)}
-                          />
-                          Show grid
-                        </label>
-                        <label className="flex items-center gap-2 text-foreground">
-                          <Checkbox
-                            checked={snapToGrid}
-                            onCheckedChange={(checked) => setSnapToGrid(checked === true)}
-                          />
-                          Snap to grid
-                        </label>
-                      </div>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        <NumberField
-                          label="Grid size (pt)"
-                          value={gridSize}
-                          onChange={(value) =>
-                            setGridSize(Number.isFinite(value) ? Math.max(value, 0) : 0)
-                          }
-                        />
-                        <NumberField
-                          label="Nudge (pt)"
-                          value={nudgeStep}
-                          onChange={(value) =>
-                            setNudgeStep(Number.isFinite(value) ? Math.max(value, 0) : 0)
-                          }
-                        />
-                      </div>
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="grid grid-cols-3 gap-2">
-                          <span />
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            onClick={() => nudgeSelectedField(0, nudgeStep)}
-                            disabled={!selectedField}
-                            aria-label="Nudge up"
-                          >
-                            <ArrowUp className="h-4 w-4" />
-                          </Button>
-                          <span />
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            onClick={() => nudgeSelectedField(-nudgeStep, 0)}
-                            disabled={!selectedField}
-                            aria-label="Nudge left"
-                          >
-                            <ArrowLeft className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            onClick={() => nudgeSelectedField(0, -nudgeStep)}
-                            disabled={!selectedField}
-                            aria-label="Nudge down"
-                          >
-                            <ArrowDown className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            onClick={() => nudgeSelectedField(nudgeStep, 0)}
-                            disabled={!selectedField}
-                            aria-label="Nudge right"
-                          >
-                            <ArrowRight className="h-4 w-4" />
-                          </Button>
-                        </div>
-                        <Button
-                          variant="secondary"
-                          size="sm"
-                          onClick={snapSelectedField}
-                          disabled={!selectedField || gridSize <= 0}
-                        >
-                          Snap selection to grid
-                        </Button>
-                        <p className="text-[11px] text-muted-foreground">
-                          Click or drag to place (snaps if enabled). Arrow keys
-                          and nudges always move by the nudge step; use Snap
-                          selection to grid to align.
-                        </p>
-                      </div>
+                  </div>
+                  <div className="space-y-3 rounded-xl border border-border/60 bg-background/70 p-4">
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() =>
+                          setMappingConfig(cloneJson(mappingDefault as MappingConfig))
+                        }
+                      >
+                        Reset mapping
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          handleDownloadJson(mappingConfig, "mapping.override.json")
+                        }
+                      >
+                        Download mapping
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() =>
+                          setCoordsConfig(cloneJson(coordinatesDefault as CoordsConfig))
+                        }
+                      >
+                        Reset coordinates
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          handleDownloadJson(coordsConfig, "coordinates.override.json")
+                        }
+                      >
+                        Download coordinates
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={handleCalibrationPdf}>
+                        Download calibration PDF
+                      </Button>
                     </div>
-                  </div>
-                  <PdfCalibrationViewer
-                    pdfUrl={previewDocumentUrl}
-                    pageKey={previewDocumentPageKey}
-                    fields={previewPageFields}
-                    selectedField={selectedField}
-                    onSelectField={setSelectedField}
-                    onChangeCoord={(field, x, y) =>
-                      updateCoordField(activeCoordsPageKey, field, { x, y })
-                    }
-                    onDocumentInfo={handlePdfDocumentInfo}
-                    showGrid={showGrid}
-                    snapToGrid={snapToGrid}
-                    gridSize={gridSize}
-                    labelMap={previewLabelMap}
-                    className="min-h-[360px]"
-                  />
-                </div>
-                {pageKeys.length ? (
-                  <Tabs value={previewPage} onValueChange={setPreviewPage}>
-                    <TabsList className="flex flex-wrap">
-                      {pageKeys.map((pageKey) => (
-                        <TabsTrigger key={pageKey} value={pageKey}>
-                          {pageKey.replace("_", " ").toUpperCase()}
-                        </TabsTrigger>
-                      ))}
-                    </TabsList>
-                    {pageKeys.map((pageKey) => {
-                      const fields = coordsConfig[pageKey] ?? {};
-                      return (
-                        <TabsContent key={pageKey} value={pageKey} className="mt-4">
-                          <div className="space-y-3">
-                            {Object.entries(fields as Record<string, CoordField>).map(
-                              ([fieldName, field]) => (
-                                <div
-                                  key={fieldName}
-                                  className="grid gap-3 rounded-xl border border-border/60 bg-background/80 p-4 md:grid-cols-[1.2fr_repeat(8,_minmax(0,_1fr))]"
-                                >
-                                  <div>
-                                    <p className="text-sm font-semibold text-foreground">
-                                      {formatFieldLabel(fieldName)}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {fieldName}
-                                    </p>
-                                  </div>
-                                  <NumberField
-                                    label="X"
-                                    value={field.x}
-                                    onChange={(value) =>
-                                      updateCoordField(pageKey, fieldName, {
-                                        x: value,
-                                      })
-                                    }
-                                  />
-                                  <NumberField
-                                    label="Y"
-                                    value={field.y}
-                                    onChange={(value) =>
-                                      updateCoordField(pageKey, fieldName, {
-                                        y: value,
-                                      })
-                                    }
-                                  />
-                                  <NumberField
-                                    label="Size"
-                                    value={field.size}
-                                    onChange={(value) =>
-                                      updateCoordField(pageKey, fieldName, {
-                                        size: value,
-                                      })
-                                    }
-                                  />
-                                  <NumberField
-                                    label="Max width"
-                                    value={field.max_width}
-                                    onChange={(value) =>
-                                      updateCoordField(pageKey, fieldName, {
-                                        max_width: value,
-                                      })
-                                    }
-                                  />
-                                  <NumberField
-                                    label="Min size"
-                                    value={field.min_size}
-                                    onChange={(value) =>
-                                      updateCoordField(pageKey, fieldName, {
-                                        min_size: value,
-                                      })
-                                    }
-                                  />
-                                  <div className="space-y-2">
-                                    <label className="text-xs text-muted-foreground">
-                                      Align
-                                    </label>
-                                    <Select
-                                      value={field.align ?? "left"}
-                                      onValueChange={(value) =>
-                                        updateCoordField(pageKey, fieldName, {
-                                          align: value,
-                                        })
-                                      }
-                                    >
-                                      <SelectTrigger className="w-full">
-                                        <SelectValue placeholder="Alignment" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        <SelectItem value="left">Left</SelectItem>
-                                        <SelectItem value="center">Center</SelectItem>
-                                        <SelectItem value="right">Right</SelectItem>
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  <div className="space-y-2">
-                                    <label className="text-xs text-muted-foreground">
-                                      Font
-                                    </label>
-                                    <Select
-                                      value={field.font ?? "WorkSans"}
-                                      onValueChange={(value) =>
-                                        updateCoordField(pageKey, fieldName, {
-                                          font: value,
-                                        })
-                                      }
-                                    >
-                                      <SelectTrigger className="w-full">
-                                        <SelectValue placeholder="Font" />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {fontOptions.map((font) => (
-                                          <SelectItem key={font} value={font}>
-                                            {font}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                  </div>
-                                  <div className="space-y-2">
-                                    <label className="text-xs text-muted-foreground">
-                                      Color
-                                    </label>
-                                    <Input
-                                      uiSize="xs"
-                                      value={field.color ?? "#111111"}
-                                      onChange={(event) =>
-                                        updateCoordField(pageKey, fieldName, {
-                                          color: event.target.value,
-                                        })
-                                      }
-                                    />
-                                  </div>
-                                  <NumberField
-                                    label="Opacity"
-                                    value={field.opacity}
-                                    onChange={(value) =>
-                                      updateCoordField(pageKey, fieldName, {
-                                        opacity: value,
-                                      })
-                                    }
-                                  />
-                                </div>
-                              )
-                            )}
+                    {workbookError ? (
+                      <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                        {workbookError}
+                      </div>
+                    ) : workbookLoading ? (
+                      <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                        Reading workbook...
+                      </div>
+                    ) : workbookLoaded ? (
+                      <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                        Workbook loaded with {sheetNames.length} sheet
+                        {sheetNames.length === 1 ? "" : "s"}.
+                      </div>
+                    ) : null}
+                    <ScrollArea className="h-[360px] rounded-lg border border-border/60 bg-background/80">
+                      <div className="space-y-2 p-2">
+                        {Object.entries(mappingConfig.fields).map(([fieldName, field]) => (
+                          <div
+                            key={fieldName}
+                            className="grid gap-2 rounded-lg border border-border/60 bg-background p-2 md:grid-cols-[1.1fr_1fr_0.8fr]"
+                          >
+                            <div>
+                              <p className="text-xs font-semibold text-foreground">
+                                {formatFieldLabel(fieldName)}
+                              </p>
+                              <p className="text-[11px] text-muted-foreground">
+                                {field.format ?? "text"}
+                              </p>
+                            </div>
+                            <Select
+                              value={field.sheet || "__none__"}
+                              onValueChange={(value) =>
+                                updateMappingField(fieldName, {
+                                  sheet: value === "__none__" ? "" : value,
+                                })
+                              }
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Sheet" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">Select sheet</SelectItem>
+                                {sheetNames.map((sheet) => (
+                                  <SelectItem key={sheet} value={sheet}>
+                                    {sheet}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <div className="space-y-1">
+                              <Input
+                                uiSize="xs"
+                                value={field.cell ?? ""}
+                                onChange={(event) =>
+                                  updateMappingField(fieldName, {
+                                    cell: event.target.value.toUpperCase(),
+                                  })
+                                }
+                                placeholder="C1"
+                              />
+                              <p className="text-[11px] text-muted-foreground">
+                                {getCellPreview(
+                                  cellPreviews,
+                                  fieldName,
+                                  workbookLoading,
+                                  workbookError
+                                )}
+                              </p>
+                            </div>
                           </div>
-                        </TabsContent>
-                      );
-                    })}
-                  </Tabs>
-                ) : (
-                  <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-                    No coordinate pages configured yet. Add a page to begin.
+                        ))}
+                      </div>
+                    </ScrollArea>
+                    {selectedField && selectedFieldSpec ? (
+                      <div className="grid gap-2 rounded-lg border border-border/60 bg-background p-3 md:grid-cols-2">
+                        <p className="text-xs font-semibold text-foreground md:col-span-2">
+                          Selected field: {formatFieldLabel(selectedField)}
+                        </p>
+                        <NumberField
+                          label="X"
+                          value={selectedFieldSpec.x}
+                          onChange={(value) =>
+                            updateCoordField(activeCoordsPageKey, selectedField, {
+                              x: value,
+                            })
+                          }
+                        />
+                        <NumberField
+                          label="Y"
+                          value={selectedFieldSpec.y}
+                          onChange={(value) =>
+                            updateCoordField(activeCoordsPageKey, selectedField, {
+                              y: value,
+                            })
+                          }
+                        />
+                        <NumberField
+                          label="Size"
+                          value={selectedFieldSpec.size}
+                          onChange={(value) =>
+                            updateCoordField(activeCoordsPageKey, selectedField, {
+                              size: value,
+                            })
+                          }
+                        />
+                        <Input
+                          uiSize="xs"
+                          value={selectedFieldSpec.color ?? "#111111"}
+                          onChange={(event) =>
+                            updateCoordField(activeCoordsPageKey, selectedField, {
+                              color: event.target.value,
+                            })
+                          }
+                        />
+                      </div>
+                    ) : null}
                   </div>
-                )}
+                </div>
               </CardContent>
             </Card>
 

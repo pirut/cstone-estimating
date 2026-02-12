@@ -76,6 +76,7 @@ export function PdfCalibrationViewer({
   const [scale, setScale] = useState(1);
   const [isDragging, setIsDragging] = useState<string | null>(null);
   const renderTokenRef = useRef(0);
+  const renderTaskRef = useRef<{ cancel: () => void } | null>(null);
   const gridPixelSize = useMemo(() => {
     if (!gridSize || gridSize <= 0) return null;
     return gridSize * scale;
@@ -139,6 +140,7 @@ export function PdfCalibrationViewer({
 
   useEffect(() => {
     if (!pdfUrl || !canvasRef.current) {
+      cancelRenderTask(renderTaskRef);
       setPdfState({ loading: false, error: null });
       return;
     }
@@ -174,8 +176,11 @@ export function PdfCalibrationViewer({
         onPageSize?.({ width: baseViewport.width, height: baseViewport.height });
 
         const containerWidth = containerRef.current?.clientWidth ?? baseViewport.width;
-        const nextScale = containerWidth / baseViewport.width;
-        setScale(nextScale);
+        const fittedScale = containerWidth / baseViewport.width;
+        const nextScale = Number.isFinite(scale) && scale > 0 ? scale : fittedScale;
+        if (Math.abs(scale - fittedScale) > 0.001) {
+          setScale(fittedScale);
+        }
 
         const scaledViewport = page.getViewport({
           scale: nextScale,
@@ -190,17 +195,32 @@ export function PdfCalibrationViewer({
         const context = canvas.getContext("2d");
         if (!context) throw new Error("Canvas rendering failed.");
 
-        await page.render({ canvasContext: context, viewport: scaledViewport })
-          .promise;
+        cancelRenderTask(renderTaskRef);
+        const renderTask = page.render({
+          canvasContext: context,
+          viewport: scaledViewport,
+        }) as { promise: Promise<void>; cancel: () => void };
+        renderTaskRef.current = renderTask;
+        await renderTask.promise;
+        if (renderTaskRef.current === renderTask) {
+          renderTaskRef.current = null;
+        }
 
         if (renderToken === renderTokenRef.current) {
           setPdfState({ loading: false, error: null });
         }
       } catch (error) {
+        const message = error instanceof Error ? error.message : "";
+        if (
+          message.toLowerCase().includes("cancelled") ||
+          message.toLowerCase().includes("renderingcancelled")
+        ) {
+          return;
+        }
         if (renderToken === renderTokenRef.current) {
-          const message =
+          const nextMessage =
             error instanceof Error ? error.message : "Failed to render PDF.";
-          setPdfState({ loading: false, error: message });
+          setPdfState({ loading: false, error: nextMessage });
         }
       }
     };
@@ -208,10 +228,12 @@ export function PdfCalibrationViewer({
     void renderPage();
     return () => {
       renderTokenRef.current += 1;
+      cancelRenderTask(renderTaskRef);
     };
-  }, [pdfUrl, pageIndex, onDocumentInfo]);
+  }, [pdfUrl, pageIndex, onDocumentInfo, onPageSize, scale]);
 
   useEffect(() => {
+    cancelRenderTask(renderTaskRef);
     pdfCacheRef.current = null;
   }, [pdfUrl]);
 
@@ -226,39 +248,6 @@ export function PdfCalibrationViewer({
     resizeObserver.observe(containerRef.current);
     return () => resizeObserver.disconnect();
   }, [pageSize, pdfUrl]);
-
-  useEffect(() => {
-    if (!pdfUrl || !pageSize || !canvasRef.current) return;
-
-    const renderScaled = async () => {
-      const token = renderTokenRef.current;
-      try {
-        const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-        ensurePdfWorker(pdfjsLib);
-
-        if (token !== renderTokenRef.current) return;
-        const cached = pdfCacheRef.current;
-        if (!cached || cached.url !== pdfUrl) return;
-
-        const page = await cached.pdfDoc.getPage(pageIndex + 1);
-
-        if (token !== renderTokenRef.current) return;
-        const viewport = page.getViewport({ scale, rotation: page.rotate });
-        viewportRef.current = viewport;
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        const context = canvas.getContext("2d");
-        if (!context) return;
-        await page.render({ canvasContext: context, viewport }).promise;
-      } catch (error) {
-        console.error(error);
-      }
-    };
-
-    void renderScaled();
-  }, [pdfUrl, pageIndex, scale, pageSize]);
 
   const snapValue = (value: number) => {
     if (!snapToGrid || !gridSize || gridSize <= 0) return value;
@@ -453,4 +442,17 @@ function measureTextWidth(
 ) {
   ctx.font = `${fontSize}px ${fontFamily}`;
   return ctx.measureText(text).width;
+}
+
+function cancelRenderTask(
+  renderTaskRef: MutableRefObject<{ cancel: () => void } | null>
+) {
+  const task = renderTaskRef.current;
+  if (!task) return;
+  try {
+    task.cancel();
+  } catch {
+    // no-op
+  }
+  renderTaskRef.current = null;
 }
