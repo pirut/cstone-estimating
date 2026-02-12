@@ -75,6 +75,12 @@ type EstimateSnapshot = {
   templateUrl?: string;
 };
 
+const REQUIRED_MANUAL_INFO_FIELDS = [
+  "prepared_for",
+  "project_name",
+  "proposal_date",
+] as const;
+
 function normalizeForComparison(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((entry) => normalizeForComparison(entry));
@@ -107,6 +113,94 @@ function toComparableEstimateSnapshot(
         : null,
     templateName: snapshot.templateName?.trim() || undefined,
     templateUrl: snapshot.templateUrl?.trim() || undefined,
+  };
+}
+
+function toFiniteNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return 0;
+  const parsed = Number(value.replace(/[$,]/g, "").trim());
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function hasAnyManualInput(values: Record<string, unknown>) {
+  return Object.entries(values).some(([key, value]) => {
+    if (key === "prepared_by") return false;
+    if (typeof value === "number") return Number.isFinite(value) && value > 0;
+    return String(value ?? "").trim().length > 0;
+  });
+}
+
+function getManualEstimateProgress(
+  estimatePayload: Record<string, any> | null,
+  estimateValues: Record<string, string | number>
+) {
+  if (estimatePayload && typeof estimatePayload === "object") {
+    const info =
+      estimatePayload.info && typeof estimatePayload.info === "object"
+        ? (estimatePayload.info as Record<string, unknown>)
+        : null;
+    const products = Array.isArray(estimatePayload.products)
+      ? (estimatePayload.products as Array<Record<string, unknown>>)
+      : null;
+    const bucking = Array.isArray(estimatePayload.bucking)
+      ? (estimatePayload.bucking as Array<Record<string, unknown>>)
+      : null;
+
+    if (info || products || bucking) {
+      const projectStepComplete = REQUIRED_MANUAL_INFO_FIELDS.every((field) =>
+        String(info?.[field] ?? "").trim()
+      );
+      const productStepComplete = (products ?? []).some((item) => {
+        const name = String(item?.name ?? "").trim();
+        const price = toFiniteNumber(item?.price);
+        return Boolean(name) && price > 0;
+      });
+      const buckingStepComplete = (bucking ?? []).some((item) => {
+        const qty = toFiniteNumber(item?.qty);
+        const sqft = toFiniteNumber(item?.sqft);
+        return qty > 0 && sqft > 0;
+      });
+      const installStepComplete =
+        toFiniteNumber(estimatePayload?.totals?.total_contract_price) > 0;
+
+      return {
+        started:
+          projectStepComplete ||
+          productStepComplete ||
+          buckingStepComplete ||
+          installStepComplete,
+        complete:
+          projectStepComplete &&
+          productStepComplete &&
+          buckingStepComplete &&
+          installStepComplete,
+      };
+    }
+
+    if (
+      estimatePayload.values &&
+      typeof estimatePayload.values === "object" &&
+      !Array.isArray(estimatePayload.values)
+    ) {
+      const values = estimatePayload.values as Record<string, unknown>;
+      return {
+        started: hasAnyManualInput(values),
+        complete:
+          REQUIRED_MANUAL_INFO_FIELDS.every((field) =>
+            String(values[field] ?? "").trim()
+          ) && toFiniteNumber(values.total_contract_price) > 0,
+      };
+    }
+  }
+
+  const fallbackValues = estimateValues as Record<string, unknown>;
+  return {
+    started: hasAnyManualInput(fallbackValues),
+    complete:
+      REQUIRED_MANUAL_INFO_FIELDS.every((field) =>
+        String(fallbackValues[field] ?? "").trim()
+      ) && toFiniteNumber(fallbackValues.total_contract_price) > 0,
   };
 }
 
@@ -414,16 +508,12 @@ export default function HomePage() {
     }));
   }, [catalogTeam?.unitTypes]);
 
-  const hasEstimateValues = useMemo(() => {
-    if (estimatePayload?.values) {
-      return Object.values(estimatePayload.values).some((value) =>
-        String(value ?? "").trim()
-      );
-    }
-    return Object.values(estimateValues).some((value) =>
-      String(value ?? "").trim()
-    );
-  }, [estimatePayload, estimateValues]);
+  const manualEstimateProgress = useMemo(
+    () => getManualEstimateProgress(estimatePayload, estimateValues),
+    [estimatePayload, estimateValues]
+  );
+  const hasEstimateValues = manualEstimateProgress.complete;
+  const hasEstimateInput = manualEstimateProgress.started;
   const canGenerate = Boolean(
     templateConfig?.templatePdf?.url &&
       (estimateMode === "workbook" ? uploads.workbook : hasEstimateValues)
@@ -703,7 +793,7 @@ export default function HomePage() {
       id: "input",
       label:
         estimateMode === "estimate"
-          ? "Manual estimate is filled"
+          ? "Manual estimate is complete"
           : "Workbook is selected",
       done:
         estimateMode === "estimate" ? hasEstimateValues : Boolean(uploads.workbook),
@@ -2257,7 +2347,7 @@ export default function HomePage() {
                     <span className="text-right font-medium text-foreground">
                       {estimateName.trim() ||
                         selectedEstimate?.name ||
-                        (hasEstimateValues ? "Manual entry" : "Not started")}
+                        (hasEstimateInput ? "Manual entry" : "Not started")}
                     </span>
                   </div>
                 ) : (
