@@ -1,5 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { UTApi, UTFile } from "uploadthing/server";
+import type {
+  MasterTemplateConfig,
+  MasterTemplateInclusionMode,
+  MasterTemplatePage,
+} from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -10,6 +15,7 @@ type TemplatePayload = {
   name?: string;
   description?: string;
   templatePdf?: { name?: string; url?: string };
+  masterTemplate?: unknown;
   coords?: Record<string, any>;
   mapping?: Record<string, any>;
 };
@@ -19,7 +25,8 @@ type TemplateConfig = {
   id: string;
   name: string;
   description?: string;
-  templatePdf: { name: string; url: string };
+  templatePdf?: { name: string; url: string };
+  masterTemplate?: MasterTemplateConfig;
   coords: Record<string, any>;
   mapping?: Record<string, any>;
   createdAt: string;
@@ -34,9 +41,16 @@ export async function POST(request: NextRequest) {
     }
 
     const templatePdf = body.templatePdf;
-    if (!templatePdf?.url) {
+    const normalizedMasterTemplate = normalizeMasterTemplate(body.masterTemplate);
+    const hasTemplatePdf = Boolean(templatePdf?.url);
+    const hasMasterTemplatePages =
+      normalizedMasterTemplate.pages.length > 0;
+    if (!hasTemplatePdf && !hasMasterTemplatePages) {
       return NextResponse.json(
-        { error: "Template PDF URL is required." },
+        {
+          error:
+            "Provide either a template PDF URL or at least one master template page.",
+        },
         { status: 400 }
       );
     }
@@ -54,14 +68,17 @@ export async function POST(request: NextRequest) {
     const description = String(body.description ?? "").trim();
     const id = slugify(name);
     const config: TemplateConfig = {
-      version: 1,
+      version: hasMasterTemplatePages ? 2 : 1,
       id,
       name,
       description: description || undefined,
-      templatePdf: {
-        name: String(templatePdf.name ?? "template.pdf"),
-        url: templatePdf.url,
-      },
+      templatePdf: hasTemplatePdf
+        ? {
+            name: String(templatePdf?.name ?? "template.pdf"),
+            url: String(templatePdf?.url),
+          }
+        : undefined,
+      masterTemplate: hasMasterTemplatePages ? normalizedMasterTemplate : undefined,
       coords,
       mapping,
       createdAt: new Date().toISOString(),
@@ -96,4 +113,67 @@ function slugify(value: string) {
     .replace(/(^-|-$)+/g, "")
     .slice(0, 48);
   return safe || "template";
+}
+
+function normalizeMasterTemplate(value: unknown): MasterTemplateConfig {
+  const source =
+    value && typeof value === "object"
+      ? (value as { pages?: unknown }).pages
+      : null;
+  if (!Array.isArray(source)) {
+    return { version: 1, pages: [] };
+  }
+
+  const pages: MasterTemplatePage[] = source
+    .map((entry, index) => normalizeMasterTemplatePage(entry, index))
+    .filter(Boolean) as MasterTemplatePage[];
+
+  return {
+    version: 1,
+    pages,
+  };
+}
+
+function normalizeMasterTemplatePage(value: unknown, index: number) {
+  if (!value || typeof value !== "object") return null;
+  const page = value as Record<string, unknown>;
+  const rawMode = String(page.inclusionMode ?? "always").trim().toLowerCase();
+  const inclusionMode = (
+    ["always", "product", "vendor", "field"].includes(rawMode)
+      ? rawMode
+      : "always"
+  ) as MasterTemplateInclusionMode;
+
+  const sourcePdf =
+    page.sourcePdf && typeof page.sourcePdf === "object"
+      ? (page.sourcePdf as Record<string, unknown>)
+      : null;
+  const sourceUrl = String(sourcePdf?.url ?? "").trim();
+  const sourceName = String(sourcePdf?.name ?? "template.pdf").trim();
+  const sourcePage = Number(page.sourcePage ?? 1);
+  const dataBindings = Array.isArray(page.dataBindings)
+    ? page.dataBindings
+        .map((item) => String(item ?? "").trim())
+        .filter(Boolean)
+    : [];
+
+  return {
+    id: String(page.id ?? `page-${index + 1}`).trim() || `page-${index + 1}`,
+    title: String(page.title ?? `Page ${index + 1}`).trim() || `Page ${index + 1}`,
+    order: Number(page.order ?? index + 1),
+    coordsPageKey:
+      String(page.coordsPageKey ?? `page_${index + 1}`).trim() ||
+      `page_${index + 1}`,
+    sourcePdf: sourceUrl ? { name: sourceName, url: sourceUrl } : undefined,
+    sourcePage:
+      Number.isFinite(sourcePage) && sourcePage > 0
+        ? Math.trunc(sourcePage)
+        : 1,
+    inclusionMode,
+    conditionField: String(page.conditionField ?? "").trim() || undefined,
+    conditionValue: String(page.conditionValue ?? "").trim() || undefined,
+    vendorKey: String(page.vendorKey ?? "").trim() || undefined,
+    dataBindings: dataBindings.length ? dataBindings : undefined,
+    notes: String(page.notes ?? "").trim() || undefined,
+  } satisfies MasterTemplatePage;
 }

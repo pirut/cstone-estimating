@@ -37,12 +37,39 @@ export type UploadEndpoint =
   | "template_config"
   | "estimate";
 
+export type MasterTemplateInclusionMode =
+  | "always"
+  | "product"
+  | "vendor"
+  | "field";
+
+export type MasterTemplatePage = {
+  id: string;
+  title: string;
+  order: number;
+  coordsPageKey: string;
+  sourcePdf?: { name: string; url: string };
+  sourcePage?: number;
+  inclusionMode: MasterTemplateInclusionMode;
+  conditionField?: string;
+  conditionValue?: string;
+  vendorKey?: string;
+  dataBindings?: string[];
+  notes?: string;
+};
+
+export type MasterTemplateConfig = {
+  version: number;
+  pages: MasterTemplatePage[];
+};
+
 export type TemplateConfig = {
   version: number;
   id: string;
   name: string;
   description?: string;
-  templatePdf: { name: string; url: string };
+  templatePdf?: { name: string; url: string };
+  masterTemplate?: MasterTemplateConfig;
   coords: Record<string, any>;
   mapping?: Record<string, any>;
   createdAt: string;

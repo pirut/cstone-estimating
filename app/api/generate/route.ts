@@ -12,12 +12,33 @@ import {
   getPageFields,
   getSortedPageKeys,
   parsePageKey,
+  toPageKey,
 } from "@/lib/coordinates";
+import type { MasterTemplateInclusionMode } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const DOWNLOAD_TIMEOUT_MS = 20000;
+
+type NormalizedMasterTemplatePage = {
+  id: string;
+  title: string;
+  order: number;
+  coordsPageKey: string;
+  sourcePdf?: { name: string; url: string };
+  sourcePage: number;
+  inclusionMode: MasterTemplateInclusionMode;
+  conditionField?: string;
+  conditionValue?: string;
+  vendorKey?: string;
+  dataBindings: string[];
+};
+
+type TemplateAssembly = {
+  templateBuffer: Buffer;
+  renderPageKeys?: string[];
+};
 
 export async function POST(request: NextRequest) {
   try {
@@ -37,28 +58,30 @@ export async function POST(request: NextRequest) {
       body.coordsOverride && typeof body.coordsOverride === "object"
         ? body.coordsOverride
         : null;
+    const masterTemplatePages = normalizeMasterTemplatePages(
+      body.masterTemplate
+    );
+    const hasMasterTemplatePages = masterTemplatePages.length > 0;
 
     if (
-      !templatePdfUrl ||
+      (!templatePdfUrl && !hasMasterTemplatePages) ||
       (!workbookUrl && !estimateUrl && !estimatePayload)
     ) {
       return NextResponse.json(
         {
           error:
-            "templatePdfUrl and either workbookUrl or estimate data are required.",
+            "Provide templatePdfUrl or masterTemplate pages and either workbookUrl or estimate data.",
         },
         { status: 400 }
       );
     }
 
-    const templateBuffer = await downloadBuffer(
-      templatePdfUrl,
-      "Template PDF",
-      {
-        baseUrl: request.nextUrl.origin,
-        timeoutMs: DOWNLOAD_TIMEOUT_MS,
-      }
-    );
+    const templateBuffer = templatePdfUrl
+      ? await downloadBuffer(templatePdfUrl, "Template PDF", {
+          baseUrl: request.nextUrl.origin,
+          timeoutMs: DOWNLOAD_TIMEOUT_MS,
+        })
+      : null;
 
     const mappingConfig = mappingOverride
       ? mappingOverride
@@ -78,6 +101,8 @@ export async function POST(request: NextRequest) {
         : coordinatesDefault;
 
     let fieldValues: Record<string, string> = {};
+    let estimateDataForRules: Record<string, unknown> | null = null;
+    let sourceValuesForRules: Record<string, unknown> = {};
     if (estimatePayload || estimateUrl) {
       const estimateData = estimatePayload
         ? estimatePayload
@@ -85,7 +110,15 @@ export async function POST(request: NextRequest) {
             baseUrl: request.nextUrl.origin,
             timeoutMs: DOWNLOAD_TIMEOUT_MS,
           });
-      fieldValues = buildFieldValuesFromEstimate(estimateData, mappingConfig);
+      sourceValuesForRules = extractEstimateValues(estimateData);
+      fieldValues = buildFieldValuesFromSourceValues(
+        sourceValuesForRules,
+        mappingConfig
+      );
+      estimateDataForRules =
+        estimateData && typeof estimateData === "object"
+          ? (estimateData as Record<string, unknown>)
+          : null;
     } else {
       const workbookBuffer = await downloadBuffer(workbookUrl, "Workbook", {
         baseUrl: request.nextUrl.origin,
@@ -93,11 +126,31 @@ export async function POST(request: NextRequest) {
       });
       fieldValues = buildFieldValues(workbookBuffer, mappingConfig);
     }
+
+    let templateAssembly: TemplateAssembly | null = null;
+    if (hasMasterTemplatePages) {
+      templateAssembly = await assembleMasterTemplate({
+        pages: masterTemplatePages,
+        fallbackTemplateBuffer: templateBuffer,
+        baseUrl: request.nextUrl.origin,
+        fieldValues,
+        sourceValues: sourceValuesForRules,
+        estimateData: estimateDataForRules,
+      });
+    } else if (templateBuffer) {
+      templateAssembly = { templateBuffer };
+    }
+
+    if (!templateAssembly?.templateBuffer) {
+      throw new Error("No template pages were available for generation.");
+    }
+
     const outputPdf = await stampPdf(
-      templateBuffer,
+      templateAssembly.templateBuffer,
       coordsConfig,
       fieldValues,
-      request.nextUrl.origin
+      request.nextUrl.origin,
+      templateAssembly.renderPageKeys
     );
 
     return new NextResponse(outputPdf, {
@@ -147,7 +200,10 @@ function buildFieldValues(workbookBuffer: Buffer, mappingConfig: any) {
   return values;
 }
 
-function buildFieldValuesFromEstimate(estimateData: any, mappingConfig: any) {
+function buildFieldValuesFromSourceValues(
+  sourceValues: Record<string, unknown>,
+  mappingConfig: any
+) {
   const missingValue = mappingConfig.missing_value ?? "";
   const preparedByMap = mappingConfig.prepared_by_map ?? {};
   const fieldSpecs = (mappingConfig.fields ?? {}) as Record<
@@ -155,7 +211,6 @@ function buildFieldValuesFromEstimate(estimateData: any, mappingConfig: any) {
     { sheet?: string; cell?: string; format?: string }
   >;
 
-  const sourceValues = extractEstimateValues(estimateData);
   const values: Record<string, string> = {};
 
   for (const [fieldName, spec] of Object.entries(fieldSpecs)) {
@@ -217,13 +272,239 @@ function getCellValue(
   return cellData.v ?? null;
 }
 
+function normalizeMasterTemplatePages(value: unknown) {
+  const pages =
+    value && typeof value === "object"
+      ? (value as { pages?: unknown }).pages
+      : null;
+  if (!Array.isArray(pages)) return [] as NormalizedMasterTemplatePage[];
+
+  return pages
+    .map((entry, index) => normalizeMasterTemplatePage(entry, index))
+    .filter(Boolean) as NormalizedMasterTemplatePage[];
+}
+
+function normalizeMasterTemplatePage(value: unknown, index: number) {
+  if (!value || typeof value !== "object") return null;
+  const page = value as Record<string, unknown>;
+  const mode = String(page.inclusionMode ?? "always").trim().toLowerCase();
+  const inclusionMode = (
+    ["always", "product", "vendor", "field"].includes(mode) ? mode : "always"
+  ) as MasterTemplateInclusionMode;
+
+  const sourcePdf =
+    page.sourcePdf && typeof page.sourcePdf === "object"
+      ? (page.sourcePdf as Record<string, unknown>)
+      : null;
+  const sourceUrl = String(sourcePdf?.url ?? "").trim();
+
+  return {
+    id: String(page.id ?? `page-${index + 1}`).trim() || `page-${index + 1}`,
+    title: String(page.title ?? `Page ${index + 1}`).trim() || `Page ${index + 1}`,
+    order: Number(page.order ?? index + 1),
+    coordsPageKey:
+      String(page.coordsPageKey ?? toPageKey(index + 1)).trim() ||
+      toPageKey(index + 1),
+    sourcePdf: sourceUrl
+      ? { name: String(sourcePdf?.name ?? "template.pdf"), url: sourceUrl }
+      : undefined,
+    sourcePage: Math.max(1, Math.trunc(Number(page.sourcePage ?? 1) || 1)),
+    inclusionMode,
+    conditionField: String(page.conditionField ?? "").trim() || undefined,
+    conditionValue: String(page.conditionValue ?? "").trim() || undefined,
+    vendorKey: String(page.vendorKey ?? "").trim() || undefined,
+    dataBindings: Array.isArray(page.dataBindings)
+      ? page.dataBindings
+          .map((binding) => String(binding ?? "").trim())
+          .filter(Boolean)
+      : [],
+  } satisfies NormalizedMasterTemplatePage;
+}
+
+async function assembleMasterTemplate({
+  pages,
+  fallbackTemplateBuffer,
+  baseUrl,
+  fieldValues,
+  sourceValues,
+  estimateData,
+}: {
+  pages: NormalizedMasterTemplatePage[];
+  fallbackTemplateBuffer: Buffer | null;
+  baseUrl: string;
+  fieldValues: Record<string, string>;
+  sourceValues: Record<string, unknown>;
+  estimateData: Record<string, unknown> | null;
+}): Promise<TemplateAssembly> {
+  const selected = pages
+    .slice()
+    .sort((a, b) => a.order - b.order)
+    .filter((page) =>
+      shouldIncludeMasterTemplatePage(page, {
+        fieldValues,
+        sourceValues,
+        estimateData,
+      })
+    );
+
+  if (!selected.length) {
+    if (!fallbackTemplateBuffer) {
+      throw new Error("Master template rules excluded every page.");
+    }
+    return { templateBuffer: fallbackTemplateBuffer };
+  }
+
+  const assembled = await PDFDocument.create();
+  const downloadedTemplateCache = new Map<string, PDFDocument>();
+  const fallbackTemplateDoc = fallbackTemplateBuffer
+    ? await PDFDocument.load(fallbackTemplateBuffer)
+    : null;
+  const renderPageKeys: string[] = [];
+
+  for (const page of selected) {
+    let sourceDoc: PDFDocument | null = null;
+    if (page.sourcePdf?.url) {
+      const cached = downloadedTemplateCache.get(page.sourcePdf.url);
+      if (cached) {
+        sourceDoc = cached;
+      } else {
+        const sourceBuffer = await downloadBuffer(
+          page.sourcePdf.url,
+          `Template page ${page.title}`,
+          {
+            baseUrl,
+            timeoutMs: DOWNLOAD_TIMEOUT_MS,
+          }
+        );
+        sourceDoc = await PDFDocument.load(sourceBuffer);
+        downloadedTemplateCache.set(page.sourcePdf.url, sourceDoc);
+      }
+    } else if (fallbackTemplateDoc) {
+      sourceDoc = fallbackTemplateDoc;
+    }
+
+    if (!sourceDoc) continue;
+
+    const sourcePageIndex = Math.min(
+      Math.max(page.sourcePage - 1, 0),
+      Math.max(sourceDoc.getPageCount() - 1, 0)
+    );
+    const copiedPages = await assembled.copyPages(sourceDoc, [sourcePageIndex]);
+    const copiedPage = copiedPages[0];
+    if (!copiedPage) continue;
+    assembled.addPage(copiedPage);
+    renderPageKeys.push(page.coordsPageKey);
+  }
+
+  if (!assembled.getPageCount()) {
+    if (!fallbackTemplateBuffer) {
+      throw new Error("Master template did not resolve to any pages.");
+    }
+    return { templateBuffer: fallbackTemplateBuffer };
+  }
+
+  const buffer = Buffer.from(await assembled.save());
+  return { templateBuffer: buffer, renderPageKeys };
+}
+
+function shouldIncludeMasterTemplatePage(
+  page: NormalizedMasterTemplatePage,
+  context: {
+    fieldValues: Record<string, string>;
+    sourceValues: Record<string, unknown>;
+    estimateData: Record<string, unknown> | null;
+  }
+) {
+  if (page.inclusionMode === "always") return true;
+
+  if (page.inclusionMode === "field") {
+    const fieldKey = page.conditionField || page.dataBindings[0];
+    if (!fieldKey) return true;
+    const fieldValue =
+      context.fieldValues[fieldKey] ??
+      stringifyUnknown(context.sourceValues[fieldKey]);
+    if (!fieldValue?.trim()) return false;
+    if (!page.conditionValue) return true;
+    return compareContains(fieldValue, page.conditionValue);
+  }
+
+  const products = getEstimateProducts(context.estimateData);
+  if (!products.length) {
+    // When product/vendor context is unavailable, keep page to avoid false negatives.
+    return true;
+  }
+
+  if (page.inclusionMode === "product") {
+    const productQuery = page.conditionValue;
+    if (!productQuery) return true;
+    return products.some((product) =>
+      getProductSearchTokens(product).some((token) =>
+        compareContains(token, productQuery)
+      )
+    );
+  }
+
+  if (page.inclusionMode === "vendor") {
+    const vendorQuery = page.conditionValue || page.vendorKey;
+    if (!vendorQuery) return true;
+    return products.some((product) => {
+      const vendorTokens = [
+        product.vendor,
+        product.manufacturer,
+        product.supplier,
+      ].map((token) => stringifyUnknown(token));
+      return vendorTokens.some((token) => compareContains(token, vendorQuery));
+    });
+  }
+
+  return true;
+}
+
+function getEstimateProducts(estimateData: Record<string, unknown> | null) {
+  if (!estimateData) return [] as Record<string, unknown>[];
+  const rawProducts = estimateData.products;
+  if (!Array.isArray(rawProducts)) return [] as Record<string, unknown>[];
+  return rawProducts.filter(
+    (item): item is Record<string, unknown> =>
+      Boolean(item) && typeof item === "object" && !Array.isArray(item)
+  );
+}
+
+function getProductSearchTokens(product: Record<string, unknown>) {
+  return [
+    stringifyUnknown(product.name),
+    stringifyUnknown(product.product),
+    stringifyUnknown(product.vendor),
+    stringifyUnknown(product.manufacturer),
+    stringifyUnknown(product.supplier),
+    stringifyUnknown(product.sku),
+  ].filter(Boolean);
+}
+
+function stringifyUnknown(value: unknown) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string") return value;
+  if (typeof value === "number" || typeof value === "boolean") {
+    return String(value);
+  }
+  return "";
+}
+
+function compareContains(value: string, query: string) {
+  const left = value.trim().toLowerCase();
+  const right = query.trim().toLowerCase();
+  if (!right) return true;
+  return left.includes(right);
+}
+
 // formatting helpers moved to lib/formatting
 
 async function stampPdf(
   templateBuffer: Buffer,
   coordsConfig: Record<string, any>,
   fieldValues: Record<string, string>,
-  baseUrl: string
+  baseUrl: string,
+  renderPageKeys?: string[]
 ) {
   const pdfDoc = await PDFDocument.load(templateBuffer);
   pdfDoc.registerFontkit(fontkit);
@@ -241,14 +522,21 @@ async function stampPdf(
   const fontCache = new Map<string, any>();
   const fontsConfig = coordsConfig.fonts ?? {};
 
-  for (const pageKey of getSortedPageKeys(coordsConfig)) {
-    const pageNumber = parsePageKey(pageKey);
-    if (!pageNumber) continue;
-    const pageIndex = pageNumber - 1;
-    const page = pages[pageIndex];
+  const stampPlan = renderPageKeys?.length
+    ? renderPageKeys.map((pageKey, index) => ({ pageKey, pageIndex: index }))
+    : getSortedPageKeys(coordsConfig)
+        .map((pageKey) => {
+          const pageNumber = parsePageKey(pageKey);
+          if (!pageNumber) return null;
+          return { pageKey, pageIndex: pageNumber - 1 };
+        })
+        .filter(Boolean) as Array<{ pageKey: string; pageIndex: number }>;
+
+  for (const planEntry of stampPlan) {
+    const page = pages[planEntry.pageIndex];
     if (!page) continue;
 
-    const fields = getPageFields(coordsConfig, pageKey) as Record<
+    const fields = getPageFields(coordsConfig, planEntry.pageKey) as Record<
       string,
       CoordSpec
     >;

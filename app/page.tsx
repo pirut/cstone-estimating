@@ -538,8 +538,14 @@ export default function HomePage() {
   );
   const hasEstimateValues = manualEstimateProgress.complete;
   const hasEstimateInput = manualEstimateProgress.started;
+  const hasMasterTemplatePages = Boolean(
+    templateConfig?.masterTemplate?.pages?.length
+  );
+  const hasTemplateForGeneration = Boolean(
+    templateConfig?.templatePdf?.url || hasMasterTemplatePages
+  );
   const canGenerate = Boolean(
-    templateConfig?.templatePdf?.url &&
+    hasTemplateForGeneration &&
       (estimateMode === "workbook" ? uploads.workbook : hasEstimateValues)
   );
   const canDownloadPlanningLines = Boolean(
@@ -825,7 +831,7 @@ export default function HomePage() {
     {
       id: "template",
       label: "Template is selected",
-      done: Boolean(templateConfig?.templatePdf?.url),
+      done: hasTemplateForGeneration,
     },
     {
       id: "generate",
@@ -1053,7 +1059,8 @@ export default function HomePage() {
 
   const handleGenerate = async () => {
     setError(null);
-    if (!templateConfig?.templatePdf?.url) {
+    const hasTemplatePages = Boolean(templateConfig?.masterTemplate?.pages?.length);
+    if (!templateConfig?.templatePdf?.url && !hasTemplatePages) {
       setError("Select a template from the library.");
       return;
     }
@@ -1085,7 +1092,8 @@ export default function HomePage() {
         body: JSON.stringify({
           workbookUrl:
             estimateMode === "workbook" ? uploads.workbook?.url : undefined,
-          templatePdfUrl: templateConfig.templatePdf.url,
+          templatePdfUrl: templateConfig?.templatePdf?.url,
+          masterTemplate: templateConfig?.masterTemplate,
           mappingOverride,
           coordsOverride,
           estimate:
@@ -1559,15 +1567,24 @@ export default function HomePage() {
         throw new Error("Failed to load template configuration.");
       }
       const data = (await response.json()) as TemplateConfig;
-      if (!data?.templatePdf?.url) {
-        throw new Error("Template configuration is missing a PDF.");
+      const hasTemplatePdf = Boolean(data?.templatePdf?.url);
+      const hasMasterTemplatePages = Boolean(data?.masterTemplate?.pages?.length);
+      if (!hasTemplatePdf && !hasMasterTemplatePages) {
+        throw new Error("Template configuration is missing template pages.");
       }
       setTemplateConfig(data);
       setSelectedTemplateConfigKey(item.key);
-      setUploads((prev) => ({
-        ...prev,
-        template: { name: data.templatePdf.name, url: data.templatePdf.url },
-      }));
+      setUploads((prev) => {
+        if (!data.templatePdf?.url) {
+          const next = { ...prev };
+          delete next.template;
+          return next;
+        }
+        return {
+          ...prev,
+          template: { name: data.templatePdf.name, url: data.templatePdf.url },
+        };
+      });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setTemplateConfigError(message);
@@ -1589,7 +1606,7 @@ export default function HomePage() {
             </Badge>
             <CardTitle className="text-2xl font-serif">Template Library</CardTitle>
             <CardDescription>
-              Apply a saved PDF template with its calibrated coordinates.
+              Apply a saved template stack with calibrated coordinates.
             </CardDescription>
           </div>
           <Badge variant="outline" className="bg-background/80">

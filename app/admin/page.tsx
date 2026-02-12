@@ -39,7 +39,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import type { UploadedFile } from "@/lib/types";
+import type {
+  MasterTemplateConfig,
+  MasterTemplateInclusionMode,
+  MasterTemplatePage,
+  UploadedFile,
+} from "@/lib/types";
 import { db, instantAppId } from "@/lib/instant";
 import {
   SignInButton,
@@ -61,7 +66,9 @@ import {
   ArrowRight,
   ArrowUp,
   FileDown,
+  GripVertical,
   Loader2,
+  Plus,
   RefreshCw,
   Trash2,
 } from "lucide-react";
@@ -112,6 +119,7 @@ type CoordField = {
 
 type CoordsConfig = Record<string, any>;
 type CellPreviewMap = Record<string, unknown>;
+type MasterTemplatePageDraft = MasterTemplatePage;
 
 const LIBRARY_CONFIG: Record<
   AdminLibraryType,
@@ -173,6 +181,15 @@ export default function AdminPage() {
   });
   const [workbookFile, setWorkbookFile] = useState<UploadedFile | null>(null);
   const [templateFile, setTemplateFile] = useState<UploadedFile | null>(null);
+  const [masterTemplatePages, setMasterTemplatePages] = useState<
+    MasterTemplatePageDraft[]
+  >([]);
+  const [selectedMasterPageId, setSelectedMasterPageId] = useState<string | null>(
+    null
+  );
+  const [draggingMasterPageId, setDraggingMasterPageId] = useState<string | null>(
+    null
+  );
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [cellPreviews, setCellPreviews] = useState<CellPreviewMap>({});
   const [workbookLoading, setWorkbookLoading] = useState(false);
@@ -452,8 +469,11 @@ export default function AdminPage() {
     const map: Record<string, string> = {};
     const preparedByMap = mappingConfig.prepared_by_map ?? {};
     const missingValue = String(mappingConfig.missing_value ?? "");
+    const coordsPageKey =
+      masterTemplatePages.find((page) => page.id === selectedMasterPageId)
+        ?.coordsPageKey ?? previewPage;
     const fields =
-      (coordsConfig[previewPage] as Record<string, CoordField>) ?? {};
+      (coordsConfig[coordsPageKey] as Record<string, CoordField>) ?? {};
     Object.keys(fields).forEach((fieldName) => {
       let raw = cellPreviews[fieldName];
       let format = mappingConfig.fields?.[fieldName]?.format;
@@ -470,7 +490,14 @@ export default function AdminPage() {
       map[fieldName] = formatted ?? missingValue;
     });
     return map;
-  }, [coordsConfig, previewPage, cellPreviews, mappingConfig]);
+  }, [
+    coordsConfig,
+    cellPreviews,
+    mappingConfig,
+    masterTemplatePages,
+    selectedMasterPageId,
+    previewPage,
+  ]);
 
   useEffect(() => {
     if (!hasTeamAdminAccess) return;
@@ -481,8 +508,14 @@ export default function AdminPage() {
 
   const handleGenerate = async () => {
     setCalibrationError(null);
-    if (!workbookFile || !templateFile) {
-      setCalibrationError("Upload both the workbook and template PDF.");
+    const masterTemplate = buildMasterTemplateConfig(masterTemplatePages);
+    const hasMasterPages = masterTemplate.pages.length > 0;
+    if (!workbookFile) {
+      setCalibrationError("Upload the workbook before generating.");
+      return;
+    }
+    if (!templateFile && !hasMasterPages) {
+      setCalibrationError("Select a template PDF or configure master template pages.");
       return;
     }
 
@@ -495,7 +528,8 @@ export default function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           workbookUrl: workbookFile.url,
-          templatePdfUrl: templateFile.url,
+          templatePdfUrl: templateFile?.url,
+          masterTemplate: hasMasterPages ? masterTemplate : undefined,
           mappingOverride: mappingConfig,
           coordsOverride: coordsConfig,
         }),
@@ -535,12 +569,27 @@ export default function AdminPage() {
     setTemplateSaveError(null);
     setTemplateSaveStatus(null);
     setTemplateLoadError(null);
-    if (!templateFile?.url) {
-      setTemplateSaveError("Select a template PDF before saving.");
-      return;
-    }
     if (!templateName.trim()) {
       setTemplateSaveError("Template name is required.");
+      return;
+    }
+    const masterTemplate = buildMasterTemplateConfig(masterTemplatePages);
+    const hasMasterPages = masterTemplate.pages.length > 0;
+    const hasTemplatePdf = Boolean(templateFile?.url);
+    if (!hasTemplatePdf && !hasMasterPages) {
+      setTemplateSaveError(
+        "Select a template PDF or create at least one master template page."
+      );
+      return;
+    }
+    if (
+      hasMasterPages &&
+      !hasTemplatePdf &&
+      masterTemplate.pages.some((page) => !page.sourcePdf?.url)
+    ) {
+      setTemplateSaveError(
+        "Each master page needs a source PDF when no base template PDF is selected."
+      );
       return;
     }
 
@@ -552,7 +601,8 @@ export default function AdminPage() {
         body: JSON.stringify({
           name: templateName.trim(),
           description: templateDescription.trim() || undefined,
-          templatePdf: templateFile,
+          templatePdf: hasTemplatePdf ? templateFile : undefined,
+          masterTemplate: hasMasterPages ? masterTemplate : undefined,
           coords: coordsConfig,
           mapping: mappingConfig,
         }),
@@ -598,24 +648,44 @@ export default function AdminPage() {
         name?: string;
         description?: string;
         templatePdf?: { name?: string; url?: string };
+        masterTemplate?: MasterTemplateConfig;
         coords?: Record<string, any>;
         mapping?: Record<string, any>;
       };
-      if (!data?.templatePdf?.url || !data?.coords) {
+      if (
+        !data?.coords ||
+        (!data?.templatePdf?.url && !data?.masterTemplate?.pages?.length)
+      ) {
         throw new Error("Template configuration is incomplete.");
       }
       setTemplateName(data.name ?? "");
       setTemplateDescription(data.description ?? "");
-      setTemplateFile({
-        name: data.templatePdf.name ?? "template.pdf",
-        url: data.templatePdf.url,
-      });
+      setTemplateFile(
+        data.templatePdf?.url
+          ? {
+              name: data.templatePdf.name ?? "template.pdf",
+              url: data.templatePdf.url,
+            }
+          : null
+      );
       if (data.coords) {
         setCoordsConfig(data.coords);
       }
       if (data.mapping) {
         setMappingConfig(data.mapping as MappingConfig);
       }
+      const loadedMasterPages = normalizeLoadedMasterTemplatePages(
+        data.masterTemplate,
+        data.coords,
+        data.templatePdf?.url
+          ? {
+              name: data.templatePdf?.name ?? "template.pdf",
+              url: data.templatePdf.url,
+            }
+          : null
+      );
+      setMasterTemplatePages(loadedMasterPages);
+      setSelectedMasterPageId(loadedMasterPages[0]?.id ?? null);
       setEditingTemplateKey(item.key);
       setSelectedTemplateKey(item.key);
       setTemplateSaveStatus("Template loaded for editing.");
@@ -709,22 +779,32 @@ export default function AdminPage() {
 
   const nudgeSelectedField = (dx: number, dy: number) => {
     if (!selectedField) return;
-    const fields = coordsConfig[previewPage] as Record<string, CoordField> | undefined;
+    const coordsPageKey =
+      masterTemplatePages.find((page) => page.id === selectedMasterPageId)
+        ?.coordsPageKey ?? previewPage;
+    const fields = coordsConfig[coordsPageKey] as
+      | Record<string, CoordField>
+      | undefined;
     const current = fields?.[selectedField];
     if (!current) return;
     const nextX = (current.x ?? 0) + dx;
     const nextY = (current.y ?? 0) + dy;
-    updateCoordField(previewPage, selectedField, { x: nextX, y: nextY });
+    updateCoordField(coordsPageKey, selectedField, { x: nextX, y: nextY });
   };
 
   const snapSelectedField = () => {
     if (!selectedField || gridSize <= 0) return;
-    const fields = coordsConfig[previewPage] as Record<string, CoordField> | undefined;
+    const coordsPageKey =
+      masterTemplatePages.find((page) => page.id === selectedMasterPageId)
+        ?.coordsPageKey ?? previewPage;
+    const fields = coordsConfig[coordsPageKey] as
+      | Record<string, CoordField>
+      | undefined;
     const current = fields?.[selectedField];
     if (!current) return;
     const nextX = snapToGridValue(current.x ?? 0, gridSize);
     const nextY = snapToGridValue(current.y ?? 0, gridSize);
-    updateCoordField(previewPage, selectedField, { x: nextX, y: nextY });
+    updateCoordField(coordsPageKey, selectedField, { x: nextX, y: nextY });
   };
 
   const configuredPageKeys = useMemo(
@@ -748,11 +828,23 @@ export default function AdminPage() {
       return leftPage - rightPage;
     });
   }, [configuredPageKeys, templatePageKeys]);
+  const activeMasterPage = useMemo(
+    () =>
+      masterTemplatePages.find((page) => page.id === selectedMasterPageId) ?? null,
+    [masterTemplatePages, selectedMasterPageId]
+  );
+  const activeCoordsPageKey = activeMasterPage?.coordsPageKey ?? previewPage;
+  const previewDocumentUrl = activeMasterPage?.sourcePdf?.url ?? templateFile?.url;
+  const previewDocumentPageKey = toPageKey(
+    activeMasterPage?.sourcePage ?? parsePageKey(previewPage) ?? 1
+  );
   const previewPageFields = useMemo(
     () =>
-      ((coordsConfig[previewPage] as Record<string, CoordField> | undefined) ??
+      ((coordsConfig[activeCoordsPageKey] as
+        | Record<string, CoordField>
+        | undefined) ??
       {}) as Record<string, CoordField>,
-    [coordsConfig, previewPage]
+    [coordsConfig, activeCoordsPageKey]
   );
   const availableStampFields = useMemo(() => {
     const result: string[] = [];
@@ -788,23 +880,82 @@ export default function AdminPage() {
     setCoordsEditorError(null);
   };
 
+  const updateMasterTemplatePage = (
+    pageId: string,
+    updates: Partial<MasterTemplatePageDraft>
+  ) => {
+    setMasterTemplatePages((prev) =>
+      prev.map((page) => {
+        if (page.id !== pageId) return page;
+        return { ...page, ...updates };
+      })
+    );
+  };
+
+  const addMasterTemplatePage = () => {
+    const highestPage = pageKeys.reduce((max, pageKey) => {
+      const pageNumber = parsePageKey(pageKey) ?? 0;
+      return Math.max(max, pageNumber);
+    }, 0);
+    const nextPageNumber = highestPage + 1;
+    const nextCoordsPageKey = toPageKey(nextPageNumber);
+    addPage(nextPageNumber);
+    const nextPage: MasterTemplatePageDraft = {
+      id: makeId(),
+      title: `Page ${nextPageNumber}`,
+      order: masterTemplatePages.length + 1,
+      coordsPageKey: nextCoordsPageKey,
+      sourcePdf: templateFile ?? undefined,
+      sourcePage: 1,
+      inclusionMode: "always",
+      dataBindings: [],
+    };
+    setMasterTemplatePages((prev) => [...prev, nextPage]);
+    setSelectedMasterPageId(nextPage.id);
+  };
+
+  const removeMasterTemplatePage = (pageId: string) => {
+    setMasterTemplatePages((prev) => {
+      const next = prev
+        .filter((page) => page.id !== pageId)
+        .map((page, index) => ({ ...page, order: index + 1 }));
+      return next;
+    });
+    setSelectedMasterPageId((prev) => (prev === pageId ? null : prev));
+  };
+
+  const moveMasterTemplatePage = (sourceId: string, targetId: string) => {
+    if (sourceId === targetId) return;
+    setMasterTemplatePages((prev) => {
+      const sourceIndex = prev.findIndex((page) => page.id === sourceId);
+      const targetIndex = prev.findIndex((page) => page.id === targetId);
+      if (sourceIndex < 0 || targetIndex < 0) return prev;
+      const next = prev.slice();
+      const [moved] = next.splice(sourceIndex, 1);
+      if (!moved) return prev;
+      next.splice(targetIndex, 0, moved);
+      return next.map((page, index) => ({ ...page, order: index + 1 }));
+    });
+  };
+
   const addFieldToCurrentPage = (fieldName: string) => {
     const nextField = String(fieldName ?? "").trim();
     if (!nextField) {
       setCoordsEditorError("Enter or select a field key to add.");
       return;
     }
-    if (!parsePageKey(previewPage)) {
+    if (!parsePageKey(activeCoordsPageKey)) {
       setCoordsEditorError("Select a valid page before adding fields.");
       return;
     }
     setCoordsConfig((prev) => {
       const page =
-        (prev[previewPage] as Record<string, CoordField> | undefined) ?? {};
+        (prev[activeCoordsPageKey] as Record<string, CoordField> | undefined) ??
+        {};
       if (page[nextField]) return prev;
       return {
         ...prev,
-        [previewPage]: {
+        [activeCoordsPageKey]: {
           ...page,
           [nextField]: {
             x: 36,
@@ -827,13 +978,14 @@ export default function AdminPage() {
     if (!selectedField) return;
     setCoordsConfig((prev) => {
       const page =
-        (prev[previewPage] as Record<string, CoordField> | undefined) ?? {};
+        (prev[activeCoordsPageKey] as Record<string, CoordField> | undefined) ??
+        {};
       if (!page[selectedField]) return prev;
       const nextPage = { ...page };
       delete nextPage[selectedField];
       return {
         ...prev,
-        [previewPage]: nextPage,
+        [activeCoordsPageKey]: nextPage,
       };
     });
     setSelectedField(null);
@@ -841,11 +993,11 @@ export default function AdminPage() {
   };
 
   const removeCurrentPage = () => {
-    if (!parsePageKey(previewPage)) return;
+    if (!parsePageKey(activeCoordsPageKey)) return;
     setCoordsConfig((prev) => {
-      if (!prev[previewPage]) return prev;
+      if (!prev[activeCoordsPageKey]) return prev;
       const next = { ...prev };
-      delete next[previewPage];
+      delete next[activeCoordsPageKey];
       return next;
     });
     setCoordsEditorError(null);
@@ -880,6 +1032,26 @@ export default function AdminPage() {
       setPreviewPage(pageKeys[0]);
     }
   }, [pageKeys, previewPage]);
+
+  useEffect(() => {
+    if (!masterTemplatePages.length) {
+      setSelectedMasterPageId(null);
+      return;
+    }
+    if (
+      !selectedMasterPageId ||
+      !masterTemplatePages.some((page) => page.id === selectedMasterPageId)
+    ) {
+      setSelectedMasterPageId(masterTemplatePages[0].id);
+    }
+  }, [masterTemplatePages, selectedMasterPageId]);
+
+  useEffect(() => {
+    if (!activeMasterPage?.coordsPageKey) return;
+    if (previewPage !== activeMasterPage.coordsPageKey) {
+      setPreviewPage(activeMasterPage.coordsPageKey);
+    }
+  }, [activeMasterPage?.coordsPageKey, previewPage]);
 
   useEffect(() => {
     const fieldNames = Object.keys(previewPageFields);
@@ -930,7 +1102,16 @@ export default function AdminPage() {
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedField, nudgeStep, previewPage, coordsConfig, snapToGrid, gridSize]);
+  }, [
+    selectedField,
+    nudgeStep,
+    previewPage,
+    coordsConfig,
+    snapToGrid,
+    gridSize,
+    selectedMasterPageId,
+    masterTemplatePages,
+  ]);
 
   const renderAccessGate = () => {
     if (!clerkEnabled) {
@@ -1186,8 +1367,8 @@ export default function AdminPage() {
                   Template Builder
                 </CardTitle>
                 <CardDescription>
-                  Save the selected PDF with the current coordinates and mapping
-                  as a reusable template.
+                  Save your master template stack with coordinates, rules, and
+                  data mapping as a reusable template.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1281,8 +1462,10 @@ export default function AdminPage() {
                 ) : null}
                 <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
                   <span>
-                    Uses: {templateFile?.name ?? "no PDF selected"}
+                    Base PDF: {templateFile?.name ?? "none selected"}
                   </span>
+                  <span>•</span>
+                  <span>{masterTemplatePages.length} master page(s)</span>
                   <span>•</span>
                   <span>{configuredPageKeys.length} configured page(s)</span>
                 </div>
@@ -1310,6 +1493,331 @@ export default function AdminPage() {
                       Update existing template
                     </Button>
                   ) : null}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/60 bg-card/80 shadow-elevated">
+              <CardHeader>
+                <CardTitle className="text-2xl font-serif">
+                  Master Template Studio
+                </CardTitle>
+                <CardDescription>
+                  Drag pages into order, assign vendor/product rules, and nudge
+                  calibrated fields over a large PDF preview.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                    <Badge variant="outline" className="bg-background/80">
+                      {masterTemplatePages.length} page
+                      {masterTemplatePages.length === 1 ? "" : "s"}
+                    </Badge>
+                    <Badge variant="outline" className="bg-background/80">
+                      {
+                        masterTemplatePages.filter(
+                          (page) => page.inclusionMode === "always"
+                        ).length
+                      }{" "}
+                      always-on
+                    </Badge>
+                    <Badge variant="outline" className="bg-background/80">
+                      {
+                        masterTemplatePages.filter(
+                          (page) => page.inclusionMode !== "always"
+                        ).length
+                      }{" "}
+                      conditional
+                    </Badge>
+                  </div>
+                  <Button variant="accent" size="sm" onClick={addMasterTemplatePage}>
+                    <Plus className="h-4 w-4" />
+                    Add master page
+                  </Button>
+                </div>
+                <div className="grid gap-4 xl:grid-cols-[0.65fr_1.35fr]">
+                  <div className="space-y-3 rounded-xl border border-border/60 bg-background/70 p-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                      Page stack
+                    </p>
+                    <ScrollArea className="h-[620px] rounded-lg border border-border/60 bg-background/80">
+                      <div className="space-y-2 p-2">
+                        {masterTemplatePages.length ? (
+                          masterTemplatePages
+                            .slice()
+                            .sort((left, right) => left.order - right.order)
+                            .map((page) => (
+                              <div
+                                key={page.id}
+                                draggable
+                                onDragStart={() => setDraggingMasterPageId(page.id)}
+                                onDragEnd={() => setDraggingMasterPageId(null)}
+                                onDragOver={(event) => event.preventDefault()}
+                                onDrop={() => {
+                                  if (!draggingMasterPageId) return;
+                                  moveMasterTemplatePage(draggingMasterPageId, page.id);
+                                  setDraggingMasterPageId(null);
+                                }}
+                                className={cn(
+                                  "cursor-pointer rounded-lg border px-3 py-2 transition",
+                                  selectedMasterPageId === page.id
+                                    ? "border-accent/70 bg-accent/10"
+                                    : "border-border/60 bg-background hover:border-accent/40"
+                                )}
+                                onClick={() => setSelectedMasterPageId(page.id)}
+                              >
+                                <div className="flex items-start justify-between gap-2">
+                                  <div className="flex items-center gap-2">
+                                    <GripVertical className="h-4 w-4 text-muted-foreground" />
+                                    <div>
+                                      <p className="text-sm font-semibold text-foreground">
+                                        {page.title || "Untitled page"}
+                                      </p>
+                                      <p className="text-[11px] text-muted-foreground">
+                                        {page.coordsPageKey.toUpperCase()} ·{" "}
+                                        {page.inclusionMode}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={(event) => {
+                                      event.stopPropagation();
+                                      removeMasterTemplatePage(page.id);
+                                    }}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))
+                        ) : (
+                          <div className="px-3 py-4 text-xs text-muted-foreground">
+                            Add pages to build your reusable estimate stack.
+                          </div>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </div>
+
+                  <div className="space-y-3 rounded-xl border border-border/60 bg-background/70 p-4">
+                    {activeMasterPage ? (
+                      <>
+                        <div className="grid gap-3 md:grid-cols-2">
+                          <div className="space-y-2">
+                            <label className="text-xs text-muted-foreground">
+                              Page title
+                            </label>
+                            <Input
+                              value={activeMasterPage.title}
+                              onChange={(event) =>
+                                updateMasterTemplatePage(activeMasterPage.id, {
+                                  title: event.target.value,
+                                })
+                              }
+                              placeholder="Vendor cover sheet"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-xs text-muted-foreground">
+                              Coordinates page key
+                            </label>
+                            <Input
+                              value={activeMasterPage.coordsPageKey}
+                              onChange={(event) =>
+                                updateMasterTemplatePage(activeMasterPage.id, {
+                                  coordsPageKey: event.target.value.trim(),
+                                })
+                              }
+                              placeholder="page_1"
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-xs text-muted-foreground">
+                              Source PDF page
+                            </label>
+                            <NumberField
+                              label=""
+                              value={activeMasterPage.sourcePage}
+                              onChange={(value) =>
+                                updateMasterTemplatePage(activeMasterPage.id, {
+                                  sourcePage: Math.max(1, Math.trunc(value || 1)),
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-xs text-muted-foreground">
+                              Inclusion mode
+                            </label>
+                            <Select
+                              value={activeMasterPage.inclusionMode}
+                              onValueChange={(value) =>
+                                updateMasterTemplatePage(activeMasterPage.id, {
+                                  inclusionMode:
+                                    value as MasterTemplateInclusionMode,
+                                })
+                              }
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select mode" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="always">Always include</SelectItem>
+                                <SelectItem value="product">
+                                  Include by product
+                                </SelectItem>
+                                <SelectItem value="vendor">
+                                  Include by vendor
+                                </SelectItem>
+                                <SelectItem value="field">
+                                  Include by data field
+                                </SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2 md:col-span-2">
+                            <label className="text-xs text-muted-foreground">
+                              Source PDF file
+                            </label>
+                            <Select
+                              value={
+                                activeMasterPage.sourcePdf?.url
+                                  ? activeMasterPage.sourcePdf.url
+                                  : "__none__"
+                              }
+                              onValueChange={(value) => {
+                                if (value === "__none__") {
+                                  updateMasterTemplatePage(activeMasterPage.id, {
+                                    sourcePdf: undefined,
+                                  });
+                                  return;
+                                }
+                                const selectedPdf = libraries.template.items.find(
+                                  (item) => item.url === value
+                                );
+                                if (!selectedPdf) return;
+                                updateMasterTemplatePage(activeMasterPage.id, {
+                                  sourcePdf: {
+                                    name: selectedPdf.name,
+                                    url: selectedPdf.url,
+                                  },
+                                });
+                              }}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select source PDF" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">
+                                  No source selected
+                                </SelectItem>
+                                {templateFile?.url &&
+                                !libraries.template.items.some(
+                                  (item) => item.url === templateFile.url
+                                ) ? (
+                                  <SelectItem value={templateFile.url}>
+                                    {templateFile.name} (selected template)
+                                  </SelectItem>
+                                ) : null}
+                                {libraries.template.items.map((item) => (
+                                  <SelectItem key={item.key} value={item.url}>
+                                    {item.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          {activeMasterPage.inclusionMode !== "always" ? (
+                            <div className="space-y-2">
+                              <label className="text-xs text-muted-foreground">
+                                Condition value
+                              </label>
+                              <Input
+                                value={activeMasterPage.conditionValue ?? ""}
+                                onChange={(event) =>
+                                  updateMasterTemplatePage(activeMasterPage.id, {
+                                    conditionValue: event.target.value,
+                                  })
+                                }
+                                placeholder="ex: Simonton, impact windows, true"
+                              />
+                            </div>
+                          ) : null}
+                          {activeMasterPage.inclusionMode === "field" ? (
+                            <div className="space-y-2">
+                              <label className="text-xs text-muted-foreground">
+                                Condition field
+                              </label>
+                              <Input
+                                value={activeMasterPage.conditionField ?? ""}
+                                onChange={(event) =>
+                                  updateMasterTemplatePage(activeMasterPage.id, {
+                                    conditionField: event.target.value,
+                                  })
+                                }
+                                placeholder="Field key from mapping"
+                              />
+                            </div>
+                          ) : null}
+                          <div className="space-y-2">
+                            <label className="text-xs text-muted-foreground">
+                              Vendor key (optional)
+                            </label>
+                            <Input
+                              value={activeMasterPage.vendorKey ?? ""}
+                              onChange={(event) =>
+                                updateMasterTemplatePage(activeMasterPage.id, {
+                                  vendorKey: event.target.value,
+                                })
+                              }
+                              placeholder="Vendor code"
+                            />
+                          </div>
+                          <div className="space-y-2 md:col-span-2">
+                            <label className="text-xs text-muted-foreground">
+                              Data bindings (comma-separated)
+                            </label>
+                            <Input
+                              value={(activeMasterPage.dataBindings ?? []).join(", ")}
+                              onChange={(event) =>
+                                updateMasterTemplatePage(activeMasterPage.id, {
+                                  dataBindings: event.target.value
+                                    .split(",")
+                                    .map((value) => value.trim())
+                                    .filter(Boolean),
+                                })
+                              }
+                              placeholder="prepared_for, project_name, vendor_name"
+                            />
+                          </div>
+                        </div>
+                        <PdfCalibrationViewer
+                          pdfUrl={previewDocumentUrl}
+                          pageKey={previewDocumentPageKey}
+                          fields={previewPageFields}
+                          selectedField={selectedField}
+                          onSelectField={setSelectedField}
+                          onChangeCoord={(field, x, y) =>
+                            updateCoordField(activeCoordsPageKey, field, { x, y })
+                          }
+                          onDocumentInfo={handlePdfDocumentInfo}
+                          showGrid={showGrid}
+                          snapToGrid={snapToGrid}
+                          gridSize={gridSize}
+                          labelMap={previewLabelMap}
+                          className="min-h-[720px]"
+                        />
+                      </>
+                    ) : (
+                      <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-4 text-sm text-muted-foreground">
+                        Select a page from the stack to configure source PDF,
+                        rules, and coordinates.
+                      </div>
+                    )}
+                  </div>
                 </div>
               </CardContent>
             </Card>
@@ -1513,7 +2021,7 @@ export default function AdminPage() {
                           variant="outline"
                           size="sm"
                           onClick={removeCurrentPage}
-                          disabled={!parsePageKey(previewPage)}
+                          disabled={!parsePageKey(activeCoordsPageKey)}
                         >
                           Remove current page
                         </Button>
@@ -1526,9 +2034,11 @@ export default function AdminPage() {
                       </label>
                       <Select
                         value={pageKeys.includes(previewPage) ? previewPage : "__none__"}
-                        onValueChange={(value) =>
-                          setPreviewPage(value === "__none__" ? previewPage : value)
-                        }
+                        onValueChange={(value) => {
+                          if (value === "__none__") return;
+                          setSelectedMasterPageId(null);
+                          setPreviewPage(value);
+                        }}
                       >
                         <SelectTrigger className="w-full">
                           <SelectValue placeholder="Select page" />
@@ -1604,7 +2114,7 @@ export default function AdminPage() {
                           onClick={() =>
                             addFieldToCurrentPage(customFieldToAdd || fieldToAdd)
                           }
-                          disabled={!parsePageKey(previewPage)}
+                          disabled={!parsePageKey(activeCoordsPageKey)}
                         >
                           Add field
                         </Button>
@@ -1718,13 +2228,13 @@ export default function AdminPage() {
                     </div>
                   </div>
                   <PdfCalibrationViewer
-                    pdfUrl={templateFile?.url}
-                    pageKey={previewPage}
+                    pdfUrl={previewDocumentUrl}
+                    pageKey={previewDocumentPageKey}
                     fields={previewPageFields}
                     selectedField={selectedField}
                     onSelectField={setSelectedField}
                     onChangeCoord={(field, x, y) =>
-                      updateCoordField(previewPage, field, { x, y })
+                      updateCoordField(activeCoordsPageKey, field, { x, y })
                     }
                     onDocumentInfo={handlePdfDocumentInfo}
                     showGrid={showGrid}
@@ -2349,6 +2859,99 @@ function isTypingTarget(target: EventTarget | null) {
     tag === "SELECT" ||
     target.isContentEditable
   );
+}
+
+function makeId() {
+  if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+    return crypto.randomUUID();
+  }
+  return `page-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalizeInclusionMode(value: unknown): MasterTemplateInclusionMode {
+  const normalized = String(value ?? "always").trim().toLowerCase();
+  if (normalized === "product") return "product";
+  if (normalized === "vendor") return "vendor";
+  if (normalized === "field") return "field";
+  return "always";
+}
+
+function buildMasterTemplateConfig(pages: MasterTemplatePageDraft[]): MasterTemplateConfig {
+  const normalizedPages = pages
+    .slice()
+    .sort((left, right) => left.order - right.order)
+    .map((page, index) => ({
+      id: page.id || makeId(),
+      title: page.title?.trim() || `Page ${index + 1}`,
+      order: index + 1,
+      coordsPageKey: page.coordsPageKey?.trim() || toPageKey(index + 1),
+      sourcePdf: page.sourcePdf?.url
+        ? {
+            name: page.sourcePdf.name || "template.pdf",
+            url: page.sourcePdf.url,
+          }
+        : undefined,
+      sourcePage:
+        Number.isFinite(page.sourcePage) && Number(page.sourcePage) > 0
+          ? Math.trunc(Number(page.sourcePage))
+          : 1,
+      inclusionMode: normalizeInclusionMode(page.inclusionMode),
+      conditionField: String(page.conditionField ?? "").trim() || undefined,
+      conditionValue: String(page.conditionValue ?? "").trim() || undefined,
+      vendorKey: String(page.vendorKey ?? "").trim() || undefined,
+      dataBindings: Array.isArray(page.dataBindings)
+        ? page.dataBindings
+            .map((binding) => String(binding ?? "").trim())
+            .filter(Boolean)
+        : [],
+      notes: String(page.notes ?? "").trim() || undefined,
+    }));
+  return {
+    version: 1,
+    pages: normalizedPages,
+  };
+}
+
+function normalizeLoadedMasterTemplatePages(
+  masterTemplate: MasterTemplateConfig | undefined,
+  coords: Record<string, unknown> | undefined,
+  fallbackTemplateFile: UploadedFile | null
+): MasterTemplatePageDraft[] {
+  const sourcePages = masterTemplate?.pages;
+  if (Array.isArray(sourcePages) && sourcePages.length) {
+    return sourcePages
+      .slice()
+      .sort((left, right) => left.order - right.order)
+      .map((page, index) => ({
+        ...page,
+        id: page.id || makeId(),
+        title: page.title || `Page ${index + 1}`,
+        order: index + 1,
+        coordsPageKey: page.coordsPageKey || toPageKey(index + 1),
+        sourcePage:
+          Number.isFinite(page.sourcePage) && Number(page.sourcePage) > 0
+            ? Math.trunc(Number(page.sourcePage))
+            : 1,
+        inclusionMode: normalizeInclusionMode(page.inclusionMode),
+        sourcePdf: page.sourcePdf?.url
+          ? { name: page.sourcePdf.name, url: page.sourcePdf.url }
+          : fallbackTemplateFile ?? undefined,
+        dataBindings: Array.isArray(page.dataBindings) ? page.dataBindings : [],
+      }));
+  }
+
+  const coordKeys = getSortedPageKeys(coords ?? {});
+  if (!coordKeys.length) return [];
+  return coordKeys.map((pageKey, index) => ({
+    id: makeId(),
+    title: `Page ${index + 1}`,
+    order: index + 1,
+    coordsPageKey: pageKey,
+    sourcePdf: fallbackTemplateFile ?? undefined,
+    sourcePage: parsePageKey(pageKey) ?? index + 1,
+    inclusionMode: "always",
+    dataBindings: [],
+  }));
 }
 
 // formatting helpers moved to lib/formatting
