@@ -919,20 +919,58 @@ export default function TeamAdminPage() {
     featureEditorVendorId === FEATURE_SCOPE_ALL_PRODUCTS
       ? ""
       : featureEditorVendorId;
+  const scopedFeatureVendor = vendorRecords.find(
+    (vendor) => vendor.id === scopedFeatureVendorId
+  );
   const scopedFeatureVendorLabel =
     featureEditorVendorId === FEATURE_SCOPE_ALL_PRODUCTS
       ? "All products (default options)"
-      : vendorRecords.find((vendor) => vendor.id === featureEditorVendorId)?.name ??
-        "Selected vendor";
+      : scopedFeatureVendor?.name ?? "Selected vendor";
+  const scopedVendorDisallowsSplitFinish = Boolean(
+    scopedFeatureVendor && scopedFeatureVendor.allowsSplitFinish !== true
+  );
+
+  const featureCategoryGroups = useMemo(() => {
+    if (!scopedVendorDisallowsSplitFinish) {
+      return PRODUCT_FEATURE_CATEGORIES.map((category) => ({
+        id: category.id,
+        label: category.label,
+        categories: [category.id],
+        createCategory: category.id,
+      }));
+    }
+
+    return [
+      {
+        id: "frame_color",
+        label: "Frame color",
+        categories: [
+          "interior_frame_color",
+          "exterior_frame_color",
+        ] as const,
+        createCategory: "interior_frame_color" as const,
+      },
+      ...PRODUCT_FEATURE_CATEGORIES.filter(
+        (category) =>
+          category.id !== "interior_frame_color" &&
+          category.id !== "exterior_frame_color"
+      ).map((category) => ({
+        id: category.id,
+        label: category.label,
+        categories: [category.id] as const,
+        createCategory: category.id,
+      })),
+    ];
+  }, [scopedVendorDisallowsSplitFinish]);
 
   const featureOptionsByCategory = useMemo(
     () =>
-      PRODUCT_FEATURE_CATEGORIES.map((category) => {
+      featureCategoryGroups.map((group) => {
         const entries = productFeatureOptionDrafts
           .map((option, index) => ({ option, index }))
           .filter(
             ({ option }) =>
-              option.category === category.id &&
+              group.categories.some((categoryId) => categoryId === option.category) &&
               (option.vendorId || "") === scopedFeatureVendorId
           )
           .sort((a, b) => {
@@ -941,9 +979,9 @@ export default function TeamAdminPage() {
             }
             return a.option.label.localeCompare(b.option.label);
           });
-        return { category, entries };
+        return { group, entries };
       }),
-    [productFeatureOptionDrafts, scopedFeatureVendorId]
+    [featureCategoryGroups, productFeatureOptionDrafts, scopedFeatureVendorId]
   );
 
   const scopedFeatureOptionCount = featureOptionsByCategory.reduce(
@@ -963,11 +1001,16 @@ export default function TeamAdminPage() {
   };
 
   const handleAddProductFeatureOption = (categoryId?: string) => {
-    const category = categoryId ?? PRODUCT_FEATURE_CATEGORIES[0]?.id ?? "";
+    const targetGroup =
+      featureCategoryGroups.find((group) => group.id === categoryId) ??
+      featureCategoryGroups[0];
+    const category = targetGroup?.createCategory ?? "";
     const nextOrder =
       productFeatureOptionDrafts.reduce(
         (max, option) => {
-          const sameCategory = option.category === category;
+          const sameCategory = targetGroup?.categories.some(
+            (categoryIdToMatch) => categoryIdToMatch === option.category
+          );
           const sameScope = (option.vendorId || "") === scopedFeatureVendorId;
           if (!sameCategory || !sameScope) return max;
           return Math.max(max, option.sortOrder || 0);
@@ -1002,10 +1045,27 @@ export default function TeamAdminPage() {
       return;
     }
 
+    const vendorAllowsSplitById = new Map(
+      vendorRecords.map((vendor) => [vendor.id, vendor.allowsSplitFinish === true])
+    );
+
     const cleaned = productFeatureOptionDrafts
       .map((option) => ({
         ...option,
-        category: option.category.trim(),
+        category: (() => {
+          const normalizedCategory = option.category.trim();
+          const vendorId = option.vendorId.trim();
+          const vendorAllowsSplit = vendorId
+            ? vendorAllowsSplitById.get(vendorId) === true
+            : true;
+          if (
+            !vendorAllowsSplit &&
+            normalizedCategory === "exterior_frame_color"
+          ) {
+            return "interior_frame_color";
+          }
+          return normalizedCategory;
+        })(),
         vendorId: option.vendorId.trim(),
         label: option.label.trim(),
         sortOrder:
@@ -2115,15 +2175,15 @@ export default function TeamAdminPage() {
                   </div>
 
                   <div className="space-y-3">
-                    {featureOptionsByCategory.map(({ category, entries }) => (
+                    {featureOptionsByCategory.map(({ group, entries }) => (
                       <div
-                        key={`${featureEditorVendorId}-${category.id}`}
+                        key={`${featureEditorVendorId}-${group.id}`}
                         className="rounded-lg border border-border/70 bg-background/70 p-3"
                       >
                         <div className="mb-2 flex items-center justify-between gap-3">
                           <div>
                             <p className="text-sm font-semibold text-foreground">
-                              {category.label}
+                              {group.label}
                             </p>
                             <p className="text-xs text-muted-foreground">
                               {entries.length} option{entries.length === 1 ? "" : "s"}
@@ -2132,17 +2192,17 @@ export default function TeamAdminPage() {
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleAddProductFeatureOption(category.id)}
+                            onClick={() => handleAddProductFeatureOption(group.id)}
                             disabled={!canEditCatalog}
                           >
                             <Plus className="h-4 w-4" />
-                            Add {category.label.toLowerCase()}
+                            Add {group.label.toLowerCase()}
                           </Button>
                         </div>
                         <div className="space-y-2">
                           {entries.map(({ option, index }) => (
                             <div
-                              key={option.id ?? `feature-option-${category.id}-${index}`}
+                              key={option.id ?? `feature-option-${group.id}-${index}`}
                               className="grid grid-cols-[auto_2fr_0.7fr_auto] items-center gap-2 rounded-lg border border-border/60 px-2 py-2 text-sm"
                             >
                               <Checkbox
@@ -2162,7 +2222,7 @@ export default function TeamAdminPage() {
                                     label: event.target.value,
                                   })
                                 }
-                                placeholder={`Add ${category.label.toLowerCase()} option`}
+                                placeholder={`Add ${group.label.toLowerCase()} option`}
                                 disabled={!canEditCatalog}
                               />
                               <Input
@@ -2189,7 +2249,7 @@ export default function TeamAdminPage() {
                           ))}
                           {!entries.length ? (
                             <div className="rounded-lg border border-dashed border-border/60 px-3 py-2 text-xs text-muted-foreground">
-                              No options yet for {category.label.toLowerCase()} in this
+                              No options yet for {group.label.toLowerCase()} in this
                               scope.
                             </div>
                           ) : null}

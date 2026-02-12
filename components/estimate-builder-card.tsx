@@ -492,6 +492,20 @@ export function EstimateBuilderCard({
     });
   };
 
+  const getFrameColorOptionsForProduct = (item: ProductItem) => {
+    const seen = new Set<string>();
+    const combined = [
+      ...getFeatureOptionsForProduct(item, "interior_frame_color"),
+      ...getFeatureOptionsForProduct(item, "exterior_frame_color"),
+    ];
+    return combined.filter((option) => {
+      const key = option.label.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
   const handleBuckingChange = (index: number, patch: Partial<BuckingLineItem>) => {
     const next = draft.bucking.map((item, idx) =>
       idx === index ? { ...item, ...patch } : item
@@ -1014,17 +1028,30 @@ export function EstimateBuilderCard({
                 const selectedVendor = selectedVendorRecord?.id ?? "__none__";
                 const allowsSplitFinish =
                   selectedVendorRecord?.allowsSplitFinish === true;
+                const visibleFeatureFields = allowsSplitFinish
+                  ? PRODUCT_FEATURE_SELECT_FIELDS
+                  : PRODUCT_FEATURE_SELECT_FIELDS.filter(
+                      (field) => field.key !== "exterior_frame_color"
+                    ).map((field) =>
+                      field.key === "interior_frame_color"
+                        ? { ...field, label: "Frame color" }
+                        : field
+                    );
                 const featureListLines = [
-                  `Interior frame color: ${
-                    item.interior_frame_color || "Not selected"
-                  }`,
-                  `Exterior frame color: ${
-                    item.split_finish
-                      ? item.exterior_frame_color || "Not selected"
-                      : item.interior_frame_color
-                        ? `${item.interior_frame_color} (same as interior)`
-                        : "Not selected"
-                  }`,
+                  `${
+                    allowsSplitFinish ? "Interior frame color" : "Frame color"
+                  }: ${item.interior_frame_color || "Not selected"}`,
+                  ...(allowsSplitFinish
+                    ? [
+                        `Exterior frame color: ${
+                          item.split_finish
+                            ? item.exterior_frame_color || "Not selected"
+                            : item.interior_frame_color
+                              ? `${item.interior_frame_color} (same as interior)`
+                              : "Not selected"
+                        }`,
+                      ]
+                    : []),
                   `Glass make up: ${item.glass_makeup || "Not selected"}`,
                   `Stainless steel operating hardware: ${
                     item.stainless_operating_hardware ? "Yes" : "No"
@@ -1135,17 +1162,14 @@ export function EstimateBuilderCard({
                       </div>
 
                       <div className="grid gap-3 md:grid-cols-2">
-                        {PRODUCT_FEATURE_SELECT_FIELDS.map((field) => {
-                          const options = getFeatureOptionsForProduct(
-                            item,
-                            field.category
-                          );
+                        {visibleFeatureFields.map((field) => {
+                          const options =
+                            field.key === "interior_frame_color" &&
+                            !allowsSplitFinish
+                              ? getFrameColorOptionsForProduct(item)
+                              : getFeatureOptionsForProduct(item, field.category);
                           const value = item[field.key];
-                          const isExteriorField =
-                            field.key === "exterior_frame_color";
-                          const isDisabled =
-                            Boolean(legacyValues) ||
-                            (isExteriorField && !item.split_finish);
+                          const isDisabled = Boolean(legacyValues);
                           return (
                             <div key={`${item.id}-${field.key}`} className="space-y-1">
                               <label className="text-xs text-muted-foreground">
@@ -1230,8 +1254,8 @@ export function EstimateBuilderCard({
 
                       {!allowsSplitFinish ? (
                         <p className="text-xs text-muted-foreground">
-                          This vendor does not allow split finish. Exterior frame
-                          color follows interior frame color.
+                          This vendor does not allow split finish. A single frame
+                          color is used.
                         </p>
                       ) : null}
 
