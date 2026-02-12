@@ -24,6 +24,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { DEFAULT_UNIT_TYPES, DEFAULT_VENDORS } from "@/lib/catalog-defaults";
+import {
+  PRODUCT_FEATURE_CATEGORIES,
+  PRODUCT_FEATURE_CATEGORY_LABELS,
+  isProductFeatureCategory,
+} from "@/lib/product-features";
 import { db, instantAppId } from "@/lib/instant";
 import {
   SignInButton,
@@ -39,6 +44,7 @@ type VendorDraft = {
   name: string;
   sortOrder: number;
   isActive: boolean;
+  allowsSplitFinish: boolean;
 };
 
 type UnitTypeDraft = {
@@ -46,6 +52,15 @@ type UnitTypeDraft = {
   code: string;
   label: string;
   price: string;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+type ProductFeatureOptionDraft = {
+  id?: string;
+  category: string;
+  vendorId: string;
+  label: string;
   sortOrder: number;
   isActive: boolean;
 };
@@ -119,6 +134,7 @@ export default function TeamAdminPage() {
           estimates: { owner: {} },
           vendors: {},
           unitTypes: {},
+          productFeatureOptions: {},
         },
       }
     : { teams: { $: { where: { domain: "__none__" } } } };
@@ -186,6 +202,19 @@ export default function TeamAdminPage() {
     });
   }, [catalogTeam?.unitTypes]);
 
+  const productFeatureOptionRecords = useMemo(() => {
+    const list = (catalogTeam?.productFeatureOptions ?? []).slice();
+    return list.sort((a, b) => {
+      const categoryA = String(a.category ?? "");
+      const categoryB = String(b.category ?? "");
+      if (categoryA !== categoryB) return categoryA.localeCompare(categoryB);
+      const orderA = typeof a.sortOrder === "number" ? a.sortOrder : 0;
+      const orderB = typeof b.sortOrder === "number" ? b.sortOrder : 0;
+      if (orderA !== orderB) return orderA - orderB;
+      return String(a.label ?? "").localeCompare(String(b.label ?? ""));
+    });
+  }, [catalogTeam?.productFeatureOptions]);
+
   const orgMembers = orgTeam?.memberships ?? [];
   const selectedTeamMembers = selectedTeam?.memberships ?? [];
   const availableOrgMembers = orgMembers.filter((member) => {
@@ -244,6 +273,17 @@ export default function TeamAdminPage() {
   const [unitTypeSaving, setUnitTypeSaving] = useState(false);
   const [unitTypeError, setUnitTypeError] = useState<string | null>(null);
   const [unitTypeStatus, setUnitTypeStatus] = useState<string | null>(null);
+  const [productFeatureOptionDrafts, setProductFeatureOptionDrafts] = useState<
+    ProductFeatureOptionDraft[]
+  >([]);
+  const [productFeatureOptionSaving, setProductFeatureOptionSaving] =
+    useState(false);
+  const [productFeatureOptionError, setProductFeatureOptionError] = useState<
+    string | null
+  >(null);
+  const [productFeatureOptionStatus, setProductFeatureOptionStatus] = useState<
+    string | null
+  >(null);
   const [estimateDrafts, setEstimateDrafts] = useState<EstimateAdminDraft[]>([]);
   const [estimateSavingId, setEstimateSavingId] = useState<string | null>(null);
   const [estimateError, setEstimateError] = useState<string | null>(null);
@@ -261,6 +301,7 @@ export default function TeamAdminPage() {
       sortOrder:
         typeof vendor.sortOrder === "number" ? vendor.sortOrder : index + 1,
       isActive: vendor.isActive !== false,
+      allowsSplitFinish: vendor.allowsSplitFinish === true,
     }));
     setVendorDrafts(next);
   }, [vendorRecords]);
@@ -280,6 +321,22 @@ export default function TeamAdminPage() {
     }));
     setUnitTypeDrafts(next);
   }, [unitTypeRecords]);
+
+  useEffect(() => {
+    const next = productFeatureOptionRecords.map((option, index) => ({
+      id: option.id,
+      category: String(option.category ?? ""),
+      vendorId:
+        typeof option.vendorId === "string" && option.vendorId.trim()
+          ? option.vendorId
+          : "",
+      label: String(option.label ?? ""),
+      sortOrder:
+        typeof option.sortOrder === "number" ? option.sortOrder : index + 1,
+      isActive: option.isActive !== false,
+    }));
+    setProductFeatureOptionDrafts(next);
+  }, [productFeatureOptionRecords]);
 
   const estimateRecords = useMemo(() => {
     const list = (selectedTeam?.estimates ?? []).slice();
@@ -532,7 +589,12 @@ export default function TeamAdminPage() {
       ) + 1;
     setVendorDrafts((prev) => [
       ...prev,
-      { name: "", sortOrder: nextOrder, isActive: true },
+      {
+        name: "",
+        sortOrder: nextOrder,
+        isActive: true,
+        allowsSplitFinish: false,
+      },
     ]);
   };
 
@@ -580,6 +642,7 @@ export default function TeamAdminPage() {
         name: vendor.name,
         sortOrder: vendor.sortOrder || index + 1,
         isActive: vendor.isActive,
+        allowsSplitFinish: vendor.allowsSplitFinish,
         updatedAt: now,
       };
       if (vendor.id) {
@@ -645,6 +708,7 @@ export default function TeamAdminPage() {
           name: vendor.name,
           sortOrder: vendor.sortOrder,
           isActive: vendor.isActive,
+          allowsSplitFinish: false,
           createdAt: now,
           updatedAt: now,
         })
@@ -833,6 +897,154 @@ export default function TeamAdminPage() {
       setUnitTypeError(message);
     } finally {
       setUnitTypeSaving(false);
+    }
+  };
+
+  const handleProductFeatureOptionChange = (
+    index: number,
+    patch: Partial<ProductFeatureOptionDraft>
+  ) => {
+    setProductFeatureOptionDrafts((prev) =>
+      prev.map((option, idx) =>
+        idx === index ? { ...option, ...patch } : option
+      )
+    );
+  };
+
+  const handleAddProductFeatureOption = () => {
+    const nextOrder =
+      productFeatureOptionDrafts.reduce(
+        (max, option) => Math.max(max, option.sortOrder || 0),
+        0
+      ) + 1;
+    setProductFeatureOptionDrafts((prev) => [
+      ...prev,
+      {
+        category: PRODUCT_FEATURE_CATEGORIES[0]?.id ?? "",
+        vendorId: "",
+        label: "",
+        sortOrder: nextOrder,
+        isActive: true,
+      },
+    ]);
+  };
+
+  const handleSaveProductFeatureOptions = async () => {
+    setProductFeatureOptionError(null);
+    setProductFeatureOptionStatus(null);
+    if (!catalogTeam) {
+      setProductFeatureOptionError(
+        "Select an organization team before editing feature options."
+      );
+      return;
+    }
+    if (!canEditCatalog) {
+      setProductFeatureOptionError(
+        "Only organization owners and admins can update feature options."
+      );
+      return;
+    }
+
+    const cleaned = productFeatureOptionDrafts
+      .map((option) => ({
+        ...option,
+        category: option.category.trim(),
+        vendorId: option.vendorId.trim(),
+        label: option.label.trim(),
+        sortOrder:
+          typeof option.sortOrder === "number" &&
+          Number.isFinite(option.sortOrder)
+            ? option.sortOrder
+            : 0,
+      }))
+      .filter((option) => option.category || option.label || option.vendorId);
+
+    if (!cleaned.length) {
+      setProductFeatureOptionError(
+        "Add at least one feature option before saving."
+      );
+      return;
+    }
+
+    const seen = new Set<string>();
+    for (const option of cleaned) {
+      if (!isProductFeatureCategory(option.category)) {
+        setProductFeatureOptionError(
+          `Invalid feature category: ${option.category || "missing"}`
+        );
+        return;
+      }
+      if (!option.label) {
+        setProductFeatureOptionError(
+          `${PRODUCT_FEATURE_CATEGORY_LABELS[option.category]} requires a label.`
+        );
+        return;
+      }
+      const key = [
+        option.category,
+        option.vendorId || "__all__",
+        option.label.toLowerCase(),
+      ].join("|");
+      if (seen.has(key)) {
+        setProductFeatureOptionError(
+          `Duplicate option "${option.label}" in ${PRODUCT_FEATURE_CATEGORY_LABELS[option.category]}.`
+        );
+        return;
+      }
+      seen.add(key);
+    }
+
+    const now = Date.now();
+    const txs = cleaned.map((option, index) => {
+      const payload = {
+        category: option.category,
+        label: option.label,
+        vendorId: option.vendorId || undefined,
+        sortOrder: option.sortOrder || index + 1,
+        isActive: option.isActive,
+        updatedAt: now,
+      };
+      if (option.id) {
+        return db.tx.productFeatureOptions[option.id].update(payload);
+      }
+      const optionId = id();
+      return db.tx.productFeatureOptions[optionId]
+        .create({ ...payload, createdAt: now })
+        .link({ team: catalogTeam.id });
+    });
+
+    setProductFeatureOptionSaving(true);
+    try {
+      await db.transact(txs);
+      setProductFeatureOptionStatus("Feature options updated.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setProductFeatureOptionError(message);
+    } finally {
+      setProductFeatureOptionSaving(false);
+    }
+  };
+
+  const handleDeleteProductFeatureOption = async (
+    option: ProductFeatureOptionDraft
+  ) => {
+    setProductFeatureOptionError(null);
+    setProductFeatureOptionStatus(null);
+    if (!option.id) {
+      setProductFeatureOptionDrafts((prev) =>
+        prev.filter((item) => item !== option)
+      );
+      return;
+    }
+    if (!window.confirm(`Delete feature option "${option.label}"?`)) return;
+    setProductFeatureOptionSaving(true);
+    try {
+      await db.transact(db.tx.productFeatureOptions[option.id].delete());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setProductFeatureOptionError(message);
+    } finally {
+      setProductFeatureOptionSaving(false);
     }
   };
 
@@ -1494,7 +1706,7 @@ export default function TeamAdminPage() {
                   Catalog settings
                 </CardTitle>
                 <CardDescription>
-                  Manage the vendor list and unit type pricing used in estimates.
+                  Manage vendors, unit types, and product feature dropdown options.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-8">
@@ -1506,8 +1718,7 @@ export default function TeamAdminPage() {
                 ) : null}
                 {!hasTeamAdminAccess ? (
                   <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                    Only organization owners and admins can edit vendors and unit
-                    types.
+                    Only organization owners and admins can edit catalog settings.
                   </div>
                 ) : null}
 
@@ -1515,7 +1726,8 @@ export default function TeamAdminPage() {
                   <div>
                     <p className="text-sm font-semibold text-foreground">Vendors</p>
                     <p className="text-xs text-muted-foreground">
-                      Controls the product type dropdown in the estimate builder.
+                      Controls product dropdowns and whether split finish is
+                      available per product.
                     </p>
                   </div>
                   {vendorError ? (
@@ -1529,10 +1741,11 @@ export default function TeamAdminPage() {
                     </div>
                   ) : null}
                   <div className="rounded-lg border border-border/70 bg-background/70 overflow-x-auto">
-                    <div className="min-w-[640px]">
-                      <div className="grid grid-cols-[auto_2fr_1fr_auto] gap-2 border-b border-border/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
+                    <div className="min-w-[760px]">
+                      <div className="grid grid-cols-[auto_2fr_1.1fr_0.8fr_auto] gap-2 border-b border-border/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
                         <span>Active</span>
                         <span>Name</span>
+                        <span>Split finish</span>
                         <span>Order</span>
                         <span></span>
                       </div>
@@ -1540,7 +1753,7 @@ export default function TeamAdminPage() {
                         {vendorDrafts.map((vendor, index) => (
                           <div
                             key={vendor.id ?? `vendor-${index}`}
-                            className="grid grid-cols-[auto_2fr_1fr_auto] items-center gap-2 px-3 py-2 text-sm"
+                            className="grid grid-cols-[auto_2fr_1.1fr_0.8fr_auto] items-center gap-2 px-3 py-2 text-sm"
                           >
                             <Checkbox
                               checked={vendor.isActive}
@@ -1560,6 +1773,18 @@ export default function TeamAdminPage() {
                               placeholder="Vendor name"
                               disabled={!canEditCatalog}
                             />
+                            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Checkbox
+                                checked={vendor.allowsSplitFinish}
+                                onCheckedChange={(checked) =>
+                                  handleVendorChange(index, {
+                                    allowsSplitFinish: checked === true,
+                                  })
+                                }
+                                disabled={!canEditCatalog}
+                              />
+                              <span>Allow split finish</span>
+                            </label>
                             <Input
                               uiSize="xs"
                               className="w-24"
@@ -1773,6 +1998,166 @@ export default function TeamAdminPage() {
                         Seed defaults
                       </Button>
                     ) : null}
+                  </div>
+                </section>
+
+                <Separator />
+
+                <section className="space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      Product feature options
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Dropdown values for the product Features list. Set a product
+                      (vendor) to scope options, or leave as All products.
+                    </p>
+                  </div>
+                  {productFeatureOptionError ? (
+                    <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                      {productFeatureOptionError}
+                    </div>
+                  ) : null}
+                  {productFeatureOptionStatus ? (
+                    <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                      {productFeatureOptionStatus}
+                    </div>
+                  ) : null}
+                  <div className="rounded-lg border border-border/70 bg-background/70 overflow-x-auto">
+                    <div className="min-w-[1080px]">
+                      <div className="grid grid-cols-[auto_1.3fr_1.5fr_2fr_0.8fr_auto] gap-2 border-b border-border/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
+                        <span>Active</span>
+                        <span>Feature type</span>
+                        <span>Product</span>
+                        <span>Option label</span>
+                        <span>Order</span>
+                        <span></span>
+                      </div>
+                      <div className="divide-y divide-border/60">
+                        {productFeatureOptionDrafts.map((option, index) => (
+                          <div
+                            key={option.id ?? `feature-option-${index}`}
+                            className="grid grid-cols-[auto_1.3fr_1.5fr_2fr_0.8fr_auto] items-center gap-2 px-3 py-2 text-sm"
+                          >
+                            <Checkbox
+                              checked={option.isActive}
+                              onCheckedChange={(checked) =>
+                                handleProductFeatureOptionChange(index, {
+                                  isActive: checked === true,
+                                })
+                              }
+                              disabled={!canEditCatalog}
+                            />
+                            <Select
+                              value={option.category || "__none__"}
+                              onValueChange={(value) =>
+                                handleProductFeatureOptionChange(index, {
+                                  category: value === "__none__" ? "" : value,
+                                })
+                              }
+                              disabled={!canEditCatalog}
+                            >
+                              <SelectTrigger className="h-8">
+                                <SelectValue placeholder="Select feature type" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">
+                                  Select feature type
+                                </SelectItem>
+                                {PRODUCT_FEATURE_CATEGORIES.map((category) => (
+                                  <SelectItem key={category.id} value={category.id}>
+                                    {category.label}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Select
+                              value={option.vendorId || "__all__"}
+                              onValueChange={(value) =>
+                                handleProductFeatureOptionChange(index, {
+                                  vendorId: value === "__all__" ? "" : value,
+                                })
+                              }
+                              disabled={!canEditCatalog}
+                            >
+                              <SelectTrigger className="h-8">
+                                <SelectValue placeholder="All products" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__all__">All products</SelectItem>
+                                {vendorRecords.map((vendor) => (
+                                  <SelectItem key={vendor.id} value={vendor.id}>
+                                    {vendor.name}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <Input
+                              uiSize="xs"
+                              value={option.label}
+                              onChange={(event) =>
+                                handleProductFeatureOptionChange(index, {
+                                  label: event.target.value,
+                                })
+                              }
+                              placeholder="Option label"
+                              disabled={!canEditCatalog}
+                            />
+                            <Input
+                              uiSize="xs"
+                              className="w-20"
+                              type="number"
+                              value={option.sortOrder}
+                              onChange={(event) =>
+                                handleProductFeatureOptionChange(index, {
+                                  sortOrder: Number(event.target.value || 0),
+                                })
+                              }
+                              disabled={!canEditCatalog}
+                            />
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteProductFeatureOption(option)}
+                              disabled={!canEditCatalog || productFeatureOptionSaving}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                        {!productFeatureOptionDrafts.length ? (
+                          <div className="px-3 py-3 text-sm text-muted-foreground">
+                            No feature options yet.
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAddProductFeatureOption}
+                      disabled={!canEditCatalog}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add feature option
+                    </Button>
+                    <Button
+                      variant="accent"
+                      size="sm"
+                      onClick={handleSaveProductFeatureOptions}
+                      disabled={!canEditCatalog || productFeatureOptionSaving}
+                    >
+                      {productFeatureOptionSaving ? (
+                        "Saving..."
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4" />
+                          Save feature options
+                        </>
+                      )}
+                    </Button>
                   </div>
                 </section>
               </CardContent>

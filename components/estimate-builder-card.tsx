@@ -5,6 +5,7 @@ import estimateFields from "@/config/estimate-fields.json";
 import { uploadFiles } from "@/components/uploadthing";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -25,6 +26,7 @@ import {
 import { Separator } from "@/components/ui/separator";
 import type { LibraryItem, UploadedFile } from "@/lib/types";
 import {
+  createDefaultProductItem,
   computeEstimate,
   createId,
   DEFAULT_DRAFT,
@@ -35,6 +37,12 @@ import {
   type PanelType,
   type ProductItem,
 } from "@/lib/estimate-calculator";
+import {
+  EMPTY_PRODUCT_FEATURE_SELECTION,
+  PRODUCT_FEATURE_SELECT_FIELDS,
+  type ProductFeatureOption,
+  type ProductFeatureSelection,
+} from "@/lib/product-features";
 import { cn } from "@/lib/utils";
 import {
   CheckCircle2,
@@ -75,8 +83,10 @@ type EstimateBuilderCardProps = {
     name: string;
     sortOrder?: number;
     isActive?: boolean;
+    allowsSplitFinish?: boolean;
   }>;
   panelTypes?: PanelType[];
+  productFeatureOptions?: ProductFeatureOption[];
 };
 
 type EstimateLibraryState = {
@@ -104,6 +114,54 @@ type AddressSuggestion = {
   fullAddress: string;
 };
 
+function normalizeLoadedProductFeatures(
+  source: Partial<ProductItem> | null | undefined
+): ProductFeatureSelection {
+  const getValue = (key: keyof ProductFeatureSelection) => {
+    const value = source?.[key];
+    return typeof value === "string" ? value : "";
+  };
+  return {
+    interior_frame_color: getValue("interior_frame_color"),
+    exterior_frame_color: getValue("exterior_frame_color"),
+    glass_makeup: getValue("glass_makeup"),
+    stainless_operating_hardware:
+      source?.stainless_operating_hardware === true,
+    has_screens: source?.has_screens === true,
+    door_hardware_color: getValue("door_hardware_color"),
+    door_hinge_color: getValue("door_hinge_color"),
+    window_hardware_color: getValue("window_hardware_color"),
+  };
+}
+
+function normalizeLoadedProduct(
+  source: Partial<ProductItem> | null | undefined,
+  fallbackId: string
+): ProductItem {
+  const base = createDefaultProductItem(fallbackId);
+  const features = normalizeLoadedProductFeatures(source);
+  const interior = features.interior_frame_color;
+  const splitFinish = source?.split_finish === true;
+  const exterior = splitFinish
+    ? features.exterior_frame_color
+    : features.exterior_frame_color || interior;
+
+  return {
+    ...base,
+    id: String(source?.id ?? base.id),
+    vendorId: typeof source?.vendorId === "string" ? source.vendorId : "",
+    name: typeof source?.name === "string" ? source.name : "",
+    price: typeof source?.price === "string" ? source.price : "",
+    markup:
+      typeof source?.markup === "string" && source.markup.trim() !== ""
+        ? source.markup
+        : base.markup,
+    split_finish: splitFinish,
+    ...features,
+    exterior_frame_color: exterior,
+  };
+}
+
 export function EstimateBuilderCard({
   values: _values,
   onValuesChange,
@@ -117,6 +175,7 @@ export function EstimateBuilderCard({
   onActivate,
   vendors,
   panelTypes,
+  productFeatureOptions,
 }: EstimateBuilderCardProps) {
   const [library, setLibrary] = useState<EstimateLibraryState>({
     items: [],
@@ -150,6 +209,7 @@ export function EstimateBuilderCard({
       sortOrder:
         typeof vendor.sortOrder === "number" ? vendor.sortOrder : index + 1,
       isActive: vendor.isActive !== false,
+      allowsSplitFinish: vendor.allowsSplitFinish === true,
     }));
     return normalized
       .filter((vendor) => vendor.isActive)
@@ -158,6 +218,41 @@ export function EstimateBuilderCard({
         return a.name.localeCompare(b.name);
       });
   }, [vendors]);
+
+  const normalizedProductFeatureOptions = useMemo(() => {
+    return (productFeatureOptions ?? [])
+      .map((option, index) => {
+        const category = option.category;
+        if (!category) return null;
+        const label = String(option.label ?? "").trim();
+        if (!label) return null;
+        return {
+          id: option.id ?? `${category}-${index}`,
+          category,
+          label,
+          vendorId:
+            typeof option.vendorId === "string" && option.vendorId.trim()
+              ? option.vendorId
+              : "",
+          sortOrder:
+            typeof option.sortOrder === "number" && Number.isFinite(option.sortOrder)
+              ? option.sortOrder
+              : index + 1,
+          isActive: option.isActive !== false,
+        };
+      })
+      .filter((entry): entry is NonNullable<typeof entry> => Boolean(entry))
+      .filter((entry) => entry.isActive)
+      .sort((a, b) => {
+        if (a.category !== b.category) {
+          return a.category.localeCompare(b.category);
+        }
+        if (a.sortOrder !== b.sortOrder) {
+          return a.sortOrder - b.sortOrder;
+        }
+        return a.label.localeCompare(b.label);
+      });
+  }, [productFeatureOptions]);
 
   const panelTypeOptions = useMemo(() => {
     return panelTypes ?? [];
@@ -204,7 +299,12 @@ export function EstimateBuilderCard({
       info: loadPayload.info ?? DEFAULT_DRAFT.info,
       products:
         Array.isArray(loadPayload.products) && loadPayload.products.length
-          ? loadPayload.products
+          ? loadPayload.products.map((item, index) =>
+              normalizeLoadedProduct(
+                item as Partial<ProductItem>,
+                createId(`product-${index + 1}`)
+              )
+            )
           : DEFAULT_DRAFT.products,
       bucking:
         Array.isArray(loadPayload.bucking) && loadPayload.bucking.length
@@ -353,11 +453,42 @@ export function EstimateBuilderCard({
 
   const handleProductChange = (index: number, patch: Partial<ProductItem>) => {
     const next = draft.products.map((item, idx) =>
-      idx === index ? { ...item, ...patch } : item
+      idx === index
+        ? (() => {
+            const merged = { ...item, ...patch };
+            if (!merged.split_finish) {
+              merged.exterior_frame_color = merged.interior_frame_color;
+            }
+            return merged;
+          })()
+        : item
     );
     handleDraftChange({
       ...draft,
       products: next,
+    });
+  };
+
+  const resolveVendorForProduct = (item: ProductItem) => {
+    if (item.vendorId) {
+      const byId = vendorOptions.find((vendor) => vendor.id === item.vendorId);
+      if (byId) return byId;
+    }
+    return (
+      vendorOptions.find((vendor) => vendor.name === item.name) ??
+      null
+    );
+  };
+
+  const getFeatureOptionsForProduct = (
+    item: ProductItem,
+    category: ProductFeatureOption["category"]
+  ) => {
+    const vendorId = resolveVendorForProduct(item)?.id ?? "";
+    return normalizedProductFeatureOptions.filter((option) => {
+      if (option.category !== category) return false;
+      if (!option.vendorId) return true;
+      return Boolean(vendorId) && option.vendorId === vendorId;
     });
   };
 
@@ -481,7 +612,14 @@ export function EstimateBuilderCard({
 
       const nextDraft: EstimateDraft = {
         info: data.info ?? DEFAULT_DRAFT.info,
-        products: data.products?.length ? data.products : DEFAULT_DRAFT.products,
+        products: data.products?.length
+          ? data.products.map((item, index) =>
+              normalizeLoadedProduct(
+                item as Partial<ProductItem>,
+                createId(`product-${index + 1}`)
+              )
+            )
+          : DEFAULT_DRAFT.products,
         bucking: data.bucking?.length ? data.bucking : DEFAULT_DRAFT.bucking,
         calculator: data.calculator ?? DEFAULT_DRAFT.calculator,
       };
@@ -872,8 +1010,32 @@ export function EstimateBuilderCard({
                   ? toNumber(item.markup)
                   : toNumber(draft.calculator.product_markup_default);
                 const total = roundUp(price * (1 + markup));
-                const selectedVendor =
-                  vendorOptions.find((vendor) => vendor.name === item.name)?.id ?? "__none__";
+                const selectedVendorRecord = resolveVendorForProduct(item);
+                const selectedVendor = selectedVendorRecord?.id ?? "__none__";
+                const allowsSplitFinish =
+                  selectedVendorRecord?.allowsSplitFinish === true;
+                const featureListLines = [
+                  `Interior frame color: ${
+                    item.interior_frame_color || "Not selected"
+                  }`,
+                  `Exterior frame color: ${
+                    item.split_finish
+                      ? item.exterior_frame_color || "Not selected"
+                      : item.interior_frame_color
+                        ? `${item.interior_frame_color} (same as interior)`
+                        : "Not selected"
+                  }`,
+                  `Glass make up: ${item.glass_makeup || "Not selected"}`,
+                  `Stainless steel operating hardware: ${
+                    item.stainless_operating_hardware ? "Yes" : "No"
+                  }`,
+                  `Screens: ${item.has_screens ? "Yes" : "No"}`,
+                  `Door hardware color: ${item.door_hardware_color || "Not selected"}`,
+                  `Door hinge color: ${item.door_hinge_color || "Not selected"}`,
+                  `Window hardware color: ${
+                    item.window_hardware_color || "Not selected"
+                  }`,
+                ];
                 return (
                   <div
                     key={item.id}
@@ -887,7 +1049,14 @@ export function EstimateBuilderCard({
                           onValueChange={(value) => {
                             const vendor = vendorOptions.find((entry) => entry.id === value);
                             handleProductChange(index, {
+                              vendorId: value === "__none__" ? "" : vendor?.id ?? "",
                               name: value === "__none__" ? "" : vendor?.name ?? "",
+                              split_finish:
+                                value === "__none__"
+                                  ? false
+                                  : vendor?.allowsSplitFinish === true
+                                    ? item.split_finish
+                                    : false,
                             });
                           }}
                           disabled={Boolean(legacyValues) || !vendorOptions.length}
@@ -942,7 +1111,9 @@ export function EstimateBuilderCard({
                             const next = draft.products.filter((_, idx) => idx !== index);
                             handleDraftChange({
                               ...draft,
-                              products: next.length ? next : DEFAULT_DRAFT.products,
+                              products: next.length
+                                ? next
+                                : [createDefaultProductItem()],
                             });
                           }}
                           disabled={draft.products.length === 1 || Boolean(legacyValues)}
@@ -950,6 +1121,129 @@ export function EstimateBuilderCard({
                         >
                           <X className="h-4 w-4" />
                         </Button>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 space-y-3 rounded-lg border border-border/60 bg-background/80 p-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                          Features
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Ordered to match your product details list.
+                        </p>
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-2">
+                        {PRODUCT_FEATURE_SELECT_FIELDS.map((field) => {
+                          const options = getFeatureOptionsForProduct(
+                            item,
+                            field.category
+                          );
+                          const value = item[field.key];
+                          const isExteriorField =
+                            field.key === "exterior_frame_color";
+                          const isDisabled =
+                            Boolean(legacyValues) ||
+                            (isExteriorField && !item.split_finish);
+                          return (
+                            <div key={`${item.id}-${field.key}`} className="space-y-1">
+                              <label className="text-xs text-muted-foreground">
+                                {field.label}
+                              </label>
+                              <Select
+                                value={value || "__none__"}
+                                onValueChange={(nextValue) =>
+                                  handleProductChange(index, {
+                                    [field.key]:
+                                      nextValue === "__none__" ? "" : nextValue,
+                                  } as Partial<ProductItem>)
+                                }
+                                disabled={isDisabled}
+                              >
+                                <SelectTrigger className={inputSmClassName}>
+                                  <SelectValue
+                                    placeholder={
+                                      options.length
+                                        ? `Select ${field.label.toLowerCase()}`
+                                        : "No options configured"
+                                    }
+                                  />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="__none__">
+                                    Select {field.label.toLowerCase()}
+                                  </SelectItem>
+                                  {options.map((option) => (
+                                    <SelectItem key={option.id} value={option.label}>
+                                      {option.label}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      <div className="grid gap-3 md:grid-cols-3">
+                        <label className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/80 px-3 py-2 text-xs text-foreground">
+                          <Checkbox
+                            checked={item.split_finish}
+                            onCheckedChange={(checked) =>
+                              handleProductChange(index, {
+                                split_finish:
+                                  allowsSplitFinish && checked === true,
+                              })
+                            }
+                            disabled={
+                              Boolean(legacyValues) || !allowsSplitFinish
+                            }
+                          />
+                          <span>Split finish</span>
+                        </label>
+                        <label className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/80 px-3 py-2 text-xs text-foreground">
+                          <Checkbox
+                            checked={item.stainless_operating_hardware}
+                            onCheckedChange={(checked) =>
+                              handleProductChange(index, {
+                                stainless_operating_hardware: checked === true,
+                              })
+                            }
+                            disabled={Boolean(legacyValues)}
+                          />
+                          <span>Stainless steel operating hardware</span>
+                        </label>
+                        <label className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/80 px-3 py-2 text-xs text-foreground">
+                          <Checkbox
+                            checked={item.has_screens}
+                            onCheckedChange={(checked) =>
+                              handleProductChange(index, {
+                                has_screens: checked === true,
+                              })
+                            }
+                            disabled={Boolean(legacyValues)}
+                          />
+                          <span>Screens</span>
+                        </label>
+                      </div>
+
+                      {!allowsSplitFinish ? (
+                        <p className="text-xs text-muted-foreground">
+                          This vendor does not allow split finish. Exterior frame
+                          color follows interior frame color.
+                        </p>
+                      ) : null}
+
+                      <div className="rounded-lg border border-border/60 bg-card/70 px-3 py-2">
+                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                          Features list (ordered)
+                        </p>
+                        <ul className="mt-2 space-y-1 text-sm text-foreground">
+                          {featureListLines.map((line) => (
+                            <li key={`${item.id}-${line}`}>• {line}</li>
+                          ))}
+                        </ul>
                       </div>
                     </div>
                   </div>
@@ -967,9 +1261,7 @@ export function EstimateBuilderCard({
                     products: [
                       ...draft.products,
                       {
-                        id: createId("product"),
-                        name: "",
-                        price: "",
+                        ...createDefaultProductItem(createId("product")),
                         markup: draft.calculator.product_markup_default,
                       },
                     ],

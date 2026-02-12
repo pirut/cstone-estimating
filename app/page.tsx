@@ -50,6 +50,10 @@ import { InstantAuthSync } from "@/components/instant-auth-sync";
 import { cn } from "@/lib/utils";
 import { APP_VERSION } from "@/lib/version";
 import {
+  isProductFeatureCategory,
+  type ProductFeatureOption,
+} from "@/lib/product-features";
+import {
   ArrowDownToLine,
   CheckCircle2,
   CircleDashed,
@@ -339,6 +343,7 @@ export default function HomePage() {
           estimates: { owner: {} },
           vendors: {},
           unitTypes: {},
+          productFeatureOptions: {},
         },
       }
     : { teams: { $: { where: { domain: "__none__" } } } };
@@ -491,6 +496,25 @@ export default function HomePage() {
     () => catalogTeam?.vendors ?? [],
     [catalogTeam?.vendors]
   );
+  const productFeatureOptions = useMemo(() => {
+    const source = catalogTeam?.productFeatureOptions ?? [];
+    const normalized: ProductFeatureOption[] = [];
+    source.forEach((option, index) => {
+      const category = String(option.category ?? "");
+      if (!isProductFeatureCategory(category)) return;
+      normalized.push({
+        id: option.id,
+        category,
+        label: String(option.label ?? ""),
+        vendorId:
+          typeof option.vendorId === "string" ? option.vendorId : undefined,
+        sortOrder:
+          typeof option.sortOrder === "number" ? option.sortOrder : index + 1,
+        isActive: option.isActive !== false,
+      });
+    });
+    return normalized;
+  }, [catalogTeam?.productFeatureOptions]);
   const panelTypeOptions = useMemo(() => {
     const list = (catalogTeam?.unitTypes ?? [])
       .filter((unit) => unit.isActive !== false && unit.code)
@@ -2154,6 +2178,7 @@ export default function HomePage() {
               loadPayload={loadedEstimatePayload}
               vendors={vendorOptions}
               panelTypes={panelTypeOptions}
+              productFeatureOptions={productFeatureOptions}
               onActivate={() => {
                 setEstimateMode("estimate");
                 setError(null);

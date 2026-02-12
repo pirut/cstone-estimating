@@ -102,6 +102,20 @@ const perms = {
       delete: "isWorkspaceAdmin || isTeamOwner || isPrimaryOwner",
     },
   },
+  productFeatureOptions: {
+    bind: {
+      isTeamMember,
+      isTeamOwner,
+      isPrimaryOwner,
+      isWorkspaceAdmin,
+    },
+    allow: {
+      view: "isTeamMember",
+      create: "isWorkspaceAdmin || isTeamOwner || isPrimaryOwner",
+      update: "isWorkspaceAdmin || isTeamOwner || isPrimaryOwner",
+      delete: "isWorkspaceAdmin || isTeamOwner || isPrimaryOwner",
+    },
+  },
 };
 
 export default perms;

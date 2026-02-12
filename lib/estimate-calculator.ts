@@ -1,4 +1,9 @@
 
+import {
+  EMPTY_PRODUCT_FEATURE_SELECTION,
+  type ProductFeatureSelection,
+} from "@/lib/product-features";
+
 export type EstimateInfo = {
   prepared_for?: string;
   project_name?: string;
@@ -10,9 +15,23 @@ export type EstimateInfo = {
 
 export type ProductItem = {
   id: string;
+  vendorId: string;
   name: string;
   price: string;
   markup: string;
+  split_finish: boolean;
+} & ProductFeatureSelection;
+
+export function createDefaultProductItem(id = "product-1"): ProductItem {
+  return {
+    id,
+    vendorId: "",
+    name: "",
+    price: "",
+    markup: "0.5",
+    split_finish: false,
+    ...EMPTY_PRODUCT_FEATURE_SELECTION,
+  };
 };
 
 export type BuckingLineItem = {
@@ -50,14 +69,7 @@ export type PanelType = {
 
 export const DEFAULT_DRAFT: EstimateDraft = {
   info: {},
-  products: [
-    {
-      id: "product-1",
-      name: "",
-      price: "",
-      markup: "0.5",
-    },
-  ],
+  products: [createDefaultProductItem()],
   bucking: [
     {
       id: "bucking-1",

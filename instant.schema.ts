@@ -36,6 +36,16 @@ const _schema = i.schema({
       name: i.string(),
       sortOrder: i.number().indexed().optional(),
       isActive: i.boolean().indexed().optional(),
+      allowsSplitFinish: i.boolean().indexed().optional(),
+      createdAt: i.number().indexed(),
+      updatedAt: i.number().indexed().optional(),
+    }),
+    productFeatureOptions: i.entity({
+      category: i.string().indexed(),
+      label: i.string(),
+      vendorId: i.string().indexed().optional(),
+      sortOrder: i.number().indexed().optional(),
+      isActive: i.boolean().indexed().optional(),
       createdAt: i.number().indexed(),
       updatedAt: i.number().indexed().optional(),
     }),
@@ -113,6 +123,19 @@ const _schema = i.schema({
         on: "teams",
         has: "many",
         label: "vendors",
+      },
+    },
+    productFeatureOptionTeam: {
+      forward: {
+        on: "productFeatureOptions",
+        has: "one",
+        label: "team",
+        onDelete: "cascade",
+      },
+      reverse: {
+        on: "teams",
+        has: "many",
+        label: "productFeatureOptions",
       },
     },
     unitTypeTeam: {
