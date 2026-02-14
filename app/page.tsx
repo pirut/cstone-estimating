@@ -20,6 +20,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
@@ -56,11 +57,13 @@ import {
 import {
   ArrowDownToLine,
   CheckCircle2,
+  Clock3,
   CircleDashed,
   FileText,
   History,
   LayoutTemplate,
   Loader2,
+  Search,
 } from "lucide-react";
 import {
   SignInButton,
@@ -133,6 +136,20 @@ function hasAnyManualInput(values: Record<string, unknown>) {
     if (typeof value === "number") return Number.isFinite(value) && value > 0;
     return String(value ?? "").trim().length > 0;
   });
+}
+
+function formatRelativeTime(timestamp: number | null | undefined) {
+  if (!timestamp || !Number.isFinite(timestamp)) return "No timestamp";
+  const diffMs = Date.now() - timestamp;
+  if (diffMs < 60_000) return "Just now";
+  if (diffMs < 3_600_000) return `${Math.max(1, Math.floor(diffMs / 60_000))}m ago`;
+  if (diffMs < 86_400_000) {
+    return `${Math.max(1, Math.floor(diffMs / 3_600_000))}h ago`;
+  }
+  if (diffMs < 604_800_000) {
+    return `${Math.max(1, Math.floor(diffMs / 86_400_000))}d ago`;
+  }
+  return new Date(timestamp).toLocaleDateString();
 }
 
 function getManualEstimateProgress(
@@ -282,6 +299,10 @@ export default function HomePage() {
   const [historyEstimateId, setHistoryEstimateId] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyActionId, setHistoryActionId] = useState<string | null>(null);
+  const [teamEstimateQuery, setTeamEstimateQuery] = useState("");
+  const [teamEstimateScope, setTeamEstimateScope] = useState<
+    "all" | "mine" | "recent"
+  >("all");
   const [loadedEstimatePayload, setLoadedEstimatePayload] = useState<Record<
     string,
     any
@@ -414,6 +435,29 @@ export default function HomePage() {
       (a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)
     );
   }, [activeTeam?.estimates]);
+  const filteredTeamEstimates = useMemo(() => {
+    const query = teamEstimateQuery.trim().toLowerCase();
+    const recentCutoff = Date.now() - 1000 * 60 * 60 * 24 * 14;
+    return teamEstimates.filter((estimate) => {
+      if (
+        teamEstimateScope === "mine" &&
+        estimate?.owner?.id !== instantUser?.id
+      ) {
+        return false;
+      }
+      if (
+        teamEstimateScope === "recent" &&
+        (estimate.updatedAt ?? 0) < recentCutoff
+      ) {
+        return false;
+      }
+      if (!query) return true;
+      const title = String(estimate?.title ?? "")
+        .trim()
+        .toLowerCase();
+      return title.includes(query);
+    });
+  }, [instantUser?.id, teamEstimateQuery, teamEstimateScope, teamEstimates]);
   const buildLegacyBaselineVersion = useCallback((estimate: any) => {
     if (!estimate || typeof estimate !== "object") return null;
     const payload =
@@ -1875,20 +1919,62 @@ export default function HomePage() {
         ) : (
           <>
         {authLoaded && isSignedIn ? (
-          <section className="mt-10 grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-            <Card className="rounded-3xl border-border/60 bg-card/80 shadow-elevated">
-              <CardHeader>
-                <div className="space-y-2">
-                  <Badge variant="muted" className="bg-muted/80 text-[10px]">
-                    Workspace
-                  </Badge>
-                  <CardTitle className="text-2xl font-serif">Team Workspace</CardTitle>
-                  <CardDescription>
-                    InstantDB keeps shared estimates synced for your domain.
-                  </CardDescription>
+          <section className="mt-10 space-y-4">
+            <Card className="rounded-2xl border-border/60 bg-card/80 shadow-elevated">
+              <CardContent className="space-y-3 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="muted" className="bg-muted/80 text-[10px]">
+                      Workspace
+                    </Badge>
+                    {teamReady ? (
+                      <>
+                        <span className="text-sm font-semibold text-foreground">
+                          {orgTeam?.name}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          Domain: {orgTeam?.domain}
+                        </span>
+                        <Badge variant="outline" className="bg-background/80">
+                          {orgRole === "owner"
+                            ? "Owner"
+                            : orgRole === "admin"
+                              ? "Admin"
+                              : "Member"}
+                        </Badge>
+                      </>
+                    ) : (
+                      <>
+                        <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          {orgTeam
+                            ? "Joining organization workspace..."
+                            : "Creating organization workspace..."}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          Domain: {teamDomain || "Unknown"}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {hasTeamAdminAccess ? (
+                      <Button asChild variant="outline" size="sm">
+                        <Link href="/team-admin">Org owner dashboard</Link>
+                      </Button>
+                    ) : null}
+                    {teamError ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRetryTeamSetup}
+                        disabled={teamSaving}
+                      >
+                        Retry setup
+                      </Button>
+                    ) : null}
+                  </div>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
                 {instantAuthError ? (
                   <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                     {instantAuthError.message}
@@ -1905,90 +1991,54 @@ export default function HomePage() {
                   </div>
                 ) : null}
                 {instantLoading ? (
-                  <div className="text-sm text-muted-foreground">
+                  <div className="text-xs text-muted-foreground">
                     Connecting to InstantDB...
                   </div>
                 ) : null}
                 {!instantLoading && !instantUser && !instantSetupError ? (
-                  <div className="text-sm text-muted-foreground">
+                  <div className="text-xs text-muted-foreground">
                     Waiting for Instant auth. If this persists, verify the Clerk
                     client name and session token email claim.
                   </div>
                 ) : null}
-
-                {teamReady ? (
-                  <div className="space-y-3">
-                    <div className="space-y-1">
-                      <p className="text-sm text-muted-foreground">
-                        Organization workspace
-                      </p>
-                      <p className="text-lg font-semibold text-foreground">
-                        {orgTeam?.name}
-                      </p>
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      Domain: {orgTeam?.domain}
-                    </div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline" className="bg-background/80">
-                        {orgRole === "owner"
-                          ? "Owner"
-                          : orgRole === "admin"
-                            ? "Admin"
-                            : "Member"}
-                      </Badge>
-                      {hasTeamAdminAccess ? (
-                        <Button asChild variant="outline" size="sm">
-                          <Link href="/team-admin">Org owner dashboard</Link>
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      {orgTeam
-                        ? "Joining organization workspace..."
-                        : "Creating organization workspace..."}
-                    </div>
-                    <div className="text-xs text-muted-foreground">
-                      Domain: {teamDomain || "Unknown"}
-                    </div>
-                    {teamError ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleRetryTeamSetup}
-                        disabled={teamSaving}
-                      >
-                        Retry setup
-                      </Button>
-                    ) : null}
-                  </div>
-                )}
               </CardContent>
             </Card>
+
             <Card className="rounded-3xl border-border/60 bg-card/80 shadow-elevated">
-              <CardHeader>
-                <div className="space-y-2">
-                  <Badge variant="muted" className="bg-muted/80 text-[10px]">
-                    Shared
-                  </Badge>
-                  <CardTitle className="text-2xl font-serif">
-                    Team Estimates
-                  </CardTitle>
-                  <CardDescription>
-                    Shared estimates for {activeTeam?.name ?? "your team"}.
-                  </CardDescription>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {memberTeams.length > 1 ? (
+              <CardHeader className="space-y-4">
+                <div className="flex flex-wrap items-start justify-between gap-3">
                   <div className="space-y-2">
-                    <label className="text-xs text-muted-foreground">
-                      Active team
-                    </label>
+                    <Badge variant="muted" className="bg-muted/80 text-[10px]">
+                      Shared
+                    </Badge>
+                    <CardTitle className="text-2xl font-serif">
+                      Team Estimates
+                    </CardTitle>
+                    <CardDescription>
+                      Search, filter, and load shared estimates for{" "}
+                      {activeTeam?.name ?? "your team"}.
+                    </CardDescription>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="bg-background/80">
+                      {filteredTeamEstimates.length} shown
+                    </Badge>
+                    <Badge variant="outline" className="bg-background/80">
+                      {teamEstimates.length} total
+                    </Badge>
+                  </div>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-[0.8fr_0.2fr]">
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={teamEstimateQuery}
+                      onChange={(event) => setTeamEstimateQuery(event.target.value)}
+                      placeholder="Search estimates by name..."
+                      className="pl-9"
+                    />
+                  </div>
+                  {memberTeams.length > 1 ? (
                     <Select
                       value={activeTeam?.id ?? undefined}
                       onValueChange={(value) => setActiveTeamId(value)}
@@ -2004,59 +2054,115 @@ export default function HomePage() {
                         ))}
                       </SelectContent>
                     </Select>
-                  </div>
-                ) : null}
+                  ) : (
+                    <div className="flex items-center justify-end">
+                      <Badge variant="outline" className="bg-background/80">
+                        Active team: {activeTeam?.name ?? "N/A"}
+                      </Badge>
+                    </div>
+                  )}
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    variant={teamEstimateScope === "all" ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => setTeamEstimateScope("all")}
+                  >
+                    All
+                  </Button>
+                  <Button
+                    variant={teamEstimateScope === "mine" ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => setTeamEstimateScope("mine")}
+                  >
+                    Mine
+                  </Button>
+                  <Button
+                    variant={teamEstimateScope === "recent" ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => setTeamEstimateScope("recent")}
+                  >
+                    Updated 14d
+                  </Button>
+                  {teamEstimateQuery.trim() ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setTeamEstimateQuery("")}
+                    >
+                      Clear search
+                    </Button>
+                  ) : null}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
                 {!teamReady ? (
                   <div className="text-sm text-muted-foreground">
                     Preparing your team workspace...
                   </div>
-                ) : teamEstimates.length ? (
-                  <ScrollArea className="h-56 rounded-lg border border-border/70 bg-background/70">
-                    <div className="divide-y divide-border/60">
-                      {teamEstimates.map((estimate) => {
+                ) : filteredTeamEstimates.length ? (
+                  <ScrollArea className="h-72 rounded-xl border border-border/70 bg-background/70">
+                    <div className="space-y-2 p-2">
+                      {filteredTeamEstimates.map((estimate) => {
                         const currentVersion = getCurrentVersionForEstimate(estimate);
                         const historyOpen = historyEstimateId === estimate.id;
+                        const editingCurrent = editingEstimateId === estimate.id;
                         return (
                           <div
                             key={estimate.id}
-                            className="flex items-center justify-between gap-4 px-4 py-3"
+                            className={cn(
+                              "rounded-lg border border-border/60 bg-card/80 px-3 py-3",
+                              historyOpen && "border-accent/40 bg-accent/5"
+                            )}
                           >
-                            <div className="space-y-1">
-                              <p className="text-sm font-medium text-foreground">
-                                {estimate.title ?? "Untitled"}
-                              </p>
-                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                <Badge variant="outline" className="bg-background/80">
-                                  v{currentVersion}
-                                </Badge>
-                                <span>
-                                  {estimate.updatedAt
-                                    ? new Date(estimate.updatedAt).toLocaleString()
-                                    : "No timestamp"}
-                                </span>
+                            <div className="flex flex-wrap items-start justify-between gap-3">
+                              <div className="space-y-1">
+                                <p className="text-sm font-semibold text-foreground">
+                                  {estimate.title ?? "Untitled"}
+                                </p>
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                  <Badge variant="outline" className="bg-background/80">
+                                    v{currentVersion}
+                                  </Badge>
+                                  {editingCurrent ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="border-accent/40 bg-accent/10 text-foreground"
+                                    >
+                                      Editing
+                                    </Badge>
+                                  ) : null}
+                                  <span className="inline-flex items-center gap-1">
+                                    <Clock3 className="h-3 w-3" />
+                                    {formatRelativeTime(estimate.updatedAt)}
+                                  </span>
+                                  {estimate.updatedAt ? (
+                                    <span>{new Date(estimate.updatedAt).toLocaleString()}</span>
+                                  ) : null}
+                                </div>
                               </div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleLoadTeamEstimate(estimate)}
-                              >
-                                Load
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setHistoryError(null);
-                                  setHistoryEstimateId((current) =>
-                                    current === estimate.id ? null : estimate.id
-                                  );
-                                }}
-                              >
-                                <History className="h-3.5 w-3.5" />
-                                {historyOpen ? "Hide history" : "History"}
-                              </Button>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => handleLoadTeamEstimate(estimate)}
+                                >
+                                  Load
+                                </Button>
+                                <Button
+                                  variant={historyOpen ? "secondary" : "ghost"}
+                                  size="sm"
+                                  onClick={() => {
+                                    setHistoryError(null);
+                                    setHistoryEstimateId((current) =>
+                                      current === estimate.id ? null : estimate.id
+                                    );
+                                  }}
+                                >
+                                  <History className="h-3.5 w-3.5" />
+                                  {historyOpen ? "Hide history" : "History"}
+                                </Button>
+                              </div>
                             </div>
                           </div>
                         );
@@ -2064,8 +2170,10 @@ export default function HomePage() {
                     </div>
                   </ScrollArea>
                 ) : (
-                  <div className="text-sm text-muted-foreground">
-                    No shared estimates yet.
+                  <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-4 text-sm text-muted-foreground">
+                    {teamEstimates.length
+                      ? "No estimates match your current filters."
+                      : "No shared estimates yet."}
                   </div>
                 )}
                 {historyError ? (
@@ -2165,27 +2273,6 @@ export default function HomePage() {
           className="mt-12 space-y-6"
         >
           <div className="space-y-6">
-            <div className="rounded-2xl border border-border/60 bg-card/80 p-4">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <Badge variant="muted" className="bg-muted/80 text-[10px]">
-                    Step 1
-                  </Badge>
-                  <h2 className="text-2xl font-serif text-foreground">
-                    Choose Input Source
-                  </h2>
-                  <p className="text-sm text-muted-foreground">
-                    Manual estimate is the primary workflow. Workbook import is
-                    available in advanced tools.
-                  </p>
-                </div>
-                <Badge variant="outline" className="bg-background/80">
-                  {estimateMode === "estimate"
-                    ? "Manual estimate active"
-                    : "Workbook import active"}
-                </Badge>
-              </div>
-            </div>
             <EstimateBuilderCard
               values={estimateValues}
               onValuesChange={setEstimateValues}
