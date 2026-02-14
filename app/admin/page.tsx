@@ -43,6 +43,7 @@ import type {
   MasterTemplateConfig,
   MasterTemplateInclusionMode,
   MasterTemplatePage,
+  MasterTemplateSectionKey,
   UploadedFile,
 } from "@/lib/types";
 import { db, instantAppId } from "@/lib/instant";
@@ -120,6 +121,11 @@ type CoordField = {
 type CoordsConfig = Record<string, any>;
 type CellPreviewMap = Record<string, unknown>;
 type MasterTemplatePageDraft = MasterTemplatePage;
+type MasterTemplateSelectionDraft = {
+  projectTypeField: string;
+  productTypeField: string;
+  sectionOrder: MasterTemplateSectionKey[];
+};
 
 const LIBRARY_CONFIG: Record<
   AdminLibraryType,
@@ -162,6 +168,17 @@ const adminDropzoneAppearance = {
     "bg-foreground text-background shadow-sm hover:bg-foreground/90 data-[state=readying]:bg-muted data-[state=uploading]:bg-muted",
 };
 
+const DEFAULT_MASTER_TEMPLATE_SECTION_ORDER: MasterTemplateSectionKey[] = [
+  "title",
+  "product",
+  "process",
+  "install_spec",
+  "terms",
+  "pricing",
+];
+const DEFAULT_PROJECT_TYPE_FIELD = "project_type";
+const DEFAULT_PRODUCT_TYPE_FIELD = "product_type";
+
 export default function AdminPage() {
   const [isEmbedded, setIsEmbedded] = useState(false);
   const { isLoaded: authLoaded, isSignedIn } = useOptionalAuth();
@@ -184,6 +201,12 @@ export default function AdminPage() {
   const [masterTemplatePages, setMasterTemplatePages] = useState<
     MasterTemplatePageDraft[]
   >([]);
+  const [masterTemplateSelection, setMasterTemplateSelection] =
+    useState<MasterTemplateSelectionDraft>({
+      projectTypeField: DEFAULT_PROJECT_TYPE_FIELD,
+      productTypeField: DEFAULT_PRODUCT_TYPE_FIELD,
+      sectionOrder: DEFAULT_MASTER_TEMPLATE_SECTION_ORDER,
+    });
   const [selectedMasterPageId, setSelectedMasterPageId] = useState<string | null>(
     null
   );
@@ -536,7 +559,10 @@ export default function AdminPage() {
 
   const handleGenerate = async () => {
     setCalibrationError(null);
-    const masterTemplate = buildMasterTemplateConfig(masterTemplatePages);
+    const masterTemplate = buildMasterTemplateConfig(
+      masterTemplatePages,
+      masterTemplateSelection
+    );
     const hasMasterPages = masterTemplate.pages.length > 0;
     if (!workbookFile) {
       setCalibrationError("Upload the workbook before generating.");
@@ -601,7 +627,10 @@ export default function AdminPage() {
       setTemplateSaveError("Template name is required.");
       return;
     }
-    const masterTemplate = buildMasterTemplateConfig(masterTemplatePages);
+    const masterTemplate = buildMasterTemplateConfig(
+      masterTemplatePages,
+      masterTemplateSelection
+    );
     const hasMasterPages = masterTemplate.pages.length > 0;
     const hasTemplatePdf = Boolean(templateFile?.url);
     if (!hasTemplatePdf && !hasMasterPages) {
@@ -726,7 +755,11 @@ export default function AdminPage() {
             }
           : null
       );
+      const loadedSelection = normalizeLoadedMasterTemplateSelection(
+        data.masterTemplate
+      );
       setMasterTemplatePages(loadedMasterPages);
+      setMasterTemplateSelection(loadedSelection);
       setSelectedMasterPageId(loadedMasterPages[0]?.id ?? null);
       setEditingTemplateKey(item.key);
       setSelectedTemplateKey(item.key);
@@ -964,6 +997,10 @@ export default function AdminPage() {
     }, 0);
     const nextPageNumber = highestPage + 1;
     const nextCoordsPageKey = toPageKey(nextPageNumber);
+    const nextSection =
+      masterTemplateSelection.sectionOrder[masterTemplatePages.length] ?? "custom";
+    const nextInclusionMode: MasterTemplateInclusionMode =
+      nextSection === "product" ? "product_type" : "project_type";
     addPage(nextPageNumber);
     const nextPage: MasterTemplatePageDraft = {
       id: makeId(),
@@ -972,7 +1009,9 @@ export default function AdminPage() {
       coordsPageKey: nextCoordsPageKey,
       sourcePdf: templateFile ?? undefined,
       sourcePage: 1,
-      inclusionMode: "always",
+      sectionKey: nextSection,
+      inclusionMode: nextInclusionMode,
+      isFallback: false,
       dataBindings: [],
     };
     setMasterTemplatePages((prev) => [...prev, nextPage]);
@@ -1000,6 +1039,28 @@ export default function AdminPage() {
       if (!moved) return prev;
       next.splice(targetIndex, 0, moved);
       return next.map((page, index) => ({ ...page, order: index + 1 }));
+    });
+  };
+
+  const moveMasterTemplateSection = (
+    section: MasterTemplateSectionKey,
+    direction: "up" | "down"
+  ) => {
+    setMasterTemplateSelection((prev) => {
+      const sourceIndex = prev.sectionOrder.findIndex((entry) => entry === section);
+      if (sourceIndex < 0) return prev;
+      const targetIndex = direction === "up" ? sourceIndex - 1 : sourceIndex + 1;
+      if (targetIndex < 0 || targetIndex >= prev.sectionOrder.length) {
+        return prev;
+      }
+      const nextOrder = prev.sectionOrder.slice();
+      const [moved] = nextOrder.splice(sourceIndex, 1);
+      if (!moved) return prev;
+      nextOrder.splice(targetIndex, 0, moved);
+      return {
+        ...prev,
+        sectionOrder: nextOrder,
+      };
     });
   };
 
@@ -1592,8 +1653,8 @@ export default function AdminPage() {
                   Master Template Studio
                 </CardTitle>
                 <CardDescription>
-                  Drag pages into order, assign vendor/product rules, and nudge
-                  calibrated fields over a large PDF preview.
+                  Manage section order, project/product-based page routing, and
+                  field linking in one place.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1606,24 +1667,111 @@ export default function AdminPage() {
                     <Badge variant="outline" className="bg-background/80">
                       {
                         masterTemplatePages.filter(
-                          (page) => page.inclusionMode === "always"
+                          (page) => page.isFallback
                         ).length
                       }{" "}
-                      always-on
+                      fallback
                     </Badge>
                     <Badge variant="outline" className="bg-background/80">
                       {
-                        masterTemplatePages.filter(
-                          (page) => page.inclusionMode !== "always"
-                        ).length
+                        new Set(
+                          masterTemplatePages
+                            .map((page) => page.sectionKey)
+                            .filter(Boolean)
+                        ).size
                       }{" "}
-                      conditional
+                      sections
                     </Badge>
                   </div>
                   <Button variant="accent" size="sm" onClick={addMasterTemplatePage}>
                     <Plus className="h-4 w-4" />
                     Add master page
                   </Button>
+                </div>
+                <div className="grid gap-4 rounded-xl border border-border/60 bg-background/70 p-4 lg:grid-cols-[0.9fr_1.1fr]">
+                  <div className="space-y-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                      Selector fields
+                    </p>
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <label className="text-xs text-muted-foreground">
+                          Project type field key
+                        </label>
+                        <Input
+                          value={masterTemplateSelection.projectTypeField}
+                          onChange={(event) =>
+                            setMasterTemplateSelection((prev) => ({
+                              ...prev,
+                              projectTypeField: event.target.value.trim(),
+                            }))
+                          }
+                          placeholder={DEFAULT_PROJECT_TYPE_FIELD}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <label className="text-xs text-muted-foreground">
+                          Product type field key
+                        </label>
+                        <Input
+                          value={masterTemplateSelection.productTypeField}
+                          onChange={(event) =>
+                            setMasterTemplateSelection((prev) => ({
+                              ...prev,
+                              productTypeField: event.target.value.trim(),
+                            }))
+                          }
+                          placeholder={DEFAULT_PRODUCT_TYPE_FIELD}
+                        />
+                      </div>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      These keys are read from estimate/workbook data to decide
+                      which template page gets selected per section.
+                    </p>
+                  </div>
+                  <div className="space-y-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                      Section order (output pages)
+                    </p>
+                    <div className="space-y-2">
+                      {masterTemplateSelection.sectionOrder.map((section, index) => (
+                        <div
+                          key={section}
+                          className="flex items-center justify-between rounded-lg border border-border/60 bg-background px-3 py-2"
+                        >
+                          <span className="text-xs font-medium text-foreground">
+                            {index + 1}. {formatMasterTemplateSectionLabel(section)}
+                          </span>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() =>
+                                moveMasterTemplateSection(section, "up")
+                              }
+                              disabled={index === 0}
+                            >
+                              <ArrowUp className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() =>
+                                moveMasterTemplateSection(section, "down")
+                              }
+                              disabled={
+                                index ===
+                                masterTemplateSelection.sectionOrder.length - 1
+                              }
+                            >
+                              <ArrowDown className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
                 <div className="grid gap-4 xl:grid-cols-[0.65fr_1.35fr]">
                   <div className="space-y-3 rounded-xl border border-border/60 bg-background/70 p-3">
@@ -1665,7 +1813,11 @@ export default function AdminPage() {
                                       </p>
                                       <p className="text-[11px] text-muted-foreground">
                                         {page.coordsPageKey.toUpperCase()} ·{" "}
-                                        {page.inclusionMode}
+                                        {formatMasterTemplateSectionLabel(
+                                          page.sectionKey ?? "custom"
+                                        )}{" "}
+                                        · {page.inclusionMode}
+                                        {page.isFallback ? " · fallback" : ""}
                                       </p>
                                     </div>
                                   </div>
@@ -1739,7 +1891,37 @@ export default function AdminPage() {
                           </div>
                           <div className="space-y-2">
                             <label className="text-xs text-muted-foreground">
-                              Inclusion mode
+                              Section role
+                            </label>
+                            <Select
+                              value={activeMasterPage.sectionKey ?? "custom"}
+                              onValueChange={(value) =>
+                                updateMasterTemplatePage(activeMasterPage.id, {
+                                  sectionKey: value as MasterTemplateSectionKey,
+                                })
+                              }
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Select section" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="title">Title page</SelectItem>
+                                <SelectItem value="product">Product page</SelectItem>
+                                <SelectItem value="process">Process page</SelectItem>
+                                <SelectItem value="install_spec">
+                                  Install specification
+                                </SelectItem>
+                                <SelectItem value="terms">
+                                  Terms and conditions
+                                </SelectItem>
+                                <SelectItem value="pricing">Pricing page</SelectItem>
+                                <SelectItem value="custom">Custom / extra</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-xs text-muted-foreground">
+                              Match rule
                             </label>
                             <Select
                               value={activeMasterPage.inclusionMode}
@@ -1755,14 +1937,20 @@ export default function AdminPage() {
                               </SelectTrigger>
                               <SelectContent>
                                 <SelectItem value="always">Always include</SelectItem>
-                                <SelectItem value="product">
-                                  Include by product
+                                <SelectItem value="project_type">
+                                  Match project type
                                 </SelectItem>
-                                <SelectItem value="vendor">
-                                  Include by vendor
+                                <SelectItem value="product_type">
+                                  Match product type
                                 </SelectItem>
                                 <SelectItem value="field">
-                                  Include by data field
+                                  Match any field
+                                </SelectItem>
+                                <SelectItem value="vendor">
+                                  Legacy: vendor contains
+                                </SelectItem>
+                                <SelectItem value="product">
+                                  Legacy: product contains
                                 </SelectItem>
                               </SelectContent>
                             </Select>
@@ -1822,7 +2010,7 @@ export default function AdminPage() {
                           {activeMasterPage.inclusionMode !== "always" ? (
                             <div className="space-y-2">
                               <label className="text-xs text-muted-foreground">
-                                Condition value
+                                Match value
                               </label>
                               {activeMasterPage.inclusionMode === "vendor" &&
                               vendorRuleOptions.length ? (
@@ -1866,7 +2054,13 @@ export default function AdminPage() {
                                       conditionValue: event.target.value,
                                     })
                                   }
-                                  placeholder="ex: Simonton, impact windows, true"
+                                  placeholder={
+                                    activeMasterPage.inclusionMode === "project_type"
+                                      ? "Residential replacement"
+                                      : activeMasterPage.inclusionMode === "product_type"
+                                        ? "WinDoor, Marvin, Simonton"
+                                        : "Match value"
+                                  }
                                 />
                               )}
                             </div>
@@ -1883,11 +2077,11 @@ export default function AdminPage() {
                                     conditionField: event.target.value,
                                   })
                                 }
-                                placeholder="Field key from mapping"
+                                placeholder="Field key (ex: project_type)"
                               />
                             </div>
                           ) : null}
-                          {activeMasterPage.inclusionMode !== "vendor" ? (
+                          {activeMasterPage.inclusionMode === "vendor" ? (
                             <div className="space-y-2">
                               <label className="text-xs text-muted-foreground">
                                 Vendor key (optional)
@@ -1903,6 +2097,22 @@ export default function AdminPage() {
                               />
                             </div>
                           ) : null}
+                          <div className="space-y-2">
+                            <label className="text-xs text-muted-foreground">
+                              Section fallback
+                            </label>
+                            <label className="flex items-center gap-2 rounded-lg border border-border/60 bg-background px-3 py-2 text-xs text-foreground">
+                              <Checkbox
+                                checked={activeMasterPage.isFallback === true}
+                                onCheckedChange={(checked) =>
+                                  updateMasterTemplatePage(activeMasterPage.id, {
+                                    isFallback: checked === true,
+                                  })
+                                }
+                              />
+                              Use when no rule-matched page is found in this section
+                            </label>
+                          </div>
                           <div className="space-y-2 md:col-span-2">
                             <label className="text-xs text-muted-foreground">
                               Data bindings (comma-separated)
@@ -2823,13 +3033,62 @@ function makeId() {
 
 function normalizeInclusionMode(value: unknown): MasterTemplateInclusionMode {
   const normalized = String(value ?? "always").trim().toLowerCase();
+  if (normalized === "project_type") return "project_type";
+  if (normalized === "product_type") return "product_type";
   if (normalized === "product") return "product";
   if (normalized === "vendor") return "vendor";
   if (normalized === "field") return "field";
   return "always";
 }
 
-function buildMasterTemplateConfig(pages: MasterTemplatePageDraft[]): MasterTemplateConfig {
+function normalizeMasterTemplateSection(
+  value: unknown,
+  fallbackIndex?: number
+): MasterTemplateSectionKey {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "title") return "title";
+  if (normalized === "product") return "product";
+  if (normalized === "process") return "process";
+  if (normalized === "install_spec") return "install_spec";
+  if (normalized === "terms") return "terms";
+  if (normalized === "pricing") return "pricing";
+  if (normalized === "custom") return "custom";
+  if (
+    typeof fallbackIndex === "number" &&
+    fallbackIndex >= 0 &&
+    fallbackIndex < DEFAULT_MASTER_TEMPLATE_SECTION_ORDER.length
+  ) {
+    return DEFAULT_MASTER_TEMPLATE_SECTION_ORDER[fallbackIndex];
+  }
+  return "custom";
+}
+
+function normalizeMasterTemplateSectionOrder(
+  value: unknown
+): MasterTemplateSectionKey[] {
+  const source = Array.isArray(value)
+    ? value
+    : DEFAULT_MASTER_TEMPLATE_SECTION_ORDER;
+  const seen = new Set<MasterTemplateSectionKey>();
+  const normalized: MasterTemplateSectionKey[] = [];
+  source.forEach((entry) => {
+    const section = normalizeMasterTemplateSection(entry);
+    if (section === "custom" || seen.has(section)) return;
+    seen.add(section);
+    normalized.push(section);
+  });
+  DEFAULT_MASTER_TEMPLATE_SECTION_ORDER.forEach((section) => {
+    if (seen.has(section)) return;
+    seen.add(section);
+    normalized.push(section);
+  });
+  return normalized;
+}
+
+function buildMasterTemplateConfig(
+  pages: MasterTemplatePageDraft[],
+  selection: MasterTemplateSelectionDraft
+): MasterTemplateConfig {
   const normalizedPages = pages
     .slice()
     .sort((left, right) => left.order - right.order)
@@ -2852,6 +3111,8 @@ function buildMasterTemplateConfig(pages: MasterTemplatePageDraft[]): MasterTemp
       conditionField: String(page.conditionField ?? "").trim() || undefined,
       conditionValue: String(page.conditionValue ?? "").trim() || undefined,
       vendorKey: String(page.vendorKey ?? "").trim() || undefined,
+      sectionKey: normalizeMasterTemplateSection(page.sectionKey, index),
+      isFallback: page.isFallback === true,
       dataBindings: Array.isArray(page.dataBindings)
         ? page.dataBindings
             .map((binding) => String(binding ?? "").trim())
@@ -2860,7 +3121,16 @@ function buildMasterTemplateConfig(pages: MasterTemplatePageDraft[]): MasterTemp
       notes: String(page.notes ?? "").trim() || undefined,
     }));
   return {
-    version: 1,
+    version: 2,
+    selection: {
+      projectTypeField:
+        String(selection.projectTypeField ?? "").trim() ||
+        DEFAULT_PROJECT_TYPE_FIELD,
+      productTypeField:
+        String(selection.productTypeField ?? "").trim() ||
+        DEFAULT_PRODUCT_TYPE_FIELD,
+      sectionOrder: normalizeMasterTemplateSectionOrder(selection.sectionOrder),
+    },
     pages: normalizedPages,
   };
 }
@@ -2886,6 +3156,8 @@ function normalizeLoadedMasterTemplatePages(
             ? Math.trunc(Number(page.sourcePage))
             : 1,
         inclusionMode: normalizeInclusionMode(page.inclusionMode),
+        sectionKey: normalizeMasterTemplateSection(page.sectionKey, index),
+        isFallback: page.isFallback === true,
         sourcePdf: page.sourcePdf?.url
           ? { name: page.sourcePdf.name, url: page.sourcePdf.url }
           : fallbackTemplateFile ?? undefined,
@@ -2902,9 +3174,36 @@ function normalizeLoadedMasterTemplatePages(
     coordsPageKey: pageKey,
     sourcePdf: fallbackTemplateFile ?? undefined,
     sourcePage: parsePageKey(pageKey) ?? index + 1,
-    inclusionMode: "always",
+    sectionKey:
+      DEFAULT_MASTER_TEMPLATE_SECTION_ORDER[index] ?? ("custom" as const),
+    inclusionMode:
+      index === 1 ? ("product_type" as const) : ("project_type" as const),
+    isFallback: false,
     dataBindings: [],
   }));
+}
+
+function normalizeLoadedMasterTemplateSelection(
+  masterTemplate: MasterTemplateConfig | undefined
+): MasterTemplateSelectionDraft {
+  const selection = masterTemplate?.selection;
+  const projectTypeField = String(selection?.projectTypeField ?? "").trim();
+  const productTypeField = String(selection?.productTypeField ?? "").trim();
+  return {
+    projectTypeField: projectTypeField || DEFAULT_PROJECT_TYPE_FIELD,
+    productTypeField: productTypeField || DEFAULT_PRODUCT_TYPE_FIELD,
+    sectionOrder: normalizeMasterTemplateSectionOrder(selection?.sectionOrder),
+  };
+}
+
+function formatMasterTemplateSectionLabel(section: MasterTemplateSectionKey) {
+  if (section === "install_spec") return "Install spec";
+  if (section === "title") return "Title";
+  if (section === "product") return "Product";
+  if (section === "process") return "Process";
+  if (section === "terms") return "Terms";
+  if (section === "pricing") return "Pricing";
+  return "Custom";
 }
 
 // formatting helpers moved to lib/formatting

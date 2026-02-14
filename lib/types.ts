@@ -39,9 +39,21 @@ export type UploadEndpoint =
 
 export type MasterTemplateInclusionMode =
   | "always"
+  | "project_type"
+  | "product_type"
+  // Legacy modes (kept for backward compatibility)
   | "product"
   | "vendor"
   | "field";
+
+export type MasterTemplateSectionKey =
+  | "title"
+  | "product"
+  | "process"
+  | "install_spec"
+  | "terms"
+  | "pricing"
+  | "custom";
 
 export type MasterTemplatePage = {
   id: string;
@@ -55,11 +67,20 @@ export type MasterTemplatePage = {
   conditionValue?: string;
   vendorKey?: string;
   dataBindings?: string[];
+  sectionKey?: MasterTemplateSectionKey;
+  isFallback?: boolean;
   notes?: string;
+};
+
+export type MasterTemplateSelectionConfig = {
+  projectTypeField?: string;
+  productTypeField?: string;
+  sectionOrder?: MasterTemplateSectionKey[];
 };
 
 export type MasterTemplateConfig = {
   version: number;
+  selection?: MasterTemplateSelectionConfig;
   pages: MasterTemplatePage[];
 };
 

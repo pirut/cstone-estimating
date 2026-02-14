@@ -4,12 +4,24 @@ import type {
   MasterTemplateConfig,
   MasterTemplateInclusionMode,
   MasterTemplatePage,
+  MasterTemplateSectionKey,
+  MasterTemplateSelectionConfig,
 } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
 
 const utapi = new UTApi();
+const DEFAULT_PROJECT_TYPE_FIELD = "project_type";
+const DEFAULT_PRODUCT_TYPE_FIELD = "product_type";
+const DEFAULT_SECTION_ORDER: MasterTemplateSectionKey[] = [
+  "title",
+  "product",
+  "process",
+  "install_spec",
+  "terms",
+  "pricing",
+];
 
 type TemplatePayload = {
   name?: string;
@@ -126,20 +138,38 @@ function normalizeTemplateVersion(value: unknown) {
 }
 
 function normalizeMasterTemplate(value: unknown): MasterTemplateConfig {
-  const source =
+  const sourceObject =
     value && typeof value === "object"
-      ? (value as { pages?: unknown }).pages
+      ? (value as {
+          pages?: unknown;
+          selection?: unknown;
+          projectTypeField?: unknown;
+          productTypeField?: unknown;
+          sectionOrder?: unknown;
+        })
       : null;
+  const source = sourceObject?.pages;
   if (!Array.isArray(source)) {
-    return { version: 1, pages: [] };
+    return {
+      version: 2,
+      selection: {
+        projectTypeField: DEFAULT_PROJECT_TYPE_FIELD,
+        productTypeField: DEFAULT_PRODUCT_TYPE_FIELD,
+        sectionOrder: DEFAULT_SECTION_ORDER,
+      },
+      pages: [],
+    };
   }
 
   const pages: MasterTemplatePage[] = source
     .map((entry, index) => normalizeMasterTemplatePage(entry, index))
     .filter(Boolean) as MasterTemplatePage[];
 
+  const selection = normalizeMasterTemplateSelection(sourceObject);
+
   return {
-    version: 1,
+    version: 2,
+    selection,
     pages,
   };
 }
@@ -147,12 +177,8 @@ function normalizeMasterTemplate(value: unknown): MasterTemplateConfig {
 function normalizeMasterTemplatePage(value: unknown, index: number) {
   if (!value || typeof value !== "object") return null;
   const page = value as Record<string, unknown>;
-  const rawMode = String(page.inclusionMode ?? "always").trim().toLowerCase();
-  const inclusionMode = (
-    ["always", "product", "vendor", "field"].includes(rawMode)
-      ? rawMode
-      : "always"
-  ) as MasterTemplateInclusionMode;
+  const inclusionMode = normalizeInclusionMode(page.inclusionMode);
+  const sectionKey = normalizeSectionKey(page.sectionKey, index);
 
   const sourcePdf =
     page.sourcePdf && typeof page.sourcePdf === "object"
@@ -183,7 +209,82 @@ function normalizeMasterTemplatePage(value: unknown, index: number) {
     conditionField: String(page.conditionField ?? "").trim() || undefined,
     conditionValue: String(page.conditionValue ?? "").trim() || undefined,
     vendorKey: String(page.vendorKey ?? "").trim() || undefined,
+    sectionKey,
+    isFallback: page.isFallback === true,
     dataBindings: dataBindings.length ? dataBindings : undefined,
     notes: String(page.notes ?? "").trim() || undefined,
   } satisfies MasterTemplatePage;
+}
+
+function normalizeMasterTemplateSelection(source: {
+  selection?: unknown;
+  projectTypeField?: unknown;
+  productTypeField?: unknown;
+  sectionOrder?: unknown;
+} | null): MasterTemplateSelectionConfig {
+  const selectionSource =
+    source?.selection && typeof source.selection === "object"
+      ? (source.selection as Record<string, unknown>)
+      : {};
+  const projectTypeField = String(
+    selectionSource.projectTypeField ?? source?.projectTypeField ?? ""
+  ).trim();
+  const productTypeField = String(
+    selectionSource.productTypeField ?? source?.productTypeField ?? ""
+  ).trim();
+  const sectionOrder = normalizeSectionOrder(
+    selectionSource.sectionOrder ?? source?.sectionOrder
+  );
+
+  return {
+    projectTypeField: projectTypeField || DEFAULT_PROJECT_TYPE_FIELD,
+    productTypeField: productTypeField || DEFAULT_PRODUCT_TYPE_FIELD,
+    sectionOrder,
+  };
+}
+
+function normalizeSectionOrder(value: unknown): MasterTemplateSectionKey[] {
+  const seen = new Set<MasterTemplateSectionKey>();
+  const normalized: MasterTemplateSectionKey[] = [];
+  const source = Array.isArray(value) ? value : DEFAULT_SECTION_ORDER;
+  source.forEach((entry) => {
+    const section = normalizeSectionKey(entry, -1);
+    if (!section || section === "custom" || seen.has(section)) return;
+    seen.add(section);
+    normalized.push(section);
+  });
+  DEFAULT_SECTION_ORDER.forEach((section) => {
+    if (seen.has(section)) return;
+    seen.add(section);
+    normalized.push(section);
+  });
+  return normalized;
+}
+
+function normalizeSectionKey(
+  value: unknown,
+  fallbackIndex: number
+): MasterTemplateSectionKey {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "title") return "title";
+  if (normalized === "product") return "product";
+  if (normalized === "process") return "process";
+  if (normalized === "install_spec") return "install_spec";
+  if (normalized === "terms") return "terms";
+  if (normalized === "pricing") return "pricing";
+  if (normalized === "custom") return "custom";
+  if (fallbackIndex >= 0 && fallbackIndex < DEFAULT_SECTION_ORDER.length) {
+    return DEFAULT_SECTION_ORDER[fallbackIndex];
+  }
+  return "custom";
+}
+
+function normalizeInclusionMode(value: unknown): MasterTemplateInclusionMode {
+  const normalized = String(value ?? "always").trim().toLowerCase();
+  if (normalized === "project_type") return "project_type";
+  if (normalized === "product_type") return "product_type";
+  if (normalized === "product") return "product";
+  if (normalized === "vendor") return "vendor";
+  if (normalized === "field") return "field";
+  return "always";
 }

@@ -14,12 +14,25 @@ import {
   parsePageKey,
   toPageKey,
 } from "@/lib/coordinates";
-import type { MasterTemplateInclusionMode } from "@/lib/types";
+import type {
+  MasterTemplateInclusionMode,
+  MasterTemplateSectionKey,
+} from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
 const DOWNLOAD_TIMEOUT_MS = 20000;
+const DEFAULT_PROJECT_TYPE_FIELD = "project_type";
+const DEFAULT_PRODUCT_TYPE_FIELD = "product_type";
+const DEFAULT_SECTION_ORDER: MasterTemplateSectionKey[] = [
+  "title",
+  "product",
+  "process",
+  "install_spec",
+  "terms",
+  "pricing",
+];
 
 type NormalizedMasterTemplatePage = {
   id: string;
@@ -32,12 +45,24 @@ type NormalizedMasterTemplatePage = {
   conditionField?: string;
   conditionValue?: string;
   vendorKey?: string;
+  sectionKey?: MasterTemplateSectionKey;
+  isFallback: boolean;
   dataBindings: string[];
+};
+
+type NormalizedMasterTemplate = {
+  pages: NormalizedMasterTemplatePage[];
+  selection: {
+    projectTypeField: string;
+    productTypeField: string;
+    sectionOrder: MasterTemplateSectionKey[];
+  };
 };
 
 type TemplateAssembly = {
   templateBuffer: Buffer;
   renderPageKeys?: string[];
+  derivedFieldValues?: Record<string, string>;
 };
 
 export async function POST(request: NextRequest) {
@@ -58,10 +83,8 @@ export async function POST(request: NextRequest) {
       body.coordsOverride && typeof body.coordsOverride === "object"
         ? body.coordsOverride
         : null;
-    const masterTemplatePages = normalizeMasterTemplatePages(
-      body.masterTemplate
-    );
-    const hasMasterTemplatePages = masterTemplatePages.length > 0;
+    const masterTemplate = normalizeMasterTemplate(body.masterTemplate);
+    const hasMasterTemplatePages = masterTemplate.pages.length > 0;
 
     if (
       (!templatePdfUrl && !hasMasterTemplatePages) ||
@@ -125,12 +148,13 @@ export async function POST(request: NextRequest) {
         timeoutMs: DOWNLOAD_TIMEOUT_MS,
       });
       fieldValues = buildFieldValues(workbookBuffer, mappingConfig);
+      sourceValuesForRules = { ...fieldValues };
     }
 
     let templateAssembly: TemplateAssembly | null = null;
     if (hasMasterTemplatePages) {
       templateAssembly = await assembleMasterTemplate({
-        pages: masterTemplatePages,
+        masterTemplate,
         fallbackTemplateBuffer: templateBuffer,
         baseUrl: request.nextUrl.origin,
         fieldValues,
@@ -144,6 +168,10 @@ export async function POST(request: NextRequest) {
     if (!templateAssembly?.templateBuffer) {
       throw new Error("No template pages were available for generation.");
     }
+    fieldValues = mergeMissingFieldValues(
+      fieldValues,
+      templateAssembly.derivedFieldValues ?? {}
+    );
 
     const outputPdf = await stampPdf(
       templateAssembly.templateBuffer,
@@ -272,26 +300,32 @@ function getCellValue(
   return cellData.v ?? null;
 }
 
-function normalizeMasterTemplatePages(value: unknown) {
-  const pages =
+function normalizeMasterTemplate(value: unknown): NormalizedMasterTemplate {
+  const source =
     value && typeof value === "object"
-      ? (value as { pages?: unknown }).pages
+      ? (value as {
+          pages?: unknown;
+          selection?: unknown;
+          projectTypeField?: unknown;
+          productTypeField?: unknown;
+          sectionOrder?: unknown;
+        })
       : null;
-  if (!Array.isArray(pages)) return [] as NormalizedMasterTemplatePage[];
-
-  return pages
-    .map((entry, index) => normalizeMasterTemplatePage(entry, index))
-    .filter(Boolean) as NormalizedMasterTemplatePage[];
+  const rawPages = source?.pages;
+  const pages = Array.isArray(rawPages)
+    ? (rawPages
+        .map((entry, index) => normalizeMasterTemplatePage(entry, index))
+        .filter(Boolean) as NormalizedMasterTemplatePage[])
+    : [];
+  return {
+    pages,
+    selection: normalizeMasterTemplateSelection(source),
+  };
 }
 
 function normalizeMasterTemplatePage(value: unknown, index: number) {
   if (!value || typeof value !== "object") return null;
   const page = value as Record<string, unknown>;
-  const mode = String(page.inclusionMode ?? "always").trim().toLowerCase();
-  const inclusionMode = (
-    ["always", "product", "vendor", "field"].includes(mode) ? mode : "always"
-  ) as MasterTemplateInclusionMode;
-
   const sourcePdf =
     page.sourcePdf && typeof page.sourcePdf === "object"
       ? (page.sourcePdf as Record<string, unknown>)
@@ -309,10 +343,12 @@ function normalizeMasterTemplatePage(value: unknown, index: number) {
       ? { name: String(sourcePdf?.name ?? "template.pdf"), url: sourceUrl }
       : undefined,
     sourcePage: Math.max(1, Math.trunc(Number(page.sourcePage ?? 1) || 1)),
-    inclusionMode,
+    inclusionMode: normalizeInclusionMode(page.inclusionMode),
     conditionField: String(page.conditionField ?? "").trim() || undefined,
     conditionValue: String(page.conditionValue ?? "").trim() || undefined,
     vendorKey: String(page.vendorKey ?? "").trim() || undefined,
+    sectionKey: normalizeSectionKey(page.sectionKey),
+    isFallback: page.isFallback === true,
     dataBindings: Array.isArray(page.dataBindings)
       ? page.dataBindings
           .map((binding) => String(binding ?? "").trim())
@@ -321,38 +357,150 @@ function normalizeMasterTemplatePage(value: unknown, index: number) {
   } satisfies NormalizedMasterTemplatePage;
 }
 
+function normalizeInclusionMode(value: unknown): MasterTemplateInclusionMode {
+  const normalized = String(value ?? "always").trim().toLowerCase();
+  if (normalized === "project_type") return "project_type";
+  if (normalized === "product_type") return "product_type";
+  if (normalized === "product") return "product";
+  if (normalized === "vendor") return "vendor";
+  if (normalized === "field") return "field";
+  return "always";
+}
+
+function normalizeSectionKey(value: unknown): MasterTemplateSectionKey | undefined {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (normalized === "title") return "title";
+  if (normalized === "product") return "product";
+  if (normalized === "process") return "process";
+  if (normalized === "install_spec") return "install_spec";
+  if (normalized === "terms") return "terms";
+  if (normalized === "pricing") return "pricing";
+  if (normalized === "custom") return "custom";
+  return undefined;
+}
+
+function normalizeMasterTemplateSelection(source: {
+  selection?: unknown;
+  projectTypeField?: unknown;
+  productTypeField?: unknown;
+  sectionOrder?: unknown;
+} | null) {
+  const selectionSource =
+    source?.selection && typeof source.selection === "object"
+      ? (source.selection as Record<string, unknown>)
+      : {};
+  const projectTypeField = String(
+    selectionSource.projectTypeField ?? source?.projectTypeField ?? ""
+  ).trim();
+  const productTypeField = String(
+    selectionSource.productTypeField ?? source?.productTypeField ?? ""
+  ).trim();
+  return {
+    projectTypeField: projectTypeField || DEFAULT_PROJECT_TYPE_FIELD,
+    productTypeField: productTypeField || DEFAULT_PRODUCT_TYPE_FIELD,
+    sectionOrder: normalizeSectionOrder(
+      selectionSource.sectionOrder ?? source?.sectionOrder
+    ),
+  };
+}
+
+function normalizeSectionOrder(value: unknown): MasterTemplateSectionKey[] {
+  const seen = new Set<MasterTemplateSectionKey>();
+  const normalized: MasterTemplateSectionKey[] = [];
+  const source = Array.isArray(value) ? value : DEFAULT_SECTION_ORDER;
+  source.forEach((entry) => {
+    const section = normalizeSectionKey(entry);
+    if (!section || section === "custom" || seen.has(section)) return;
+    seen.add(section);
+    normalized.push(section);
+  });
+  DEFAULT_SECTION_ORDER.forEach((section) => {
+    if (seen.has(section)) return;
+    seen.add(section);
+    normalized.push(section);
+  });
+  return normalized;
+}
+
 async function assembleMasterTemplate({
-  pages,
+  masterTemplate,
   fallbackTemplateBuffer,
   baseUrl,
   fieldValues,
   sourceValues,
   estimateData,
 }: {
-  pages: NormalizedMasterTemplatePage[];
+  masterTemplate: NormalizedMasterTemplate;
   fallbackTemplateBuffer: Buffer | null;
   baseUrl: string;
   fieldValues: Record<string, string>;
   sourceValues: Record<string, unknown>;
   estimateData: Record<string, unknown> | null;
 }): Promise<TemplateAssembly> {
-  const selected = pages
+  const sortedPages = masterTemplate.pages
     .slice()
-    .sort((a, b) => a.order - b.order)
-    .filter((page) =>
-      shouldIncludeMasterTemplatePage(page, {
-        fieldValues,
-        sourceValues,
-        estimateData,
-      })
-    );
+    .sort((a, b) => a.order - b.order);
 
-  if (!selected.length) {
+  const products = getEstimateProducts(estimateData);
+  const projectTypeValue = resolveProjectTypeValue({
+    fieldValues,
+    sourceValues,
+    estimateData,
+    projectTypeField: masterTemplate.selection.projectTypeField,
+  });
+  const productTypeFallbackValues = resolveProductTypeFallbackValues({
+    fieldValues,
+    sourceValues,
+    estimateData,
+    productTypeField: masterTemplate.selection.productTypeField,
+  });
+
+  const matchContext = {
+    fieldValues,
+    sourceValues,
+    estimateData,
+    products,
+    projectTypeValue,
+    productTypeFallbackValues,
+    selection: masterTemplate.selection,
+  };
+
+  const hasSectionDrivenPages = sortedPages.some(
+    (page) => Boolean(page.sectionKey) && page.sectionKey !== "custom"
+  );
+
+  let selectedPages: NormalizedMasterTemplatePage[] = [];
+  let selectedProduct: Record<string, unknown> | null = null;
+
+  if (hasSectionDrivenPages) {
+    const selectedBySection = selectMasterTemplatePagesBySection(
+      sortedPages,
+      matchContext
+    );
+    selectedPages = selectedBySection.pages;
+    selectedProduct = selectedBySection.selectedProduct;
+  } else {
+    selectedPages = sortedPages.filter(
+      (page) => evaluateMasterTemplatePageMatch(page, matchContext).matched
+    );
+  }
+
+  if (!selectedPages.length) {
     if (!fallbackTemplateBuffer) {
       throw new Error("Master template rules excluded every page.");
     }
     return { templateBuffer: fallbackTemplateBuffer };
   }
+
+  const derivedFieldValues = buildDerivedProductFieldValues({
+    selectedProduct: selectedProduct ?? products[0] ?? null,
+    fieldValues,
+    sourceValues,
+    estimateData,
+    productTypeField: masterTemplate.selection.productTypeField,
+    projectTypeField: masterTemplate.selection.projectTypeField,
+    projectTypeValue,
+  });
 
   const assembled = await PDFDocument.create();
   const downloadedTemplateCache = new Map<string, PDFDocument>();
@@ -361,7 +509,7 @@ async function assembleMasterTemplate({
     : null;
   const renderPageKeys: string[] = [];
 
-  for (const page of selected) {
+  for (const page of selectedPages) {
     let sourceDoc: PDFDocument | null = null;
     if (page.sourcePdf?.url) {
       const cached = downloadedTemplateCache.get(page.sourcePdf.url);
@@ -400,66 +548,292 @@ async function assembleMasterTemplate({
     if (!fallbackTemplateBuffer) {
       throw new Error("Master template did not resolve to any pages.");
     }
-    return { templateBuffer: fallbackTemplateBuffer };
+    return { templateBuffer: fallbackTemplateBuffer, derivedFieldValues };
   }
 
   const buffer = Buffer.from(await assembled.save());
-  return { templateBuffer: buffer, renderPageKeys };
+  return { templateBuffer: buffer, renderPageKeys, derivedFieldValues };
 }
 
-function shouldIncludeMasterTemplatePage(
+function selectMasterTemplatePagesBySection(
+  pages: NormalizedMasterTemplatePage[],
+  context: {
+    fieldValues: Record<string, string>;
+    sourceValues: Record<string, unknown>;
+    estimateData: Record<string, unknown> | null;
+    products: Record<string, unknown>[];
+    projectTypeValue: string;
+    productTypeFallbackValues: string[];
+    selection: NormalizedMasterTemplate["selection"];
+  }
+) {
+  const selected: NormalizedMasterTemplatePage[] = [];
+  const selectedIds = new Set<string>();
+  let selectedProduct: Record<string, unknown> | null = null;
+
+  for (const sectionKey of context.selection.sectionOrder) {
+    const candidates = pages.filter((page) => page.sectionKey === sectionKey);
+    if (!candidates.length) continue;
+
+    const picked = pickBestSectionPage(candidates, context);
+    if (!picked || selectedIds.has(picked.page.id)) continue;
+    selected.push(picked.page);
+    selectedIds.add(picked.page.id);
+    if (sectionKey === "product" && picked.match.matchedProduct) {
+      selectedProduct = picked.match.matchedProduct;
+    }
+  }
+
+  const customPages = pages.filter((page) => {
+    const pageSection = page.sectionKey ?? "custom";
+    if (pageSection !== "custom") return false;
+    if (selectedIds.has(page.id)) return false;
+    return evaluateMasterTemplatePageMatch(page, context).matched;
+  });
+  customPages.forEach((page) => {
+    selected.push(page);
+    selectedIds.add(page.id);
+  });
+
+  return { pages: selected, selectedProduct };
+}
+
+function pickBestSectionPage(
+  candidates: NormalizedMasterTemplatePage[],
+  context: {
+    fieldValues: Record<string, string>;
+    sourceValues: Record<string, unknown>;
+    estimateData: Record<string, unknown> | null;
+    products: Record<string, unknown>[];
+    projectTypeValue: string;
+    productTypeFallbackValues: string[];
+    selection: NormalizedMasterTemplate["selection"];
+  }
+) {
+  const evaluated = candidates.map((page) => ({
+    page,
+    match: evaluateMasterTemplatePageMatch(page, context),
+  }));
+  const matched = evaluated
+    .filter((entry) => entry.match.matched)
+    .sort((left, right) => {
+      if (left.match.score !== right.match.score) {
+        return right.match.score - left.match.score;
+      }
+      return left.page.order - right.page.order;
+    });
+  if (matched.length) return matched[0];
+
+  const fallback = evaluated
+    .filter(
+      (entry) => entry.page.isFallback || entry.page.inclusionMode === "always"
+    )
+    .sort((left, right) => left.page.order - right.page.order);
+  return fallback[0] ?? null;
+}
+
+function evaluateMasterTemplatePageMatch(
   page: NormalizedMasterTemplatePage,
   context: {
     fieldValues: Record<string, string>;
     sourceValues: Record<string, unknown>;
     estimateData: Record<string, unknown> | null;
+    products: Record<string, unknown>[];
+    projectTypeValue: string;
+    productTypeFallbackValues: string[];
+    selection: NormalizedMasterTemplate["selection"];
   }
-) {
-  if (page.inclusionMode === "always") return true;
+): { matched: boolean; score: number; matchedProduct: Record<string, unknown> | null } {
+  if (page.inclusionMode === "always") {
+    return { matched: true, score: 1, matchedProduct: null };
+  }
+
+  if (page.inclusionMode === "project_type") {
+    if (!page.conditionValue) {
+      return { matched: true, score: 2, matchedProduct: null };
+    }
+    const matched = compareMatchTerms(context.projectTypeValue, page.conditionValue);
+    return { matched, score: matched ? 3 : 0, matchedProduct: null };
+  }
 
   if (page.inclusionMode === "field") {
     const fieldKey = page.conditionField || page.dataBindings[0];
-    if (!fieldKey) return true;
-    const fieldValue =
-      context.fieldValues[fieldKey] ??
-      stringifyUnknown(context.sourceValues[fieldKey]);
-    if (!fieldValue?.trim()) return false;
-    if (!page.conditionValue) return true;
-    return compareContains(fieldValue, page.conditionValue);
+    if (!fieldKey) {
+      return { matched: true, score: 1, matchedProduct: null };
+    }
+    const fieldValue = resolveContextValue(context, fieldKey);
+    if (!fieldValue.trim()) {
+      return { matched: false, score: 0, matchedProduct: null };
+    }
+    if (!page.conditionValue) {
+      return { matched: true, score: 2, matchedProduct: null };
+    }
+    const matched = compareMatchTerms(fieldValue, page.conditionValue);
+    return { matched, score: matched ? 3 : 0, matchedProduct: null };
   }
 
-  const products = getEstimateProducts(context.estimateData);
-  if (!products.length) {
-    // When product/vendor context is unavailable, keep page to avoid false negatives.
-    return true;
-  }
-
-  if (page.inclusionMode === "product") {
-    const productQuery = page.conditionValue;
-    if (!productQuery) return true;
-    return products.some((product) =>
-      getProductSearchTokens(product).some((token) =>
-        compareContains(token, productQuery)
-      )
+  if (page.inclusionMode === "product_type" || page.inclusionMode === "product") {
+    const query = page.conditionValue;
+    if (!query) {
+      return {
+        matched: true,
+        score: 2,
+        matchedProduct: context.products[0] ?? null,
+      };
+    }
+    const matchedProduct = findMatchingProduct(context.products, query, {
+      productTypeField: context.selection.productTypeField,
+      includeVendorTokens: false,
+    });
+    if (matchedProduct) {
+      return { matched: true, score: 3, matchedProduct };
+    }
+    const fallbackMatched = context.productTypeFallbackValues.some((token) =>
+      compareMatchTerms(token, query)
     );
+    if (!context.products.length && !context.productTypeFallbackValues.length) {
+      return {
+        matched: true,
+        score: 1,
+        matchedProduct: null,
+      };
+    }
+    return {
+      matched: fallbackMatched,
+      score: fallbackMatched ? 3 : 0,
+      matchedProduct: context.products[0] ?? null,
+    };
   }
 
   if (page.inclusionMode === "vendor") {
-    const vendorQuery = page.conditionValue || page.vendorKey;
-    if (!vendorQuery) return true;
-    return products.some((product) => {
-      const vendorTokens = [
-        product.vendorId,
-        product.name,
-        product.vendor,
-        product.manufacturer,
-        product.supplier,
-      ].map((token) => stringifyUnknown(token));
-      return vendorTokens.some((token) => compareContains(token, vendorQuery));
+    const query = page.conditionValue || page.vendorKey;
+    if (!query) {
+      return {
+        matched: true,
+        score: 2,
+        matchedProduct: context.products[0] ?? null,
+      };
+    }
+    const matchedProduct = findMatchingProduct(context.products, query, {
+      productTypeField: context.selection.productTypeField,
+      includeVendorTokens: true,
     });
+    if (!matchedProduct && !context.products.length) {
+      return {
+        matched: true,
+        score: 1,
+        matchedProduct: null,
+      };
+    }
+    return {
+      matched: Boolean(matchedProduct),
+      score: matchedProduct ? 3 : 0,
+      matchedProduct: matchedProduct ?? null,
+    };
   }
 
-  return true;
+  return { matched: true, score: 1, matchedProduct: null };
+}
+
+function resolveProjectTypeValue(context: {
+  fieldValues: Record<string, string>;
+  sourceValues: Record<string, unknown>;
+  estimateData: Record<string, unknown> | null;
+  projectTypeField: string;
+}) {
+  return (
+    resolveContextValue(context, context.projectTypeField) ||
+    resolveContextValue(context, DEFAULT_PROJECT_TYPE_FIELD) ||
+    resolveContextValue(context, "info.project_type")
+  );
+}
+
+function resolveProductTypeFallbackValues(context: {
+  fieldValues: Record<string, string>;
+  sourceValues: Record<string, unknown>;
+  estimateData: Record<string, unknown> | null;
+  productTypeField: string;
+}) {
+  const values = [
+    resolveContextValue(context, context.productTypeField),
+    resolveContextValue(context, DEFAULT_PRODUCT_TYPE_FIELD),
+    resolveContextValue(context, "info.product_type"),
+  ]
+    .map((value) => value.trim())
+    .filter(Boolean);
+  return Array.from(new Set(values));
+}
+
+function resolveContextValue(
+  context: {
+    fieldValues: Record<string, string>;
+    sourceValues: Record<string, unknown>;
+    estimateData: Record<string, unknown> | null;
+  },
+  key: string
+) {
+  const normalizedKey = String(key ?? "").trim();
+  if (!normalizedKey) return "";
+
+  const directFieldValue = context.fieldValues[normalizedKey];
+  if (typeof directFieldValue === "string" && directFieldValue.trim()) {
+    return directFieldValue;
+  }
+
+  const sourceDirect = stringifyUnknown(context.sourceValues[normalizedKey]).trim();
+  if (sourceDirect) return sourceDirect;
+
+  const sourceByPath = stringifyUnknown(
+    readValueByPath(context.sourceValues, normalizedKey)
+  ).trim();
+  if (sourceByPath) return sourceByPath;
+
+  const estimateDirect = context.estimateData
+    ? stringifyUnknown(context.estimateData[normalizedKey]).trim()
+    : "";
+  if (estimateDirect) return estimateDirect;
+
+  const estimateByPath = context.estimateData
+    ? stringifyUnknown(readValueByPath(context.estimateData, normalizedKey)).trim()
+    : "";
+  return estimateByPath;
+}
+
+function readValueByPath(source: unknown, path: string): unknown {
+  if (!source || typeof source !== "object") return undefined;
+  const segments = path
+    .split(".")
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  if (!segments.length) return undefined;
+
+  let current: unknown = source;
+  for (const segment of segments) {
+    if (!current || typeof current !== "object") return undefined;
+    if (!(segment in (current as Record<string, unknown>))) return undefined;
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return current;
+}
+
+function findMatchingProduct(
+  products: Record<string, unknown>[],
+  query: string,
+  options: {
+    productTypeField: string;
+    includeVendorTokens: boolean;
+  }
+) {
+  for (const product of products) {
+    const tokens = getProductSearchTokens(product, {
+      productTypeField: options.productTypeField,
+      includeVendorTokens: options.includeVendorTokens,
+    });
+    if (tokens.some((token) => compareMatchTerms(token, query))) {
+      return product;
+    }
+  }
+  return null;
 }
 
 function getEstimateProducts(estimateData: Record<string, unknown> | null) {
@@ -472,15 +846,135 @@ function getEstimateProducts(estimateData: Record<string, unknown> | null) {
   );
 }
 
-function getProductSearchTokens(product: Record<string, unknown>) {
-  return [
+function getProductSearchTokens(
+  product: Record<string, unknown>,
+  options: {
+    productTypeField: string;
+    includeVendorTokens: boolean;
+  }
+) {
+  const typeToken =
+    stringifyUnknown(readValueByPath(product, options.productTypeField)) ||
+    stringifyUnknown(product.product_type);
+  const coreTokens = [
+    typeToken,
     stringifyUnknown(product.name),
     stringifyUnknown(product.product),
-    stringifyUnknown(product.vendor),
-    stringifyUnknown(product.manufacturer),
-    stringifyUnknown(product.supplier),
     stringifyUnknown(product.sku),
-  ].filter(Boolean);
+  ];
+  const vendorTokens = options.includeVendorTokens
+    ? [
+        stringifyUnknown(product.vendorId),
+        stringifyUnknown(product.vendor),
+        stringifyUnknown(product.manufacturer),
+        stringifyUnknown(product.supplier),
+      ]
+    : [];
+  return [...coreTokens, ...vendorTokens]
+    .map((token) => token.trim())
+    .filter(Boolean);
+}
+
+function compareMatchTerms(value: string, query: string) {
+  const queryTerms = splitMatchTerms(query);
+  if (!queryTerms.length) return true;
+  return queryTerms.some((term) => compareContains(value, term));
+}
+
+function splitMatchTerms(value: string) {
+  return value
+    .split(/[\n,|]+/g)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function buildDerivedProductFieldValues({
+  selectedProduct,
+  fieldValues,
+  sourceValues,
+  estimateData,
+  productTypeField,
+  projectTypeField,
+  projectTypeValue,
+}: {
+  selectedProduct: Record<string, unknown> | null;
+  fieldValues: Record<string, string>;
+  sourceValues: Record<string, unknown>;
+  estimateData: Record<string, unknown> | null;
+  productTypeField: string;
+  projectTypeField: string;
+  projectTypeValue: string;
+}) {
+  const derived: Record<string, string> = {};
+  if (projectTypeValue.trim()) {
+    derived.project_type = projectTypeValue;
+    derived.selected_project_type = projectTypeValue;
+  }
+
+  const selectedTypeFromContext =
+    resolveContextValue({ fieldValues, sourceValues, estimateData }, productTypeField) ||
+    resolveContextValue(
+      { fieldValues, sourceValues, estimateData },
+      DEFAULT_PRODUCT_TYPE_FIELD
+    );
+
+  if (selectedProduct) {
+    const productType =
+      stringifyUnknown(readValueByPath(selectedProduct, productTypeField)) ||
+      stringifyUnknown(selectedProduct.product_type) ||
+      stringifyUnknown(selectedProduct.name) ||
+      selectedTypeFromContext;
+    const productName =
+      stringifyUnknown(selectedProduct.name) ||
+      stringifyUnknown(selectedProduct.product) ||
+      productType;
+
+    derived.product_type = productType;
+    derived.selected_product_type = productType;
+    derived.selected_product_name = productName;
+    derived.selected_product_vendor =
+      stringifyUnknown(selectedProduct.vendor) ||
+      stringifyUnknown(selectedProduct.vendorId) ||
+      stringifyUnknown(selectedProduct.manufacturer) ||
+      "";
+    derived.selected_product_vendor_id = stringifyUnknown(selectedProduct.vendorId);
+    derived.selected_product_price = stringifyUnknown(selectedProduct.price);
+
+    Object.entries(selectedProduct).forEach(([key, value]) => {
+      const token = stringifyUnknown(value);
+      if (!token.trim()) return;
+      derived[`selected_product_${normalizeFieldKey(key)}`] = token;
+    });
+  } else if (selectedTypeFromContext) {
+    derived.product_type = selectedTypeFromContext;
+    derived.selected_product_type = selectedTypeFromContext;
+  }
+
+  return derived;
+}
+
+function normalizeFieldKey(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/(^_|_$)+/g, "");
+}
+
+function mergeMissingFieldValues(
+  source: Record<string, string>,
+  extra: Record<string, string>
+) {
+  const next = { ...source };
+  Object.entries(extra).forEach(([key, value]) => {
+    const normalizedKey = String(key ?? "").trim();
+    if (!normalizedKey) return;
+    const normalizedValue = String(value ?? "").trim();
+    if (!normalizedValue) return;
+    if (next[normalizedKey] && next[normalizedKey].trim()) return;
+    next[normalizedKey] = normalizedValue;
+  });
+  return next;
 }
 
 function stringifyUnknown(value: unknown) {
