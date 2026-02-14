@@ -15,7 +15,6 @@ import {
 } from "@/components/ui/card";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Input, inputVariants } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
@@ -24,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import type { LibraryItem, UploadedFile } from "@/lib/types";
+import type { UploadedFile } from "@/lib/types";
 import {
   createDefaultProductItem,
   computeEstimate,
@@ -50,10 +49,8 @@ import {
   Loader2,
   LockKeyhole,
   Plus,
-  RefreshCw,
   Save,
   Sparkles,
-  Trash2,
   X,
 } from "lucide-react";
 
@@ -87,12 +84,6 @@ type EstimateBuilderCardProps = {
   }>;
   panelTypes?: PanelType[];
   productFeatureOptions?: ProductFeatureOption[];
-};
-
-type EstimateLibraryState = {
-  items: LibraryItem[];
-  loading: boolean;
-  error: string | null;
 };
 
 type EstimateFilePayload = {
@@ -177,15 +168,9 @@ export function EstimateBuilderCard({
   panelTypes,
   productFeatureOptions,
 }: EstimateBuilderCardProps) {
-  const [library, setLibrary] = useState<EstimateLibraryState>({
-    items: [],
-    loading: false,
-    error: null,
-  });
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [draft, setDraft] = useState<EstimateDraft>(DEFAULT_DRAFT);
   const [legacyValues, setLegacyValues] = useState<
     Record<string, string | number> | null
@@ -390,34 +375,6 @@ export function EstimateBuilderCard({
     return () => window.clearTimeout(lookupTimeout);
   }, [legacyValues, projectNameValue, addressLookupOpen]);
 
-  const loadLibrary = async () => {
-    setLibrary((prev) => ({ ...prev, loading: true, error: null }));
-    try {
-      const response = await fetch("/api/library?type=estimate", {
-        cache: "no-store",
-      });
-      if (!response.ok) {
-        const data = await response.json().catch(() => null);
-        const message = data?.error || "Failed to load estimates.";
-        throw new Error(message);
-      }
-      const data = await response.json();
-      setLibrary((prev) => ({
-        ...prev,
-        items: Array.isArray(data.items) ? data.items : [],
-      }));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error.";
-      setLibrary((prev) => ({ ...prev, error: message }));
-    } finally {
-      setLibrary((prev) => ({ ...prev, loading: false }));
-    }
-  };
-
-  useEffect(() => {
-    void loadLibrary();
-  }, []);
-
   const handleDraftChange = (next: EstimateDraft) => {
     setDraft(next);
     setLegacyValues(null);
@@ -589,67 +546,11 @@ export function EstimateBuilderCard({
       onNameChange(resolvedName);
       onSelectEstimate?.({ name: uploadedFile.name, url });
       setSaveStatus("Estimate saved to the library.");
-      await loadLibrary();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setSaveError(message);
     } finally {
       setIsSaving(false);
-    }
-  };
-
-  const handleLoadEstimate = async (item: LibraryItem) => {
-    if (!item.url) {
-      setLoadError("Selected estimate has no URL.");
-      return;
-    }
-
-    setLoadError(null);
-    try {
-      const response = await fetch(item.url, { cache: "no-store" });
-      if (!response.ok) {
-        throw new Error("Failed to load estimate JSON.");
-      }
-      const data = (await response.json()) as Partial<EstimateFilePayload>;
-
-      if (data?.values && !data?.calculator) {
-        setLegacyValues(data.values as Record<string, string | number>);
-        onNameChange(
-          typeof data?.name === "string" && data.name.trim()
-            ? data.name
-            : stripJsonExtension(item.name)
-        );
-        onSelectEstimate?.({ name: item.name, url: item.url });
-        onActivate?.();
-        return;
-      }
-
-      const nextDraft: EstimateDraft = {
-        info: data.info ?? DEFAULT_DRAFT.info,
-        products: data.products?.length
-          ? data.products.map((item, index) =>
-              normalizeLoadedProduct(
-                item as Partial<ProductItem>,
-                createId(`product-${index + 1}`)
-              )
-            )
-          : DEFAULT_DRAFT.products,
-        bucking: data.bucking?.length ? data.bucking : DEFAULT_DRAFT.bucking,
-        calculator: data.calculator ?? DEFAULT_DRAFT.calculator,
-      };
-
-      setLegacyValues(null);
-      setDraft(nextDraft);
-      onNameChange(
-        typeof data?.name === "string" && data.name.trim()
-          ? data.name
-          : stripJsonExtension(item.name)
-      );
-      onSelectEstimate?.({ name: item.name, url: item.url });
-      onActivate?.();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error.";
-      setLoadError(message);
     }
   };
 
@@ -666,7 +567,6 @@ export function EstimateBuilderCard({
     onEstimatePayloadChange?.(null);
     setSaveStatus(null);
     setSaveError(null);
-    setLoadError(null);
   };
 
   const projectStepComplete = REQUIRED_INFO_FIELDS.every((field) =>
@@ -794,11 +694,6 @@ export function EstimateBuilderCard({
         {saveError ? (
           <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {saveError}
-          </div>
-        ) : null}
-        {loadError ? (
-          <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {loadError}
           </div>
         ) : null}
         {saveStatus ? (
@@ -1637,97 +1532,6 @@ export function EstimateBuilderCard({
           </section>
         ) : null}
 
-        <section className="space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Saved estimates</p>
-              <p className="text-xs text-muted-foreground">
-                Load a previous estimate JSON from UploadThing.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={loadLibrary}
-                disabled={library.loading}
-              >
-                <RefreshCw className="h-4 w-4" />
-                Refresh
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={async () => {
-                  setLibrary((prev) => ({ ...prev, loading: true, error: null }));
-                  try {
-                    const response = await fetch("/api/library?type=estimate", {
-                      method: "DELETE",
-                    });
-                    if (!response.ok) {
-                      const data = await response.json().catch(() => null);
-                      const message = data?.error || "Failed to delete estimates.";
-                      throw new Error(message);
-                    }
-                    await loadLibrary();
-                  } catch (err) {
-                    const message =
-                      err instanceof Error ? err.message : "Unknown error.";
-                    setLibrary((prev) => ({ ...prev, error: message }));
-                  } finally {
-                    setLibrary((prev) => ({ ...prev, loading: false }));
-                  }
-                }}
-                disabled={library.loading}
-                className={cn(
-                  "text-destructive hover:text-destructive",
-                  library.loading && "opacity-60"
-                )}
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete all
-              </Button>
-            </div>
-          </div>
-
-          {library.error ? (
-            <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {library.error}
-            </div>
-          ) : null}
-
-          {library.loading ? (
-            <div className="text-sm text-muted-foreground">Loading...</div>
-          ) : library.items.length ? (
-            <ScrollArea className="h-56 rounded-xl border border-border/70 bg-background/70">
-              <div className="divide-y divide-border/60">
-                {library.items.map((item) => (
-                  <div
-                    key={item.key}
-                    className="flex items-center justify-between gap-4 px-4 py-3"
-                  >
-                    <div>
-                      <p className="text-sm font-medium text-foreground">{item.name}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {new Date(item.uploadedAt).toLocaleString()}
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleLoadEstimate(item)}
-                      disabled={!item.url}
-                    >
-                      Load
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
-          ) : (
-            <div className="text-sm text-muted-foreground">No saved estimates yet.</div>
-          )}
-        </section>
       </CardContent>
     </Card>
   );
@@ -1802,8 +1606,4 @@ function formatCurrency(value: number) {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-}
-
-function stripJsonExtension(name: string) {
-  return name.replace(/\.json$/i, "");
 }
