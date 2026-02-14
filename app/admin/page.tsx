@@ -67,7 +67,6 @@ import {
   ArrowRight,
   ArrowUp,
   FileDown,
-  GripVertical,
   Loader2,
   Plus,
   RefreshCw,
@@ -208,9 +207,6 @@ export default function AdminPage() {
       sectionOrder: DEFAULT_MASTER_TEMPLATE_SECTION_ORDER,
     });
   const [selectedMasterPageId, setSelectedMasterPageId] = useState<string | null>(
-    null
-  );
-  const [draggingMasterPageId, setDraggingMasterPageId] = useState<string | null>(
     null
   );
   const [sheetNames, setSheetNames] = useState<string[]>([]);
@@ -951,6 +947,26 @@ export default function AdminPage() {
       fieldName.toLowerCase().includes(query)
     );
   }, [availableStampFields, fieldSearch]);
+  const masterTemplatePagesBySection = useMemo(() => {
+    const orderedSections = [
+      ...masterTemplateSelection.sectionOrder,
+      "custom" as const,
+    ];
+    const seen = new Set<MasterTemplateSectionKey>();
+    return orderedSections
+      .filter((section) => {
+        if (seen.has(section)) return false;
+        seen.add(section);
+        return true;
+      })
+      .map((sectionKey) => ({
+        sectionKey,
+        pages: masterTemplatePages
+          .filter((page) => (page.sectionKey ?? "custom") === sectionKey)
+          .slice()
+          .sort((left, right) => left.order - right.order),
+      }));
+  }, [masterTemplatePages, masterTemplateSelection.sectionOrder]);
 
   const addPage = (pageNumber: number) => {
     const pageKey = toPageKey(pageNumber);
@@ -990,7 +1006,7 @@ export default function AdminPage() {
     );
   };
 
-  const addMasterTemplatePage = () => {
+  const addMasterTemplatePage = (sectionKey?: MasterTemplateSectionKey) => {
     const highestPage = pageKeys.reduce((max, pageKey) => {
       const pageNumber = parsePageKey(pageKey) ?? 0;
       return Math.max(max, pageNumber);
@@ -998,7 +1014,9 @@ export default function AdminPage() {
     const nextPageNumber = highestPage + 1;
     const nextCoordsPageKey = toPageKey(nextPageNumber);
     const nextSection =
-      masterTemplateSelection.sectionOrder[masterTemplatePages.length] ?? "custom";
+      sectionKey ??
+      masterTemplateSelection.sectionOrder[masterTemplatePages.length] ??
+      "custom";
     const nextInclusionMode: MasterTemplateInclusionMode =
       nextSection === "product" ? "product_type" : "project_type";
     addPage(nextPageNumber);
@@ -1040,6 +1058,24 @@ export default function AdminPage() {
       next.splice(targetIndex, 0, moved);
       return next.map((page, index) => ({ ...page, order: index + 1 }));
     });
+  };
+
+  const moveMasterTemplatePageInSection = (
+    sectionKey: MasterTemplateSectionKey,
+    pageId: string,
+    direction: "up" | "down"
+  ) => {
+    const pagesInSection = masterTemplatePages
+      .filter((page) => (page.sectionKey ?? "custom") === sectionKey)
+      .slice()
+      .sort((left, right) => left.order - right.order);
+    const index = pagesInSection.findIndex((page) => page.id === pageId);
+    if (index < 0) return;
+    const targetIndex = direction === "up" ? index - 1 : index + 1;
+    if (targetIndex < 0 || targetIndex >= pagesInSection.length) return;
+    const targetPage = pagesInSection[targetIndex];
+    if (!targetPage) return;
+    moveMasterTemplatePage(pageId, targetPage.id);
   };
 
   const moveMasterTemplateSection = (
@@ -1683,10 +1719,6 @@ export default function AdminPage() {
                       sections
                     </Badge>
                   </div>
-                  <Button variant="accent" size="sm" onClick={addMasterTemplatePage}>
-                    <Plus className="h-4 w-4" />
-                    Add master page
-                  </Button>
                 </div>
                 <div className="grid gap-4 rounded-xl border border-border/60 bg-background/70 p-4 lg:grid-cols-[0.9fr_1.1fr]">
                   <div className="space-y-3">
@@ -1776,69 +1808,126 @@ export default function AdminPage() {
                 <div className="grid gap-4 xl:grid-cols-[0.65fr_1.35fr]">
                   <div className="space-y-3 rounded-xl border border-border/60 bg-background/70 p-3">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                      Page stack
+                      Section options
                     </p>
                     <ScrollArea className="h-[620px] rounded-lg border border-border/60 bg-background/80">
-                      <div className="space-y-2 p-2">
-                        {masterTemplatePages.length ? (
-                          masterTemplatePages
-                            .slice()
-                            .sort((left, right) => left.order - right.order)
-                            .map((page) => (
-                              <div
-                                key={page.id}
-                                draggable
-                                onDragStart={() => setDraggingMasterPageId(page.id)}
-                                onDragEnd={() => setDraggingMasterPageId(null)}
-                                onDragOver={(event) => event.preventDefault()}
-                                onDrop={() => {
-                                  if (!draggingMasterPageId) return;
-                                  moveMasterTemplatePage(draggingMasterPageId, page.id);
-                                  setDraggingMasterPageId(null);
-                                }}
-                                className={cn(
-                                  "cursor-pointer rounded-lg border px-3 py-2 transition",
-                                  selectedMasterPageId === page.id
-                                    ? "border-accent/70 bg-accent/10"
-                                    : "border-border/60 bg-background hover:border-accent/40"
-                                )}
-                                onClick={() => setSelectedMasterPageId(page.id)}
+                      <div className="space-y-3 p-2">
+                        {masterTemplatePagesBySection.map((sectionGroup) => (
+                          <div
+                            key={sectionGroup.sectionKey}
+                            className="space-y-2 rounded-lg border border-border/60 bg-background p-2"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <div>
+                                <p className="text-xs font-semibold text-foreground">
+                                  {formatMasterTemplateSectionLabel(
+                                    sectionGroup.sectionKey
+                                  )}
+                                </p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  {sectionGroup.pages.length} option
+                                  {sectionGroup.pages.length === 1 ? "" : "s"}
+                                </p>
+                              </div>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  addMasterTemplatePage(sectionGroup.sectionKey)
+                                }
                               >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="flex items-center gap-2">
-                                    <GripVertical className="h-4 w-4 text-muted-foreground" />
-                                    <div>
-                                      <p className="text-sm font-semibold text-foreground">
-                                        {page.title || "Untitled page"}
-                                      </p>
-                                      <p className="text-[11px] text-muted-foreground">
-                                        {page.coordsPageKey.toUpperCase()} ·{" "}
-                                        {formatMasterTemplateSectionLabel(
-                                          page.sectionKey ?? "custom"
-                                        )}{" "}
-                                        · {page.inclusionMode}
-                                        {page.isFallback ? " · fallback" : ""}
-                                      </p>
+                                <Plus className="h-4 w-4" />
+                                Add option
+                              </Button>
+                            </div>
+                            {sectionGroup.pages.length ? (
+                              <div className="space-y-1">
+                                {sectionGroup.pages.map((page, index) => (
+                                  <div
+                                    key={page.id}
+                                    className={cn(
+                                      "cursor-pointer rounded-md border px-2 py-2 transition",
+                                      selectedMasterPageId === page.id
+                                        ? "border-accent/70 bg-accent/10"
+                                        : "border-border/60 bg-background hover:border-accent/40"
+                                    )}
+                                    onClick={() => setSelectedMasterPageId(page.id)}
+                                  >
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="space-y-0.5">
+                                        <p className="text-xs font-semibold text-foreground">
+                                          {page.title || "Untitled option"}
+                                        </p>
+                                        <p className="text-[11px] text-muted-foreground">
+                                          {formatMasterTemplateRuleSummary(page)}
+                                        </p>
+                                        <p className="text-[11px] text-muted-foreground">
+                                          {page.sourcePdf?.name ?? "No PDF"} · page{" "}
+                                          {page.sourcePage} · {page.coordsPageKey}
+                                          {page.isFallback ? " · fallback" : ""}
+                                        </p>
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            moveMasterTemplatePageInSection(
+                                              sectionGroup.sectionKey,
+                                              page.id,
+                                              "up"
+                                            );
+                                          }}
+                                          disabled={index === 0}
+                                        >
+                                          <ArrowUp className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            moveMasterTemplatePageInSection(
+                                              sectionGroup.sectionKey,
+                                              page.id,
+                                              "down"
+                                            );
+                                          }}
+                                          disabled={
+                                            index === sectionGroup.pages.length - 1
+                                          }
+                                        >
+                                          <ArrowDown className="h-4 w-4" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          onClick={(event) => {
+                                            event.stopPropagation();
+                                            removeMasterTemplatePage(page.id);
+                                          }}
+                                        >
+                                          <Trash2 className="h-4 w-4" />
+                                        </Button>
+                                      </div>
                                     </div>
                                   </div>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      removeMasterTemplatePage(page.id);
-                                    }}
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </div>
+                                ))}
                               </div>
-                            ))
-                        ) : (
-                          <div className="px-3 py-4 text-xs text-muted-foreground">
-                            Add pages to build your reusable estimate stack.
+                            ) : (
+                              <div className="rounded-md border border-dashed border-border/60 px-2 py-2 text-[11px] text-muted-foreground">
+                                No options yet for this section.
+                              </div>
+                            )}
                           </div>
-                        )}
+                        ))}
+                        {!masterTemplatePages.length ? (
+                          <div className="px-3 py-4 text-xs text-muted-foreground">
+                            Add options under each section. Each option can target a
+                            different project or product type.
+                          </div>
+                        ) : null}
                       </div>
                     </ScrollArea>
                   </div>
@@ -1898,6 +1987,12 @@ export default function AdminPage() {
                               onValueChange={(value) =>
                                 updateMasterTemplatePage(activeMasterPage.id, {
                                   sectionKey: value as MasterTemplateSectionKey,
+                                  inclusionMode:
+                                    value === "product"
+                                      ? "product_type"
+                                      : value === "custom"
+                                        ? activeMasterPage.inclusionMode
+                                        : "project_type",
                                 })
                               }
                             >
@@ -3204,6 +3299,28 @@ function formatMasterTemplateSectionLabel(section: MasterTemplateSectionKey) {
   if (section === "terms") return "Terms";
   if (section === "pricing") return "Pricing";
   return "Custom";
+}
+
+function formatMasterTemplateRuleSummary(page: MasterTemplatePageDraft) {
+  const mode = page.inclusionMode;
+  const value = String(page.conditionValue ?? "").trim();
+  if (mode === "project_type") {
+    return value ? `Project type: ${value}` : "Project type: any";
+  }
+  if (mode === "product_type") {
+    return value ? `Product type: ${value}` : "Product type: any";
+  }
+  if (mode === "field") {
+    const field = String(page.conditionField ?? "").trim() || "field";
+    return value ? `${field}: ${value}` : `${field}: has value`;
+  }
+  if (mode === "vendor") {
+    return value ? `Vendor contains: ${value}` : "Vendor contains: any";
+  }
+  if (mode === "product") {
+    return value ? `Product contains: ${value}` : "Product contains: any";
+  }
+  return "Always include";
 }
 
 // formatting helpers moved to lib/formatting
