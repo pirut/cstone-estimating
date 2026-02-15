@@ -18,6 +18,17 @@
           "placeholder": "Project name"
         },
         {
+          "key": "project_type",
+          "label": "Project Type",
+          "type": "select",
+          "placeholder": "Select project type",
+          "options": [
+            "New Construction",
+            "Replacement",
+            "Remodel"
+          ]
+        },
+        {
           "key": "city_state_zip",
           "label": "City, State, ZIP",
           "type": "text",

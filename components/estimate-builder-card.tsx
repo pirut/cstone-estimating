@@ -61,6 +61,7 @@ const inputSmClassName = inputVariants({ uiSize: "sm" });
 const REQUIRED_INFO_FIELDS: Array<keyof EstimateDraft["info"]> = [
   "prepared_for",
   "project_name",
+  "project_type",
   "proposal_date",
 ];
 
@@ -757,12 +758,21 @@ export function EstimateBuilderCard({
                 const fieldValue =
                   draft.info[field.key as keyof EstimateDraft["info"]] ?? "";
                 const isDate = field.type === "date";
+                const selectOptions = Array.isArray((field as any).options)
+                  ? ((field as any).options as unknown[])
+                      .map((option) => String(option ?? "").trim())
+                      .filter(Boolean)
+                  : [];
+                const isSelect = field.type === "select" && selectOptions.length > 0;
                 const isRequired = REQUIRED_INFO_FIELDS.includes(
                   field.key as keyof EstimateDraft["info"]
                 );
                 const isProjectNameField = field.key === "project_name";
                 const isCityStateZipField = field.key === "city_state_zip";
                 const isPreparedByField = field.key === "prepared_by";
+                const infoFieldDisabled =
+                  Boolean(legacyValues) ||
+                  (isPreparedByField && Boolean(normalizedPreparedByName));
                 const displayedValue =
                   isPreparedByField && normalizedPreparedByName
                     ? normalizedPreparedByName
@@ -785,6 +795,33 @@ export function EstimateBuilderCard({
                         placeholder={field.placeholder ?? "Pick a date"}
                         disabled={Boolean(legacyValues)}
                       />
+                    ) : isSelect ? (
+                      <Select
+                        value={String(displayedValue || "__none__")}
+                        onValueChange={(value) =>
+                          handleInfoChange(
+                            field.key,
+                            value === "__none__" ? "" : value
+                          )
+                        }
+                        disabled={infoFieldDisabled}
+                      >
+                        <SelectTrigger className={inputClassName}>
+                          <SelectValue
+                            placeholder={field.placeholder ?? "Select an option"}
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none__">
+                            {field.placeholder ?? "Select an option"}
+                          </SelectItem>
+                          {selectOptions.map((option) => (
+                            <SelectItem key={option} value={option}>
+                              {option}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     ) : (
                       <div className="space-y-2">
                         <Input
@@ -819,10 +856,7 @@ export function EstimateBuilderCard({
                               setAddressLookupError(null);
                             }
                           }}
-                          disabled={
-                            Boolean(legacyValues) ||
-                            (isPreparedByField && Boolean(normalizedPreparedByName))
-                          }
+                          disabled={infoFieldDisabled}
                         />
                         {isProjectNameField ? (
                           <div className="space-y-2">
@@ -880,7 +914,7 @@ export function EstimateBuilderCard({
             )}
           </div>
           {!projectStepComplete ? (
-            <UnlockNotice message="Complete Prepared For, Project Name, and Proposal Date to unlock Product Pricing." />
+            <UnlockNotice message="Complete Prepared For, Project Name, Project Type, and Proposal Date to unlock Product Pricing." />
           ) : null}
         </section>
 

@@ -1,6 +1,13 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type DragEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import Link from "next/link";
 import mappingDefault from "@/config/mapping.json";
 import coordinatesDefault from "@/config/coordinates.json";
@@ -37,7 +44,6 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
   MasterTemplateConfig,
@@ -177,6 +183,7 @@ const DEFAULT_MASTER_TEMPLATE_SECTION_ORDER: MasterTemplateSectionKey[] = [
 ];
 const DEFAULT_PROJECT_TYPE_FIELD = "project_type";
 const DEFAULT_PRODUCT_TYPE_FIELD = "product_type";
+const MASTER_TEMPLATE_TEMPLATE_MIME = "application/x-master-template-pdf";
 
 export default function AdminPage() {
   const [isEmbedded, setIsEmbedded] = useState(false);
@@ -209,6 +216,8 @@ export default function AdminPage() {
   const [selectedMasterPageId, setSelectedMasterPageId] = useState<string | null>(
     null
   );
+  const [templateDropSectionKey, setTemplateDropSectionKey] =
+    useState<MasterTemplateSectionKey | null>(null);
   const [sheetNames, setSheetNames] = useState<string[]>([]);
   const [cellPreviews, setCellPreviews] = useState<CellPreviewMap>({});
   const [workbookLoading, setWorkbookLoading] = useState(false);
@@ -967,6 +976,21 @@ export default function AdminPage() {
           .sort((left, right) => left.order - right.order),
       }));
   }, [masterTemplatePages, masterTemplateSelection.sectionOrder]);
+  const draggableTemplatePdfs = useMemo(() => {
+    const seen = new Set<string>();
+    const result: UploadedFile[] = [];
+    const add = (file: UploadedFile | null | undefined) => {
+      if (!file?.url) return;
+      if (seen.has(file.url)) return;
+      seen.add(file.url);
+      result.push(file);
+    };
+    add(templateFile);
+    libraries.template.items.forEach((item) => {
+      add({ name: item.name, url: item.url });
+    });
+    return result;
+  }, [libraries.template.items, templateFile]);
 
   const addPage = (pageNumber: number) => {
     const pageKey = toPageKey(pageNumber);
@@ -1006,7 +1030,10 @@ export default function AdminPage() {
     );
   };
 
-  const addMasterTemplatePage = (sectionKey?: MasterTemplateSectionKey) => {
+  const addMasterTemplatePage = (options?: {
+    sectionKey?: MasterTemplateSectionKey;
+    sourcePdf?: UploadedFile;
+  }) => {
     const highestPage = pageKeys.reduce((max, pageKey) => {
       const pageNumber = parsePageKey(pageKey) ?? 0;
       return Math.max(max, pageNumber);
@@ -1014,18 +1041,23 @@ export default function AdminPage() {
     const nextPageNumber = highestPage + 1;
     const nextCoordsPageKey = toPageKey(nextPageNumber);
     const nextSection =
-      sectionKey ??
+      options?.sectionKey ??
       masterTemplateSelection.sectionOrder[masterTemplatePages.length] ??
       "custom";
+    const sourcePdf = options?.sourcePdf ?? templateFile ?? undefined;
     const nextInclusionMode: MasterTemplateInclusionMode =
-      nextSection === "product" ? "product_type" : "project_type";
+      nextSection === "product"
+        ? "product_type"
+        : nextSection === "custom"
+          ? "always"
+          : "project_type";
     addPage(nextPageNumber);
     const nextPage: MasterTemplatePageDraft = {
       id: makeId(),
-      title: `Page ${nextPageNumber}`,
+      title: sourcePdf?.name || `Page ${nextPageNumber}`,
       order: masterTemplatePages.length + 1,
       coordsPageKey: nextCoordsPageKey,
-      sourcePdf: templateFile ?? undefined,
+      sourcePdf,
       sourcePage: 1,
       sectionKey: nextSection,
       inclusionMode: nextInclusionMode,
@@ -1098,6 +1130,40 @@ export default function AdminPage() {
         sectionOrder: nextOrder,
       };
     });
+  };
+
+  const handleTemplateDragStart = (
+    event: DragEvent<HTMLElement>,
+    sourcePdf: UploadedFile
+  ) => {
+    event.dataTransfer.setData(
+      MASTER_TEMPLATE_TEMPLATE_MIME,
+      JSON.stringify(sourcePdf)
+    );
+    event.dataTransfer.setData("text/plain", sourcePdf.name);
+    event.dataTransfer.effectAllowed = "copy";
+  };
+
+  const handleTemplateDropToSection = (
+    event: DragEvent<HTMLElement>,
+    sectionKey: MasterTemplateSectionKey
+  ) => {
+    event.preventDefault();
+    setTemplateDropSectionKey(null);
+    const payload = event.dataTransfer.getData(MASTER_TEMPLATE_TEMPLATE_MIME);
+    if (!payload) return;
+    try {
+      const parsed = JSON.parse(payload) as { name?: unknown; url?: unknown };
+      const name = String(parsed?.name ?? "").trim();
+      const url = String(parsed?.url ?? "").trim();
+      if (!name || !url) return;
+      addMasterTemplatePage({
+        sectionKey,
+        sourcePdf: { name, url },
+      });
+    } catch {
+      // Ignore invalid drag payloads.
+    }
   };
 
   const addFieldToCurrentPage = (
@@ -1807,6 +1873,35 @@ export default function AdminPage() {
                 </div>
                 <div className="grid gap-4 xl:grid-cols-[0.65fr_1.35fr]">
                   <div className="space-y-3 rounded-xl border border-border/60 bg-background/70 p-3">
+                    <div className="space-y-2 rounded-lg border border-border/60 bg-background/80 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                        Template PDFs
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Drag a template PDF into a section to create an option.
+                      </p>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        {draggableTemplatePdfs.length ? (
+                          draggableTemplatePdfs.map((file) => (
+                            <button
+                              key={file.url}
+                              type="button"
+                              draggable
+                              onDragStart={(event) =>
+                                handleTemplateDragStart(event, file)
+                              }
+                              className="rounded-md border border-border/60 bg-background px-2 py-2 text-left text-xs text-foreground hover:border-accent/50"
+                            >
+                              <span className="line-clamp-2">{file.name}</span>
+                            </button>
+                          ))
+                        ) : (
+                          <div className="rounded-md border border-dashed border-border/60 px-2 py-2 text-xs text-muted-foreground sm:col-span-2">
+                            Upload template PDFs above, then drag them into sections.
+                          </div>
+                        )}
+                      </div>
+                    </div>
                     <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
                       Section options
                     </p>
@@ -1815,7 +1910,26 @@ export default function AdminPage() {
                         {masterTemplatePagesBySection.map((sectionGroup) => (
                           <div
                             key={sectionGroup.sectionKey}
-                            className="space-y-2 rounded-lg border border-border/60 bg-background p-2"
+                            className={cn(
+                              "space-y-2 rounded-lg border border-border/60 bg-background p-2 transition",
+                              templateDropSectionKey === sectionGroup.sectionKey &&
+                                "border-accent/70 bg-accent/10"
+                            )}
+                            onDragOver={(event) => {
+                              event.preventDefault();
+                              setTemplateDropSectionKey(sectionGroup.sectionKey);
+                            }}
+                            onDragLeave={() => {
+                              setTemplateDropSectionKey((current) =>
+                                current === sectionGroup.sectionKey ? null : current
+                              );
+                            }}
+                            onDrop={(event) =>
+                              handleTemplateDropToSection(
+                                event,
+                                sectionGroup.sectionKey
+                              )
+                            }
                           >
                             <div className="flex items-center justify-between gap-2">
                               <div>
@@ -1828,12 +1942,17 @@ export default function AdminPage() {
                                   {sectionGroup.pages.length} option
                                   {sectionGroup.pages.length === 1 ? "" : "s"}
                                 </p>
+                                <p className="text-[11px] text-muted-foreground">
+                                  Drop a template PDF here.
+                                </p>
                               </div>
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() =>
-                                  addMasterTemplatePage(sectionGroup.sectionKey)
+                                  addMasterTemplatePage({
+                                    sectionKey: sectionGroup.sectionKey,
+                                  })
                                 }
                               >
                                 <Plus className="h-4 w-4" />
@@ -2072,6 +2191,7 @@ export default function AdminPage() {
                                 );
                                 if (!selectedPdf) return;
                                 updateMasterTemplatePage(activeMasterPage.id, {
+                                  title: selectedPdf.name,
                                   sourcePdf: {
                                     name: selectedPdf.name,
                                     url: selectedPdf.url,
@@ -2254,8 +2374,27 @@ export default function AdminPage() {
                     )}
                   </div>
                 </div>
-                <Separator />
-                <div className="grid gap-4 xl:grid-cols-[0.7fr_1.3fr]">
+                <Tabs defaultValue="master_flow" className="space-y-3">
+                  <TabsList className="grid w-full max-w-sm grid-cols-2">
+                    <TabsTrigger value="master_flow">Master flow</TabsTrigger>
+                    <TabsTrigger value="advanced_setup">Advanced setup</TabsTrigger>
+                  </TabsList>
+                  <TabsContent value="master_flow" className="mt-0">
+                    <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
+                      Advanced coordinate and mapping controls are in
+                      <span className="font-medium text-foreground">
+                        {" "}
+                        Advanced setup
+                      </span>
+                      . The default master flow is optimized for section-based
+                      template selection.
+                    </div>
+                  </TabsContent>
+                  <TabsContent value="advanced_setup" className="mt-0 space-y-3">
+                    <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                      Legacy calibration and mapping tools.
+                    </div>
+                    <div className="grid gap-4 xl:grid-cols-[0.7fr_1.3fr]">
                   <div className="space-y-3 rounded-xl border border-border/60 bg-background/70 p-4">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
                       Placement tools
@@ -2657,6 +2796,8 @@ export default function AdminPage() {
                     ) : null}
                   </div>
                 </div>
+                  </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
 

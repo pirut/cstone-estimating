@@ -7,6 +7,7 @@ import {
 export type EstimateInfo = {
   prepared_for?: string;
   project_name?: string;
+  project_type?: string;
   city_state_zip?: string;
   proposal_date?: string;
   plan_set_date?: string;
