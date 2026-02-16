@@ -1,6 +1,6 @@
 # Cornerstone Proposal Generator (Next.js)
 
-A web-focused app that uploads proposal inputs with UploadThing and generates a filled Cornerstone "New Construction Proposal" PDF.
+A web-focused app that uploads proposal inputs with UploadThing and generates Cornerstone proposal documents in PandaDoc.
 
 ## Setup
 
@@ -66,17 +66,20 @@ DOWNLOAD_ALLOWLIST_SUFFIXES=uploadthing.com,utfs.io,ufs.sh
 ALLOW_PRIVATE_DOWNLOADS=false
 ```
 
-Document generation provider (preparing PandaDoc rollout):
+PandaDoc configuration (required for proposal generation):
 
 ```
-# Default: local_pdf
-DOCUMENT_GENERATION_PROVIDER=local_pdf
-
-# PandaDoc prep vars (used when DOCUMENT_GENERATION_PROVIDER=pandadoc)
 PANDADOC_API_KEY=...
 PANDADOC_TEMPLATE_UUID=...
 PANDADOC_RECIPIENT_EMAIL=...
 PANDADOC_RECIPIENT_ROLE=Client
+
+# Optional overrides
+PANDADOC_API_BASE_URL=https://api.pandadoc.com/public/v1
+PANDADOC_APP_BASE_URL=https://app.pandadoc.com
+PANDADOC_SESSION_LIFETIME_SECONDS=900
+PANDADOC_READY_TIMEOUT_MS=45000
+PANDADOC_READY_POLL_INTERVAL_MS=1200
 ```
 
 Admin access is controlled by Clerk + InstantDB team roles. Only users with
@@ -91,12 +94,13 @@ npm run dev
 
 Open `http://localhost:3000`.
 
-## Generate PDFs
+## Generate PandaDoc proposals
 
-1) Upload the workbook and template PDF using the UploadThing widgets.
-2) Click **Generate Proposal PDF**.
+1) Build estimate variables in the app (manual estimate or workbook upload).
+2) Provide the signer email in the Generate step.
+3) Click **Generate PandaDoc**.
 
-## Calibration PDF (grid + markers)
+## Legacy Calibration PDF (optional)
 
 ```bash
 npm run calibrate -- --template "/path/to/Cornerstone Proposal.pdf" --output calibration.pdf

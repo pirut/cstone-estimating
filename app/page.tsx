@@ -82,6 +82,30 @@ type EstimateSnapshot = {
   templateUrl?: string;
 };
 
+type PandaDocGenerationResponse = {
+  document?: {
+    id?: string;
+    name?: string;
+    status?: string;
+    appUrl?: string;
+    sharedLink?: string;
+  };
+  session?: {
+    id?: string;
+    url?: string;
+    expiresAt?: string;
+  };
+  recipient?: {
+    email?: string;
+    firstName?: string;
+    lastName?: string;
+  };
+  businessCentralSync?: {
+    status?: string;
+    reason?: string;
+  };
+};
+
 const REQUIRED_MANUAL_INFO_FIELDS = [
   "prepared_for",
   "project_name",
@@ -288,6 +312,9 @@ export default function HomePage() {
   const [selectedEstimate, setSelectedEstimate] = useState<UploadedFile | null>(
     null
   );
+  const [signerEmail, setSignerEmail] = useState("");
+  const [lastGeneration, setLastGeneration] =
+    useState<PandaDocGenerationResponse | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [instantSetupError, setInstantSetupError] = useState<string | null>(null);
   const [teamName, setTeamName] = useState("");
@@ -358,6 +385,12 @@ export default function HomePage() {
   const normalizedOrgTeamName = preferredOrgTeamName.toLowerCase();
   const teamDomain = (allowedDomain || emailDomain || "").trim();
   const teamLookupDomain = teamDomain || "__none__";
+
+  useEffect(() => {
+    if (signerEmail.trim()) return;
+    if (!emailAddress) return;
+    setSignerEmail(emailAddress);
+  }, [emailAddress, signerEmail]);
 
   const teamQuery = instantAppId
     ? {
@@ -588,15 +621,9 @@ export default function HomePage() {
   );
   const hasEstimateValues = manualEstimateProgress.complete;
   const hasEstimateInput = manualEstimateProgress.started;
-  const hasMasterTemplatePages = Boolean(
-    templateConfig?.masterTemplate?.pages?.length
-  );
-  const hasTemplateForGeneration = Boolean(
-    templateConfig?.templatePdf?.url || hasMasterTemplatePages
-  );
   const canGenerate = Boolean(
-    hasTemplateForGeneration &&
-      (estimateMode === "workbook" ? uploads.workbook : hasEstimateValues)
+    (estimateMode === "workbook" ? uploads.workbook : hasEstimateValues) &&
+      signerEmail.trim()
   );
   const canDownloadPlanningLines = Boolean(
     uploads.workbook?.url ||
@@ -612,16 +639,16 @@ export default function HomePage() {
             : "Downloading workbook",
         value: 0.2,
       },
-      { label: "Downloading template", value: 0.4 },
+      { label: "Preparing PandaDoc variables", value: 0.45 },
       {
         label:
           estimateMode === "estimate"
-            ? "Formatting estimate data"
+            ? "Formatting estimate fields"
             : "Reading Excel data",
         value: 0.58,
       },
-      { label: "Stamping PDF pages", value: 0.78 },
-      { label: "Finalizing download", value: 0.9 },
+      { label: "Creating PandaDoc document", value: 0.78 },
+      { label: "Starting signing session", value: 0.9 },
     ],
     [estimateMode]
   );
@@ -835,8 +862,8 @@ export default function HomePage() {
   const status = useMemo(() => {
     if (isGenerating) {
       return {
-        label: "Generating PDF",
-        helper: "Building and stamping the proposal PDF.",
+        label: "Generating PandaDoc",
+        helper: "Creating the document and preparing signing.",
         tone: "loading" as const,
       };
     }
@@ -845,7 +872,7 @@ export default function HomePage() {
       const inputLabel = estimateMode === "estimate" ? "Estimate" : "Workbook";
       return {
         label: "Ready to generate",
-        helper: `${inputLabel} and template are selected.`,
+        helper: `${inputLabel} is ready.`,
         tone: "ready" as const,
       };
     }
@@ -854,8 +881,8 @@ export default function HomePage() {
       label: estimateMode === "estimate" ? "Awaiting estimate" : "Awaiting uploads",
       helper:
         estimateMode === "estimate"
-          ? "Enter estimate details and select a template."
-          : "Upload a workbook and select a template.",
+          ? "Enter estimate details."
+          : "Upload a workbook.",
       tone: "idle" as const,
     };
   }, [isGenerating, canGenerate, estimateMode]);
@@ -879,13 +906,13 @@ export default function HomePage() {
         estimateMode === "estimate" ? hasEstimateValues : Boolean(uploads.workbook),
     },
     {
-      id: "template",
-      label: "Template is selected",
-      done: hasTemplateForGeneration,
+      id: "recipient",
+      label: "Signer email is set",
+      done: Boolean(signerEmail.trim()),
     },
     {
       id: "generate",
-      label: "Proposal is ready to generate",
+      label: "PandaDoc is ready to generate",
       done: canGenerate,
     },
   ] as const;
@@ -1109,11 +1136,7 @@ export default function HomePage() {
 
   const handleGenerate = async () => {
     setError(null);
-    const hasTemplatePages = Boolean(templateConfig?.masterTemplate?.pages?.length);
-    if (!templateConfig?.templatePdf?.url && !hasTemplatePages) {
-      setError("Select a template from the library.");
-      return;
-    }
+    setLastGeneration(null);
     if (estimateMode === "workbook" && !uploads.workbook) {
       setError("Upload the workbook to continue.");
       return;
@@ -1122,9 +1145,17 @@ export default function HomePage() {
       setError("Enter at least one estimate value or load a saved estimate.");
       return;
     }
+    const normalizedSignerEmail = signerEmail.trim().toLowerCase();
+    if (!normalizedSignerEmail) {
+      setError("Enter a signer email before generating.");
+      return;
+    }
+    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(normalizedSignerEmail)) {
+      setError("Enter a valid signer email address.");
+      return;
+    }
 
     const mappingOverride = templateConfig?.mapping;
-    const coordsOverride = templateConfig?.coords;
     let generationSucceeded = false;
 
     if (progressResetTimeoutRef.current !== null) {
@@ -1142,10 +1173,7 @@ export default function HomePage() {
         body: JSON.stringify({
           workbookUrl:
             estimateMode === "workbook" ? uploads.workbook?.url : undefined,
-          templatePdfUrl: templateConfig?.templatePdf?.url,
-          masterTemplate: templateConfig?.masterTemplate,
           mappingOverride,
-          coordsOverride,
           estimate:
             estimateMode === "estimate"
               ? {
@@ -1156,12 +1184,17 @@ export default function HomePage() {
                     (Object.keys(estimateValues).length ? estimateValues : undefined),
                 }
               : undefined,
+          pandadoc: {
+            recipient: { email: normalizedSignerEmail },
+            createSession: true,
+            send: true,
+          },
         }),
       });
 
       if (!response.ok) {
         const contentType = response.headers.get("content-type") || "";
-        let message = "Failed to generate PDF.";
+        let message = "Failed to generate PandaDoc document.";
         if (contentType.includes("application/json")) {
           const data = await response.json();
           message = data?.error || message;
@@ -1172,15 +1205,19 @@ export default function HomePage() {
         throw new Error(message);
       }
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "Cornerstone Proposal - Filled.pdf";
-      link.click();
-      window.URL.revokeObjectURL(url);
+      const data = (await response.json()) as PandaDocGenerationResponse;
+      setLastGeneration(data);
+
+      const launchUrl =
+        data.session?.url ||
+        data.document?.sharedLink ||
+        data.document?.appUrl;
+      if (launchUrl) {
+        window.open(launchUrl, "_blank", "noopener,noreferrer");
+      }
+
       setProgress(1);
-      setProgressLabel("Download ready");
+      setProgressLabel("PandaDoc ready");
       generationSucceeded = true;
 
       if (estimateMode === "estimate") {
@@ -1191,7 +1228,9 @@ export default function HomePage() {
             historyErr instanceof Error
               ? historyErr.message
               : "Unable to save generated version.";
-          setError(`PDF downloaded, but version history update failed: ${message}`);
+          setError(
+            `PandaDoc was created, but version history update failed: ${message}`
+          );
         }
       }
     } catch (err) {
@@ -1622,11 +1661,6 @@ export default function HomePage() {
         throw new Error("Failed to load template configuration.");
       }
       const data = (await response.json()) as TemplateConfig;
-      const hasTemplatePdf = Boolean(data?.templatePdf?.url);
-      const hasMasterTemplatePages = Boolean(data?.masterTemplate?.pages?.length);
-      if (!hasTemplatePdf && !hasMasterTemplatePages) {
-        throw new Error("Template configuration is missing template pages.");
-      }
       setTemplateConfig(data);
       setLoadedTemplateConfigKey(item.key);
       setUploads((prev) => {
@@ -1676,13 +1710,13 @@ export default function HomePage() {
             <Badge variant="muted" className="bg-muted/80 text-[10px]">
               Step 2
             </Badge>
-            <CardTitle className="text-2xl font-serif">Template Library</CardTitle>
+            <CardTitle className="text-2xl font-serif">Generation Presets</CardTitle>
             <CardDescription>
-              Apply a saved template stack with calibrated coordinates.
+              Optionally load team mapping presets before creating PandaDoc.
             </CardDescription>
           </div>
           <Badge variant="outline" className="bg-background/80">
-            Required
+            Optional
           </Badge>
         </div>
       </CardHeader>
@@ -1707,18 +1741,18 @@ export default function HomePage() {
               {activeTemplateConfigItem.name}
             </p>
             <p className="text-xs text-muted-foreground">
-              Active team template. Updated{" "}
+              Active team preset. Updated{" "}
               {new Date(activeTemplateConfigItem.uploadedAt).toLocaleString()}.
             </p>
           </div>
         ) : (
           <div className="text-sm text-muted-foreground">
-            No template yet. Create one in the admin portal.
+            No preset yet. You can still generate directly from current values.
           </div>
         )}
         <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
           <span>
-            Active template:{" "}
+            Active preset:{" "}
             <span className="text-foreground">
               {templateConfig?.name ?? "None"}
               {templateConfig?.templateVersion
@@ -1822,7 +1856,7 @@ export default function HomePage() {
                     Cornerstone Proposal Generator
                   </h1>
                   <p className="max-w-xl text-base text-white/70">
-                    Build an estimate, select a template, and download the proposal PDF.
+                    Build estimate variables, generate PandaDoc, and launch e-sign.
                   </p>
                 </div>
               </div>
@@ -2421,10 +2455,10 @@ export default function HomePage() {
                     Step 3
                   </Badge>
                   <CardTitle className="text-2xl font-serif">
-                    Generate Proposal
+                    Generate PandaDoc
                   </CardTitle>
                   <CardDescription>
-                    Combine selected inputs into a branded PDF download.
+                    Create the proposal in PandaDoc and start signing.
                   </CardDescription>
                 </div>
                 <LayoutTemplate className="mt-1 h-5 w-5 text-muted-foreground" />
@@ -2469,6 +2503,22 @@ export default function HomePage() {
                 </div>
               ) : null}
               <div className="space-y-3 text-sm">
+                <div className="space-y-2">
+                  <label
+                    htmlFor="signer-email"
+                    className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground"
+                  >
+                    Signer email
+                  </label>
+                  <Input
+                    id="signer-email"
+                    type="email"
+                    value={signerEmail}
+                    onChange={(event) => setSignerEmail(event.target.value)}
+                    placeholder="client@example.com"
+                    autoComplete="email"
+                  />
+                </div>
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-muted-foreground">Input source</span>
                   <span className="text-right font-medium text-foreground">
@@ -2493,7 +2543,7 @@ export default function HomePage() {
                   </div>
                 )}
                 <div className="flex items-center justify-between gap-4">
-                  <span className="text-muted-foreground">Template</span>
+                  <span className="text-muted-foreground">Preset</span>
                   <span className="text-right font-medium text-foreground">
                     {templateConfig?.name ?? "Not selected"}
                     {templateConfig?.templateVersion
@@ -2515,7 +2565,7 @@ export default function HomePage() {
                   ) : (
                     <ArrowDownToLine className="h-4 w-4" />
                   )}
-                  {isGenerating ? "Generating..." : "Generate Proposal PDF"}
+                  {isGenerating ? "Generating..." : "Generate PandaDoc"}
                 </Button>
                 <Button
                   variant="secondary"
@@ -2536,8 +2586,48 @@ export default function HomePage() {
                     : "Copy _SYNC rows now"}
                 </Button>
               </div>
+              {lastGeneration?.document?.id ? (
+                <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 px-4 py-3 text-sm">
+                  <p className="font-medium text-foreground">
+                    Last document: {lastGeneration.document.name ?? lastGeneration.document.id}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Status: {lastGeneration.document.status ?? "unknown"}
+                    {lastGeneration.businessCentralSync?.status
+                      ? ` · Business Central sync: ${lastGeneration.businessCentralSync.status}`
+                      : ""}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {lastGeneration.session?.url ? (
+                      <Button asChild size="sm" variant="outline">
+                        <a href={lastGeneration.session.url} target="_blank" rel="noreferrer">
+                          Open signing session
+                        </a>
+                      </Button>
+                    ) : null}
+                    {lastGeneration.document?.sharedLink ? (
+                      <Button asChild size="sm" variant="outline">
+                        <a
+                          href={lastGeneration.document.sharedLink}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Open recipient link
+                        </a>
+                      </Button>
+                    ) : null}
+                    {lastGeneration.document?.appUrl ? (
+                      <Button asChild size="sm" variant="outline">
+                        <a href={lastGeneration.document.appUrl} target="_blank" rel="noreferrer">
+                          Open PandaDoc
+                        </a>
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
               <p className="text-xs text-muted-foreground">
-                Generated PDFs are produced on demand and downloaded immediately.
+                Documents are created in PandaDoc and opened automatically.
               </p>
             </CardContent>
           </Card>

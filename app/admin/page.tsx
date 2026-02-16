@@ -134,6 +134,24 @@ type MasterTemplateSelectionDraft = {
   sectionOrder: MasterTemplateSectionKey[];
 };
 
+type PandaDocGenerationResponse = {
+  document?: {
+    id?: string;
+    name?: string;
+    status?: string;
+    appUrl?: string;
+    sharedLink?: string;
+  };
+  session?: {
+    id?: string;
+    url?: string;
+    expiresAt?: string;
+  };
+  businessCentralSync?: {
+    status?: string;
+  };
+};
+
 const LIBRARY_CONFIG: Record<
   AdminLibraryType,
   { label: string; description: string; endpoint: AdminLibraryType }
@@ -302,6 +320,9 @@ export default function AdminPage() {
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
+  const [testSignerEmail, setTestSignerEmail] = useState("");
+  const [lastGeneration, setLastGeneration] =
+    useState<PandaDocGenerationResponse | null>(null);
   const activeTemplateConfigItem = useMemo(
     () => getMostRecentLibraryItem(libraries.template_config.items),
     [libraries.template_config.items]
@@ -337,6 +358,12 @@ export default function AdminPage() {
   const normalizedOrgTeamName = preferredOrgTeamName.toLowerCase();
   const teamDomain = (allowedDomain || emailDomain || "").trim();
   const teamLookupDomain = teamDomain || "__none__";
+
+  useEffect(() => {
+    if (testSignerEmail.trim()) return;
+    if (!emailAddress) return;
+    setTestSignerEmail(emailAddress);
+  }, [emailAddress, testSignerEmail]);
 
   const teamQuery = instantAppId
     ? {
@@ -407,10 +434,10 @@ export default function AdminPage() {
   const progressSteps = useMemo(
     () => [
       { label: "Downloading workbook", value: 0.2 },
-      { label: "Downloading template", value: 0.4 },
+      { label: "Preparing PandaDoc variables", value: 0.45 },
       { label: "Reading Excel data", value: 0.58 },
-      { label: "Stamping PDF pages", value: 0.78 },
-      { label: "Finalizing download", value: 0.9 },
+      { label: "Creating PandaDoc document", value: 0.78 },
+      { label: "Starting signing session", value: 0.9 },
     ],
     []
   );
@@ -570,17 +597,18 @@ export default function AdminPage() {
 
   const handleGenerate = async () => {
     setCalibrationError(null);
-    const masterTemplate = buildMasterTemplateConfig(
-      masterTemplatePages,
-      masterTemplateSelection
-    );
-    const hasMasterPages = masterTemplate.pages.length > 0;
+    setLastGeneration(null);
     if (!workbookFile) {
       setCalibrationError("Upload the workbook before generating.");
       return;
     }
-    if (!templateFile && !hasMasterPages) {
-      setCalibrationError("Select a template PDF or configure master template pages.");
+    const normalizedSignerEmail = testSignerEmail.trim().toLowerCase();
+    if (!normalizedSignerEmail) {
+      setCalibrationError("Enter a signer email before generating.");
+      return;
+    }
+    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(normalizedSignerEmail)) {
+      setCalibrationError("Enter a valid signer email address.");
       return;
     }
 
@@ -593,16 +621,18 @@ export default function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           workbookUrl: workbookFile.url,
-          templatePdfUrl: templateFile?.url,
-          masterTemplate: hasMasterPages ? masterTemplate : undefined,
           mappingOverride: mappingConfig,
-          coordsOverride: coordsConfig,
+          pandadoc: {
+            recipient: { email: normalizedSignerEmail },
+            createSession: true,
+            send: true,
+          },
         }),
       });
 
       if (!response.ok) {
         const contentType = response.headers.get("content-type") || "";
-        let message = "Failed to generate PDF.";
+        let message = "Failed to generate PandaDoc document.";
         if (contentType.includes("application/json")) {
           const data = await response.json();
           message = data?.error || message;
@@ -613,15 +643,17 @@ export default function AdminPage() {
         throw new Error(message);
       }
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "Cornerstone Proposal - Filled.pdf";
-      link.click();
-      window.URL.revokeObjectURL(url);
+      const data = (await response.json()) as PandaDocGenerationResponse;
+      setLastGeneration(data);
+      const launchUrl =
+        data.session?.url ||
+        data.document?.sharedLink ||
+        data.document?.appUrl;
+      if (launchUrl) {
+        window.open(launchUrl, "_blank", "noopener,noreferrer");
+      }
       setProgress(1);
-      setProgressLabel("Download ready");
+      setProgressLabel("PandaDoc ready");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error.";
       setCalibrationError(message);
@@ -3155,7 +3187,7 @@ export default function AdminPage() {
                   Test Generation
                 </CardTitle>
                 <CardDescription>
-                  Generate a proposal with the current mapping and coordinates.
+                  Create a PandaDoc document using the current variable mapping.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -3164,6 +3196,22 @@ export default function AdminPage() {
                     {calibrationError}
                   </div>
                 ) : null}
+                <div className="space-y-2">
+                  <label
+                    htmlFor="admin-signer-email"
+                    className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground"
+                  >
+                    Signer email
+                  </label>
+                  <Input
+                    id="admin-signer-email"
+                    type="email"
+                    value={testSignerEmail}
+                    onChange={(event) => setTestSignerEmail(event.target.value)}
+                    placeholder="client@example.com"
+                    autoComplete="email"
+                  />
+                </div>
                 {isGenerating ? (
                   <div className="space-y-2 rounded-lg border border-border/60 bg-muted/40 px-4 py-3">
                     <div className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
@@ -3188,7 +3236,7 @@ export default function AdminPage() {
                     ) : (
                       <ArrowDownToLine className="h-4 w-4" />
                     )}
-                    {isGenerating ? "Generating..." : "Generate with overrides"}
+                    {isGenerating ? "Generating..." : "Generate PandaDoc"}
                   </Button>
                   <Button
                     variant="outline"
@@ -3201,6 +3249,35 @@ export default function AdminPage() {
                     Clear uploads
                   </Button>
                 </div>
+                {lastGeneration?.document?.id ? (
+                  <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 px-4 py-3 text-sm">
+                    <p className="font-medium text-foreground">
+                      Last document: {lastGeneration.document.name ?? lastGeneration.document.id}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Status: {lastGeneration.document.status ?? "unknown"}
+                      {lastGeneration.businessCentralSync?.status
+                        ? ` · Business Central sync: ${lastGeneration.businessCentralSync.status}`
+                        : ""}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {lastGeneration.session?.url ? (
+                        <Button asChild size="sm" variant="outline">
+                          <a href={lastGeneration.session.url} target="_blank" rel="noreferrer">
+                            Open signing session
+                          </a>
+                        </Button>
+                      ) : null}
+                      {lastGeneration.document?.appUrl ? (
+                        <Button asChild size="sm" variant="outline">
+                          <a href={lastGeneration.document.appUrl} target="_blank" rel="noreferrer">
+                            Open PandaDoc
+                          </a>
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
           </TabsContent>
