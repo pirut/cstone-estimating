@@ -40,6 +40,7 @@ type ViewerProps = {
   onPageSize?: (size: { width: number; height: number }) => void;
   onDocumentInfo?: (info: { pageCount: number }) => void;
   labelMap?: Record<string, string>;
+  showFallbackLabels?: boolean;
   className?: string;
 };
 
@@ -70,6 +71,7 @@ export function PdfCalibrationViewer({
   onPageSize,
   onDocumentInfo,
   labelMap,
+  showFallbackLabels = true,
   className,
 }: ViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -115,7 +117,11 @@ export function PdfCalibrationViewer({
           mappedValue === null || mappedValue === undefined
             ? ""
             : String(mappedValue);
-        const rawText = mappedText.trim() ? mappedText : name;
+        const rawText = mappedText.trim()
+          ? mappedText
+          : showFallbackLabels
+            ? name
+            : "";
         const fitted = fitPreviewText(
           rawText,
           fontFamily,
@@ -133,6 +139,7 @@ export function PdfCalibrationViewer({
           x,
           y,
           text: fitted.text,
+          hasText: Boolean(fitted.text.trim()),
           fontFamily,
           fontSize: fitted.size * scale,
           color: String(spec.color ?? "#111111"),
@@ -145,13 +152,14 @@ export function PdfCalibrationViewer({
       x: number;
       y: number;
       text: string;
+      hasText: boolean;
       fontFamily: string;
       fontSize: number;
       color: string;
       opacity?: number;
       textAnchor: "start" | "middle" | "end";
     }[];
-  }, [fields, labelMap, scale]);
+  }, [fields, labelMap, scale, showFallbackLabels]);
 
   useEffect(() => {
     if (!pdfUrl || !canvasRef.current) {
@@ -279,7 +287,7 @@ export function PdfCalibrationViewer({
   };
 
   const handlePointerDown = (
-    event: React.PointerEvent<SVGTextElement>,
+    event: React.PointerEvent<SVGElement>,
     fieldName: string
   ) => {
     if (event.button !== 0) return;
@@ -391,36 +399,75 @@ export function PdfCalibrationViewer({
             preserveAspectRatio="none"
           >
             {textOverlays.map((overlay) => (
-              <text
-                key={overlay.name}
-                x={overlay.x}
-                y={overlay.y}
-                fill={overlay.color}
-                opacity={overlay.opacity}
-                fontFamily={overlay.fontFamily}
-                fontSize={overlay.fontSize}
-                textAnchor={overlay.textAnchor}
-                dominantBaseline="alphabetic"
-                style={{ cursor: "grab" }}
-                className={cn(
-                  "pointer-events-auto select-none",
-                  overlay.name === selectedField && "drop-shadow-sm"
-                )}
-                onPointerDown={(event) =>
-                  handlePointerDown(event, overlay.name)
-                }
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  onSelectField(overlay.name);
-                  onFieldContextMenu?.(overlay.name, {
-                    clientX: event.clientX,
-                    clientY: event.clientY,
-                  });
-                }}
-              >
-                {overlay.text}
-              </text>
+              <g key={overlay.name}>
+                <line
+                  x1={overlay.x - 4}
+                  y1={overlay.y}
+                  x2={overlay.x + 4}
+                  y2={overlay.y}
+                  stroke={overlay.name === selectedField ? "#f59e0b" : "#94a3b8"}
+                  strokeOpacity={0.9}
+                  strokeWidth={1}
+                />
+                <line
+                  x1={overlay.x}
+                  y1={overlay.y - 4}
+                  x2={overlay.x}
+                  y2={overlay.y + 4}
+                  stroke={overlay.name === selectedField ? "#f59e0b" : "#94a3b8"}
+                  strokeOpacity={0.9}
+                  strokeWidth={1}
+                />
+                <circle
+                  cx={overlay.x}
+                  cy={overlay.y}
+                  r={8}
+                  fill="transparent"
+                  className="pointer-events-auto"
+                  style={{ cursor: "grab" }}
+                  onPointerDown={(event) => handlePointerDown(event, overlay.name)}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onSelectField(overlay.name);
+                    onFieldContextMenu?.(overlay.name, {
+                      clientX: event.clientX,
+                      clientY: event.clientY,
+                    });
+                  }}
+                />
+                {overlay.hasText ? (
+                  <text
+                    x={overlay.x}
+                    y={overlay.y}
+                    fill={overlay.color}
+                    opacity={overlay.opacity}
+                    fontFamily={overlay.fontFamily}
+                    fontSize={overlay.fontSize}
+                    textAnchor={overlay.textAnchor}
+                    dominantBaseline="alphabetic"
+                    style={{ cursor: "grab" }}
+                    className={cn(
+                      "pointer-events-auto select-none",
+                      overlay.name === selectedField && "drop-shadow-sm"
+                    )}
+                    onPointerDown={(event) =>
+                      handlePointerDown(event, overlay.name)
+                    }
+                    onContextMenu={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      onSelectField(overlay.name);
+                      onFieldContextMenu?.(overlay.name, {
+                        clientX: event.clientX,
+                        clientY: event.clientY,
+                      });
+                    }}
+                  >
+                    {overlay.text}
+                  </text>
+                ) : null}
+              </g>
             ))}
           </svg>
         </div>

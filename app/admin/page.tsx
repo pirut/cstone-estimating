@@ -561,40 +561,6 @@ export default function AdminPage() {
     }
   }, [editingTemplateKey, templateFile?.url]);
 
-  const previewLabelMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    const preparedByMap = mappingConfig.prepared_by_map ?? {};
-    const missingValue = String(mappingConfig.missing_value ?? "");
-    const coordsPageKey =
-      masterTemplatePages.find((page) => page.id === selectedMasterPageId)
-        ?.coordsPageKey ?? previewPage;
-    const fields =
-      (coordsConfig[coordsPageKey] as Record<string, CoordField>) ?? {};
-    Object.keys(fields).forEach((fieldName) => {
-      let raw = cellPreviews[fieldName];
-      let format = mappingConfig.fields?.[fieldName]?.format;
-      if (raw === undefined && fieldName === "plan_set_date_line") {
-        raw = cellPreviews.plan_set_date;
-        format = mappingConfig.fields?.plan_set_date?.format ?? "date_plan";
-      }
-      const formatted = formatPreviewValue(
-        raw,
-        format,
-        preparedByMap,
-        missingValue
-      );
-      map[fieldName] = formatted ?? missingValue;
-    });
-    return map;
-  }, [
-    coordsConfig,
-    cellPreviews,
-    mappingConfig,
-    masterTemplatePages,
-    selectedMasterPageId,
-    previewPage,
-  ]);
-
   useEffect(() => {
     if (!hasTeamAdminAccess) return;
     (Object.keys(LIBRARY_CONFIG) as AdminLibraryType[]).forEach((type) => {
@@ -802,6 +768,8 @@ export default function AdminPage() {
       setMasterTemplatePages(loadedMasterPages);
       setMasterTemplateSelection(loadedSelection);
       setSelectedMasterPageId(loadedMasterPages[0]?.id ?? null);
+      setSelectedField(null);
+      setFieldInspector(null);
       setEditingTemplateKey(item.key);
       setTemplateSaveStatus("Template loaded for editing.");
     } catch (error) {
@@ -1012,7 +980,7 @@ export default function AdminPage() {
   const previewDocumentPageKey = toPageKey(
     activeMasterPage?.sourcePage ?? parsePageKey(previewPage) ?? 1
   );
-  const previewPageFields = useMemo(
+  const activeCoordsFields = useMemo(
     () =>
       ((coordsConfig[activeCoordsPageKey] as
         | Record<string, CoordField>
@@ -1020,6 +988,48 @@ export default function AdminPage() {
       {}) as Record<string, CoordField>,
     [coordsConfig, activeCoordsPageKey]
   );
+  const activeBindingFields = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          (activeMasterPage?.dataBindings ?? [])
+            .map((binding) => String(binding ?? "").trim())
+            .filter(Boolean)
+        )
+      ),
+    [activeMasterPage?.dataBindings]
+  );
+  const previewPageFields = useMemo(() => {
+    if (!activeBindingFields.length) return activeCoordsFields;
+    const filtered: Record<string, CoordField> = {};
+    activeBindingFields.forEach((fieldName) => {
+      const field = activeCoordsFields[fieldName];
+      if (!field) return;
+      filtered[fieldName] = field;
+    });
+    return filtered;
+  }, [activeBindingFields, activeCoordsFields]);
+  const previewLabelMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    const preparedByMap = mappingConfig.prepared_by_map ?? {};
+    const missingValue = String(mappingConfig.missing_value ?? "");
+    Object.keys(previewPageFields).forEach((fieldName) => {
+      let raw = cellPreviews[fieldName];
+      let format = mappingConfig.fields?.[fieldName]?.format;
+      if (raw === undefined && fieldName === "plan_set_date_line") {
+        raw = cellPreviews.plan_set_date;
+        format = mappingConfig.fields?.plan_set_date?.format ?? "date_plan";
+      }
+      const formatted = formatPreviewValue(
+        raw,
+        format,
+        preparedByMap,
+        missingValue
+      );
+      map[fieldName] = formatted ?? missingValue;
+    });
+    return map;
+  }, [cellPreviews, mappingConfig, previewPageFields]);
   const selectedFieldSpec = selectedField
     ? previewPageFields[selectedField]
     : undefined;
@@ -2704,6 +2714,7 @@ export default function AdminPage() {
                           snapToGrid={snapToGrid}
                           gridSize={gridSize}
                           labelMap={previewLabelMap}
+                          showFallbackLabels={false}
                           className="min-h-[720px]"
                         />
                       </>
