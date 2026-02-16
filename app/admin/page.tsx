@@ -61,6 +61,7 @@ import {
 } from "@/lib/clerk";
 import { cn } from "@/lib/utils";
 import { formatPreviewValue } from "@/lib/formatting";
+import { PRODUCT_FEATURE_SELECT_FIELDS } from "@/lib/product-features";
 import {
   getSortedPageKeys,
   parsePageKey,
@@ -189,8 +190,26 @@ const DEFAULT_MASTER_TEMPLATE_PROJECT_TYPES = [
   "Replacement",
   "Remodel",
 ];
+const DEFAULT_TEAM_TEMPLATE_NAME = "Team Master Template";
 const MASTER_TEMPLATE_TEMPLATE_MIME = "application/x-master-template-pdf";
 const CALIBRATION_FIELD_MIME = "application/x-calibration-field";
+const GENERATED_MASTER_BINDING_FIELDS = [
+  "project_type",
+  "selected_project_type",
+  "product_type",
+  "selected_product_type",
+  "selected_product_name",
+  "selected_product_vendor",
+  "selected_product_vendor_id",
+  "selected_product_vendorid",
+  "selected_product_price",
+  "selected_product_split_finish",
+  "selected_product_stainless_operating_hardware",
+  "selected_product_has_screens",
+  ...PRODUCT_FEATURE_SELECT_FIELDS.map(
+    (field) => `selected_product_${field.key}` as const
+  ),
+];
 
 export default function AdminPage() {
   const [isEmbedded, setIsEmbedded] = useState(false);
@@ -245,7 +264,7 @@ export default function AdminPage() {
   const [fieldSearch, setFieldSearch] = useState("");
   const [bindingSearch, setBindingSearch] = useState("");
   const [coordsEditorError, setCoordsEditorError] = useState<string | null>(null);
-  const [templateName, setTemplateName] = useState("");
+  const [templateName, setTemplateName] = useState(DEFAULT_TEAM_TEMPLATE_NAME);
   const [templateVersion, setTemplateVersion] = useState(1);
   const [templateDescription, setTemplateDescription] = useState("");
   const [editingTemplateKey, setEditingTemplateKey] = useState<string | null>(
@@ -516,12 +535,6 @@ export default function AdminPage() {
   }, [mappingConfig, workbookLoaded]);
 
   useEffect(() => {
-    if (!templateFile?.name || templateName.trim()) return;
-    const baseName = templateFile.name.replace(/\.[^.]+$/, "");
-    setTemplateName(baseName);
-  }, [templateFile?.name, templateName]);
-
-  useEffect(() => {
     if (!templateFile?.url) {
       setTemplatePageCount(0);
     }
@@ -640,10 +653,10 @@ export default function AdminPage() {
     setTemplateSaveError(null);
     setTemplateSaveStatus(null);
     setTemplateLoadError(null);
-    if (!templateName.trim()) {
-      setTemplateSaveError("Template name is required.");
-      return;
-    }
+    const resolvedTemplateName =
+      activeTemplateConfigItem?.name?.trim() ||
+      templateName.trim() ||
+      DEFAULT_TEAM_TEMPLATE_NAME;
     const masterTemplate = buildMasterTemplateConfig(
       masterTemplatePages,
       masterTemplateSelection
@@ -676,7 +689,7 @@ export default function AdminPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: templateName.trim(),
+          name: resolvedTemplateName,
           templateVersion: nextTemplateVersion,
           description: templateDescription.trim() || undefined,
           templatePdf: hasTemplatePdf ? templateFile : undefined,
@@ -694,6 +707,7 @@ export default function AdminPage() {
       const savedKey = data?.item?.key as string | undefined;
       if (savedKey) {
         setEditingTemplateKey(savedKey);
+        setTemplateName(resolvedTemplateName);
         const oldTemplateKeys = libraries.template_config.items
           .map((item) => item.key)
           .filter((key) => key !== savedKey);
@@ -981,6 +995,7 @@ export default function AdminPage() {
 
     Object.keys(mappingConfig.fields ?? {}).forEach(addField);
     addField("plan_set_date_line");
+    GENERATED_MASTER_BINDING_FIELDS.forEach(addField);
     pageKeys.forEach((pageKey) => {
       const fields =
         (coordsConfig[pageKey] as Record<string, CoordField> | undefined) ?? {};
@@ -1762,18 +1777,12 @@ export default function AdminPage() {
                         template.
                       </div>
                     )}
+                    <p className="text-[11px] text-muted-foreground">
+                      Template naming is automatic. Saving updates the single team
+                      template.
+                    </p>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-xs text-muted-foreground">
-                      Template name
-                    </label>
-                    <Input
-                      value={templateName}
-                      onChange={(event) => setTemplateName(event.target.value)}
-                      placeholder="Cornerstone Proposal"
-                    />
-                  </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 md:col-span-2">
                     <label className="text-xs text-muted-foreground">
                       Description
                     </label>
