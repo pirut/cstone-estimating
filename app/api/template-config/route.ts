@@ -12,6 +12,9 @@ export const runtime = "nodejs";
 export const maxDuration = 30;
 
 const utapi = new UTApi();
+const LIST_LIMIT = 100;
+const MAX_LIST = 1000;
+const TEMPLATE_CONFIG_PREFIX = "template-config:";
 const DEFAULT_PROJECT_TYPE_FIELD = "project_type";
 const DEFAULT_PRODUCT_TYPE_FIELD = "product_type";
 const DEFAULT_PROJECT_TYPES = ["New Construction", "Replacement", "Remodel"];
@@ -109,6 +112,9 @@ export async function POST(request: NextRequest) {
 
     const uploaded = await utapi.uploadFiles(file);
     const fileResult = Array.isArray(uploaded) ? uploaded[0] : uploaded;
+    if (fileResult?.key) {
+      await deleteOtherTemplateConfigs(fileResult.key);
+    }
     return NextResponse.json({
       item: {
         key: fileResult.key,
@@ -136,6 +142,36 @@ function normalizeTemplateVersion(value: unknown) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed < 1) return 1;
   return Math.trunc(parsed);
+}
+
+async function deleteOtherTemplateConfigs(activeKey: string) {
+  const files = await listAllFiles();
+  const oldKeys = files
+    .filter(
+      (file) =>
+        file.customId?.startsWith(TEMPLATE_CONFIG_PREFIX) && file.key !== activeKey
+    )
+    .map((file) => file.key);
+  if (!oldKeys.length) return;
+  await utapi.deleteFiles(oldKeys);
+}
+
+type ListedFile = Awaited<ReturnType<typeof utapi.listFiles>>["files"][number];
+
+async function listAllFiles() {
+  const results: ListedFile[] = [];
+  let offset = 0;
+
+  while (offset < MAX_LIST) {
+    const response = await utapi.listFiles({ limit: LIST_LIMIT, offset });
+    results.push(...response.files);
+    if (!response.hasMore || response.files.length === 0) {
+      break;
+    }
+    offset += response.files.length;
+  }
+
+  return results;
 }
 
 function normalizeMasterTemplate(value: unknown): MasterTemplateConfig {

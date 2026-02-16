@@ -945,6 +945,20 @@ function buildDerivedProductFieldValues({
       if (!token.trim()) return;
       derived[`selected_product_${normalizeFieldKey(key)}`] = token;
     });
+
+    const detailsBlock = buildSelectedProductDetailsBlock({
+      productName,
+      productType,
+      vendor:
+        derived.selected_product_vendor ||
+        stringifyUnknown(selectedProduct.vendor) ||
+        "",
+      selectedProduct,
+    });
+    if (detailsBlock.trim()) {
+      derived.selected_product_details_block = detailsBlock;
+      derived.product_details_block = detailsBlock;
+    }
   } else if (selectedTypeFromContext) {
     derived.product_type = selectedTypeFromContext;
     derived.selected_product_type = selectedTypeFromContext;
@@ -959,6 +973,42 @@ function normalizeFieldKey(value: string) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/(^_|_$)+/g, "");
+}
+
+function buildSelectedProductDetailsBlock({
+  productName,
+  productType,
+  vendor,
+  selectedProduct,
+}: {
+  productName: string;
+  productType: string;
+  vendor: string;
+  selectedProduct: Record<string, unknown>;
+}) {
+  const lineValue = (value: unknown) => {
+    const text = stringifyUnknown(value).trim();
+    if (!text || text.toLowerCase() === "false") return "";
+    if (text.toLowerCase() === "true") return "Yes";
+    return text;
+  };
+  const lines = [
+    ["Product", productName],
+    ["Product type", productType],
+    ["Vendor", vendor],
+    ["Interior frame color", lineValue(selectedProduct.interior_frame_color)],
+    ["Exterior frame color", lineValue(selectedProduct.exterior_frame_color)],
+    ["Glass make up", lineValue(selectedProduct.glass_makeup)],
+    [
+      "Stainless operating hardware",
+      lineValue(selectedProduct.stainless_operating_hardware),
+    ],
+    ["Screens", lineValue(selectedProduct.has_screens)],
+    ["Door hardware color", lineValue(selectedProduct.door_hardware_color)],
+    ["Door hinge color", lineValue(selectedProduct.door_hinge_color)],
+    ["Window hardware color", lineValue(selectedProduct.window_hardware_color)],
+  ];
+  return lines.map(([label, value]) => `${label}: ${value}`).join("\n");
 }
 
 function mergeMissingFieldValues(

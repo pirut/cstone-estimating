@@ -197,12 +197,14 @@ const GENERATED_MASTER_BINDING_FIELDS = [
   "project_type",
   "selected_project_type",
   "product_type",
+  "product_details_block",
   "selected_product_type",
   "selected_product_name",
   "selected_product_vendor",
   "selected_product_vendor_id",
   "selected_product_vendorid",
   "selected_product_price",
+  "selected_product_details_block",
   "selected_product_split_finish",
   "selected_product_stainless_operating_hardware",
   "selected_product_has_screens",
@@ -721,17 +723,11 @@ export default function AdminPage() {
       if (savedKey) {
         setEditingTemplateKey(savedKey);
         setTemplateName(resolvedTemplateName);
-        const oldTemplateKeys = libraries.template_config.items
-          .map((item) => item.key)
-          .filter((key) => key !== savedKey);
-        for (const key of oldTemplateKeys) {
-          await deleteItem("template_config", key);
-        }
       }
       setTemplateVersion(nextTemplateVersion);
       setTemplateSaveStatus(
         editingTemplateKey
-          ? `Template updated to v${nextTemplateVersion}.`
+          ? `Template overwritten to v${nextTemplateVersion}.`
           : "Template saved as v1."
       );
       setTemplateDescription("");
