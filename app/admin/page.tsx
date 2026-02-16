@@ -271,6 +271,10 @@ export default function AdminPage() {
     clientX: number;
     clientY: number;
   } | null>(null);
+  const [fieldInspectorPosition, setFieldInspectorPosition] = useState<{
+    left: number;
+    top: number;
+  } | null>(null);
   const fieldInspectorRef = useRef<HTMLDivElement | null>(null);
   const [coordsEditorError, setCoordsEditorError] = useState<string | null>(null);
   const [templateName, setTemplateName] = useState(DEFAULT_TEAM_TEMPLATE_NAME);
@@ -1027,24 +1031,6 @@ export default function AdminPage() {
   const inspectorFieldSpec = inspectorFieldName
     ? previewPageFields[inspectorFieldName]
     : undefined;
-  const fieldInspectorPosition = useMemo(() => {
-    if (!fieldInspector) return null;
-    const panelWidth = 360;
-    const panelHeight = 440;
-    const viewportWidth =
-      typeof window !== "undefined" ? window.innerWidth : fieldInspector.clientX;
-    const viewportHeight =
-      typeof window !== "undefined" ? window.innerHeight : fieldInspector.clientY;
-    const left = Math.max(
-      12,
-      Math.min(fieldInspector.clientX + 12, viewportWidth - panelWidth - 12)
-    );
-    const top = Math.max(
-      12,
-      Math.min(fieldInspector.clientY + 12, viewportHeight - panelHeight - 12)
-    );
-    return { left, top };
-  }, [fieldInspector]);
   const availableStampFields = useMemo(() => {
     const result: string[] = [];
     const seen = new Set<string>();
@@ -1561,6 +1547,20 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!fieldInspector) return;
+    const updatePosition = () => {
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
+      const panelWidth = fieldInspectorRef.current?.offsetWidth ?? 360;
+      const panelHeight = fieldInspectorRef.current?.offsetHeight ?? 520;
+      const maxLeft = Math.max(12, viewportWidth - panelWidth - 12);
+      const maxTop = Math.max(12, viewportHeight - panelHeight - 12);
+      const nextLeft = Math.min(Math.max(fieldInspector.clientX + 12, 12), maxLeft);
+      const nextTop = Math.min(Math.max(fieldInspector.clientY + 12, 12), maxTop);
+      setFieldInspectorPosition({ left: nextLeft, top: nextTop });
+    };
+
+    updatePosition();
+    window.addEventListener("resize", updatePosition);
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
       if (
@@ -1579,9 +1579,15 @@ export default function AdminPage() {
     window.addEventListener("pointerdown", handlePointerDown);
     window.addEventListener("keydown", handleEscape);
     return () => {
+      window.removeEventListener("resize", updatePosition);
       window.removeEventListener("pointerdown", handlePointerDown);
       window.removeEventListener("keydown", handleEscape);
     };
+  }, [fieldInspector]);
+
+  useEffect(() => {
+    if (fieldInspector) return;
+    setFieldInspectorPosition(null);
   }, [fieldInspector]);
 
   useEffect(() => {
@@ -3198,14 +3204,13 @@ export default function AdminPage() {
       </div>
       {fieldInspector &&
       inspectorFieldName &&
-      inspectorFieldSpec &&
-      fieldInspectorPosition ? (
+      inspectorFieldSpec ? (
         <div
           ref={fieldInspectorRef}
-          className="fixed z-50 w-[360px] rounded-2xl border border-border/70 bg-card/95 p-4 shadow-elevated backdrop-blur"
+          className="fixed z-50 max-h-[calc(100vh-24px)] w-[360px] overflow-y-auto rounded-2xl border border-border/70 bg-card/95 p-4 shadow-elevated backdrop-blur"
           style={{
-            left: `${fieldInspectorPosition.left}px`,
-            top: `${fieldInspectorPosition.top}px`,
+            left: `${fieldInspectorPosition?.left ?? 12}px`,
+            top: `${fieldInspectorPosition?.top ?? 12}px`,
           }}
         >
           <div className="mb-3 flex items-start justify-between gap-2">
