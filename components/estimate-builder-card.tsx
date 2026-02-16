@@ -85,6 +85,7 @@ type EstimateBuilderCardProps = {
   }>;
   panelTypes?: PanelType[];
   productFeatureOptions?: ProductFeatureOption[];
+  projectTypeOptions?: string[];
 };
 
 type EstimateFilePayload = {
@@ -168,6 +169,7 @@ export function EstimateBuilderCard({
   vendors,
   panelTypes,
   productFeatureOptions,
+  projectTypeOptions,
 }: EstimateBuilderCardProps) {
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -243,6 +245,18 @@ export function EstimateBuilderCard({
   const panelTypeOptions = useMemo(() => {
     return panelTypes ?? [];
   }, [panelTypes]);
+  const normalizedProjectTypeOptions = useMemo(() => {
+    const source = Array.isArray(projectTypeOptions) ? projectTypeOptions : [];
+    const seen = new Set<string>();
+    const normalized: string[] = [];
+    source.forEach((entry) => {
+      const option = String(entry ?? "").trim();
+      if (!option || seen.has(option)) return;
+      seen.add(option);
+      normalized.push(option);
+    });
+    return normalized;
+  }, [projectTypeOptions]);
 
   const computed = useMemo(
     () => computeEstimate(draft, panelTypeOptions),
@@ -758,25 +772,34 @@ export function EstimateBuilderCard({
                 const fieldValue =
                   draft.info[field.key as keyof EstimateDraft["info"]] ?? "";
                 const isDate = field.type === "date";
-                const selectOptions = Array.isArray((field as any).options)
+                const selectOptionsFromField = Array.isArray((field as any).options)
                   ? ((field as any).options as unknown[])
                       .map((option) => String(option ?? "").trim())
                       .filter(Boolean)
                   : [];
-                const isSelect = field.type === "select" && selectOptions.length > 0;
-                const isRequired = REQUIRED_INFO_FIELDS.includes(
-                  field.key as keyof EstimateDraft["info"]
-                );
+                const selectOptions =
+                  field.key === "project_type" &&
+                  normalizedProjectTypeOptions.length
+                    ? normalizedProjectTypeOptions
+                    : selectOptionsFromField;
                 const isProjectNameField = field.key === "project_name";
                 const isCityStateZipField = field.key === "city_state_zip";
                 const isPreparedByField = field.key === "prepared_by";
-                const infoFieldDisabled =
-                  Boolean(legacyValues) ||
-                  (isPreparedByField && Boolean(normalizedPreparedByName));
                 const displayedValue =
                   isPreparedByField && normalizedPreparedByName
                     ? normalizedPreparedByName
                     : fieldValue;
+                const currentSelectValue = String(displayedValue ?? "").trim();
+                const includeCurrentSelectValue =
+                  Boolean(currentSelectValue) &&
+                  !selectOptions.includes(currentSelectValue);
+                const isSelect = field.type === "select" && selectOptions.length > 0;
+                const isRequired = REQUIRED_INFO_FIELDS.includes(
+                  field.key as keyof EstimateDraft["info"]
+                );
+                const infoFieldDisabled =
+                  Boolean(legacyValues) ||
+                  (isPreparedByField && Boolean(normalizedPreparedByName));
 
                 return (
                   <div key={field.key} className="space-y-2">
@@ -820,6 +843,11 @@ export function EstimateBuilderCard({
                               {option}
                             </SelectItem>
                           ))}
+                          {includeCurrentSelectValue ? (
+                            <SelectItem value={currentSelectValue}>
+                              {currentSelectValue}
+                            </SelectItem>
+                          ) : null}
                         </SelectContent>
                       </Select>
                     ) : (

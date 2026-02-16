@@ -152,6 +152,12 @@ function formatRelativeTime(timestamp: number | null | undefined) {
   return new Date(timestamp).toLocaleDateString();
 }
 
+function getMostRecentLibraryItem(items: LibraryItem[]) {
+  return items
+    .slice()
+    .sort((left, right) => right.uploadedAt - left.uploadedAt)[0];
+}
+
 function getManualEstimateProgress(
   estimatePayload: Record<string, any> | null,
   estimateValues: Record<string, string | number>
@@ -258,7 +264,7 @@ export default function HomePage() {
   const [uploads, setUploads] = useState<UploadState>({});
   const [error, setError] = useState<string | null>(null);
   const [templateConfig, setTemplateConfig] = useState<TemplateConfig | null>(null);
-  const [selectedTemplateConfigKey, setSelectedTemplateConfigKey] = useState<
+  const [loadedTemplateConfigKey, setLoadedTemplateConfigKey] = useState<
     string | null
   >(null);
   const [templateConfigError, setTemplateConfigError] = useState<string | null>(null);
@@ -1556,7 +1562,7 @@ export default function HomePage() {
     }));
     if (type === "template") {
       setTemplateConfig(null);
-      setSelectedTemplateConfigKey(null);
+      setLoadedTemplateConfigKey(null);
     }
   };
 
@@ -1593,12 +1599,17 @@ export default function HomePage() {
     }
   };
 
+  const activeTemplateConfigItem = useMemo(
+    () => getMostRecentLibraryItem(library.template_config.items),
+    [library.template_config.items]
+  );
+
   useEffect(() => {
     void loadLibrary("workbook");
     void loadLibrary("template_config");
   }, []);
 
-  const handleSelectTemplateConfig = async (item: LibraryItem) => {
+  const handleSelectTemplateConfig = useCallback(async (item: LibraryItem) => {
     if (!item.url) {
       setTemplateConfigError("Selected template has no URL.");
       return;
@@ -1617,7 +1628,7 @@ export default function HomePage() {
         throw new Error("Template configuration is missing template pages.");
       }
       setTemplateConfig(data);
-      setSelectedTemplateConfigKey(item.key);
+      setLoadedTemplateConfigKey(item.key);
       setUploads((prev) => {
         if (!data.templatePdf?.url) {
           const next = { ...prev };
@@ -1632,10 +1643,27 @@ export default function HomePage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setTemplateConfigError(message);
+      setLoadedTemplateConfigKey(item.key);
     } finally {
       setTemplateConfigLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!activeTemplateConfigItem) {
+      setTemplateConfig(null);
+      setLoadedTemplateConfigKey(null);
+      return;
+    }
+    if (templateConfigLoading) return;
+    if (loadedTemplateConfigKey === activeTemplateConfigItem.key) return;
+    void handleSelectTemplateConfig(activeTemplateConfigItem);
+  }, [
+    activeTemplateConfigItem,
+    handleSelectTemplateConfig,
+    loadedTemplateConfigKey,
+    templateConfigLoading,
+  ]);
 
   const templateCard = (
     <Card
@@ -1671,47 +1699,26 @@ export default function HomePage() {
         ) : null}
         {library.template_config.loading ? (
           <div className="text-sm text-muted-foreground">
-            Loading template library...
+            Loading template configuration...
           </div>
-        ) : library.template_config.items.length ? (
-          <ScrollArea className="h-56 rounded-lg border border-border/70 bg-background/70">
-            <div className="divide-y divide-border/60">
-              {library.template_config.items.map((item) => (
-                <div
-                  key={item.key}
-                  className="flex items-center justify-between gap-4 px-4 py-3"
-                >
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
-                      {item.name}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {new Date(item.uploadedAt).toLocaleString()}
-                    </p>
-                  </div>
-                  <Button
-                    variant={
-                      selectedTemplateConfigKey === item.key ? "accent" : "outline"
-                    }
-                    size="sm"
-                    onClick={() => handleSelectTemplateConfig(item)}
-                  >
-                    {selectedTemplateConfigKey === item.key
-                      ? "Selected"
-                      : "Use template"}
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
+        ) : activeTemplateConfigItem ? (
+          <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
+            <p className="text-sm font-medium text-foreground">
+              {activeTemplateConfigItem.name}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Active team template. Updated{" "}
+              {new Date(activeTemplateConfigItem.uploadedAt).toLocaleString()}.
+            </p>
+          </div>
         ) : (
           <div className="text-sm text-muted-foreground">
-            No templates yet. Create one in the admin portal.
+            No template yet. Create one in the admin portal.
           </div>
         )}
         <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
           <span>
-            Selected template:{" "}
+            Active template:{" "}
             <span className="text-foreground">
               {templateConfig?.name ?? "None"}
               {templateConfig?.templateVersion
@@ -1719,22 +1726,14 @@ export default function HomePage() {
                 : ""}
             </span>
           </span>
-          {templateConfig ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  setTemplateConfig(null);
-                  setSelectedTemplateConfigKey(null);
-                }}
-              >
-                Clear selection
-              </Button>
-          ) : null}
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => loadLibrary("template_config")}
+            onClick={() => {
+              setTemplateConfigError(null);
+              setLoadedTemplateConfigKey(null);
+              void loadLibrary("template_config");
+            }}
           >
             Refresh
           </Button>
@@ -2286,6 +2285,9 @@ export default function HomePage() {
               vendors={vendorOptions}
               panelTypes={panelTypeOptions}
               productFeatureOptions={productFeatureOptions}
+              projectTypeOptions={
+                templateConfig?.masterTemplate?.selection?.projectTypes
+              }
               onActivate={() => {
                 setEstimateMode("estimate");
                 setError(null);

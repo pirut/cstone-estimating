@@ -14,6 +14,7 @@ export const maxDuration = 30;
 const utapi = new UTApi();
 const DEFAULT_PROJECT_TYPE_FIELD = "project_type";
 const DEFAULT_PRODUCT_TYPE_FIELD = "product_type";
+const DEFAULT_PROJECT_TYPES = ["New Construction", "Replacement", "Remodel"];
 const DEFAULT_SECTION_ORDER: MasterTemplateSectionKey[] = [
   "title",
   "product",
@@ -145,6 +146,7 @@ function normalizeMasterTemplate(value: unknown): MasterTemplateConfig {
           selection?: unknown;
           projectTypeField?: unknown;
           productTypeField?: unknown;
+          projectTypes?: unknown;
           sectionOrder?: unknown;
         })
       : null;
@@ -155,6 +157,7 @@ function normalizeMasterTemplate(value: unknown): MasterTemplateConfig {
       selection: {
         projectTypeField: DEFAULT_PROJECT_TYPE_FIELD,
         productTypeField: DEFAULT_PRODUCT_TYPE_FIELD,
+        projectTypes: DEFAULT_PROJECT_TYPES,
         sectionOrder: DEFAULT_SECTION_ORDER,
       },
       pages: [],
@@ -220,6 +223,7 @@ function normalizeMasterTemplateSelection(source: {
   selection?: unknown;
   projectTypeField?: unknown;
   productTypeField?: unknown;
+  projectTypes?: unknown;
   sectionOrder?: unknown;
 } | null): MasterTemplateSelectionConfig {
   const selectionSource =
@@ -232,6 +236,9 @@ function normalizeMasterTemplateSelection(source: {
   const productTypeField = String(
     selectionSource.productTypeField ?? source?.productTypeField ?? ""
   ).trim();
+  const projectTypes = normalizeProjectTypes(
+    selectionSource.projectTypes ?? source?.projectTypes
+  );
   const sectionOrder = normalizeSectionOrder(
     selectionSource.sectionOrder ?? source?.sectionOrder
   );
@@ -239,8 +246,23 @@ function normalizeMasterTemplateSelection(source: {
   return {
     projectTypeField: projectTypeField || DEFAULT_PROJECT_TYPE_FIELD,
     productTypeField: productTypeField || DEFAULT_PRODUCT_TYPE_FIELD,
+    projectTypes,
     sectionOrder,
   };
+}
+
+function normalizeProjectTypes(value: unknown): string[] {
+  const source = Array.isArray(value) ? value : DEFAULT_PROJECT_TYPES;
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  source.forEach((entry) => {
+    const projectType = String(entry ?? "").trim();
+    if (!projectType || seen.has(projectType)) return;
+    seen.add(projectType);
+    normalized.push(projectType);
+  });
+  if (normalized.length) return normalized;
+  return DEFAULT_PROJECT_TYPES.slice();
 }
 
 function normalizeSectionOrder(value: unknown): MasterTemplateSectionKey[] {

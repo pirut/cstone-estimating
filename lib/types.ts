@@ -75,6 +75,7 @@ export type MasterTemplatePage = {
 export type MasterTemplateSelectionConfig = {
   projectTypeField?: string;
   productTypeField?: string;
+  projectTypes?: string[];
   sectionOrder?: MasterTemplateSectionKey[];
 };
 

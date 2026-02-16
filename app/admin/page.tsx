@@ -129,6 +129,7 @@ type MasterTemplatePageDraft = MasterTemplatePage;
 type MasterTemplateSelectionDraft = {
   projectTypeField: string;
   productTypeField: string;
+  projectTypes: string[];
   sectionOrder: MasterTemplateSectionKey[];
 };
 
@@ -183,7 +184,13 @@ const DEFAULT_MASTER_TEMPLATE_SECTION_ORDER: MasterTemplateSectionKey[] = [
 ];
 const DEFAULT_PROJECT_TYPE_FIELD = "project_type";
 const DEFAULT_PRODUCT_TYPE_FIELD = "product_type";
+const DEFAULT_MASTER_TEMPLATE_PROJECT_TYPES = [
+  "New Construction",
+  "Replacement",
+  "Remodel",
+];
 const MASTER_TEMPLATE_TEMPLATE_MIME = "application/x-master-template-pdf";
+const CALIBRATION_FIELD_MIME = "application/x-calibration-field";
 
 export default function AdminPage() {
   const [isEmbedded, setIsEmbedded] = useState(false);
@@ -211,6 +218,7 @@ export default function AdminPage() {
     useState<MasterTemplateSelectionDraft>({
       projectTypeField: DEFAULT_PROJECT_TYPE_FIELD,
       productTypeField: DEFAULT_PRODUCT_TYPE_FIELD,
+      projectTypes: DEFAULT_MASTER_TEMPLATE_PROJECT_TYPES,
       sectionOrder: DEFAULT_MASTER_TEMPLATE_SECTION_ORDER,
     });
   const [selectedMasterPageId, setSelectedMasterPageId] = useState<string | null>(
@@ -235,11 +243,11 @@ export default function AdminPage() {
   const [fieldToAdd, setFieldToAdd] = useState("");
   const [customFieldToAdd, setCustomFieldToAdd] = useState("");
   const [fieldSearch, setFieldSearch] = useState("");
+  const [bindingSearch, setBindingSearch] = useState("");
   const [coordsEditorError, setCoordsEditorError] = useState<string | null>(null);
   const [templateName, setTemplateName] = useState("");
   const [templateVersion, setTemplateVersion] = useState(1);
   const [templateDescription, setTemplateDescription] = useState("");
-  const [selectedTemplateKey, setSelectedTemplateKey] = useState("");
   const [editingTemplateKey, setEditingTemplateKey] = useState<string | null>(
     null
   );
@@ -260,6 +268,10 @@ export default function AdminPage() {
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
+  const activeTemplateConfigItem = useMemo(
+    () => getMostRecentLibraryItem(libraries.template_config.items),
+    [libraries.template_config.items]
+  );
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -624,7 +636,7 @@ export default function AdminPage() {
     }
   };
 
-  const handleSaveTemplate = async (options?: { replaceKey?: string }) => {
+  const handleSaveTemplate = async () => {
     setTemplateSaveError(null);
     setTemplateSaveStatus(null);
     setTemplateLoadError(null);
@@ -654,7 +666,7 @@ export default function AdminPage() {
       );
       return;
     }
-    const nextTemplateVersion = options?.replaceKey
+    const nextTemplateVersion = editingTemplateKey
       ? Math.max(templateVersion + 1, 2)
       : 1;
 
@@ -680,17 +692,18 @@ export default function AdminPage() {
       }
       const data = await response.json();
       const savedKey = data?.item?.key as string | undefined;
-      const replaceKey = options?.replaceKey;
-      if (replaceKey && replaceKey !== savedKey) {
-        await deleteItem("template_config", replaceKey);
-      }
       if (savedKey) {
         setEditingTemplateKey(savedKey);
-        setSelectedTemplateKey(savedKey);
+        const oldTemplateKeys = libraries.template_config.items
+          .map((item) => item.key)
+          .filter((key) => key !== savedKey);
+        for (const key of oldTemplateKeys) {
+          await deleteItem("template_config", key);
+        }
       }
       setTemplateVersion(nextTemplateVersion);
       setTemplateSaveStatus(
-        replaceKey
+        editingTemplateKey
           ? `Template updated to v${nextTemplateVersion}.`
           : "Template saved as v1."
       );
@@ -704,7 +717,7 @@ export default function AdminPage() {
     }
   };
 
-  const handleLoadTemplateConfig = async (item: LibraryItem) => {
+  const handleLoadTemplateConfig = useCallback(async (item: LibraryItem) => {
     setTemplateLoadError(null);
     setTemplateSaveStatus(null);
     setTemplateLoading(true);
@@ -767,7 +780,6 @@ export default function AdminPage() {
       setMasterTemplateSelection(loadedSelection);
       setSelectedMasterPageId(loadedMasterPages[0]?.id ?? null);
       setEditingTemplateKey(item.key);
-      setSelectedTemplateKey(item.key);
       setTemplateSaveStatus("Template loaded for editing.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error.";
@@ -775,7 +787,20 @@ export default function AdminPage() {
     } finally {
       setTemplateLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!activeTemplateConfigItem) return;
+    if (templateLoading || templateSaving) return;
+    if (editingTemplateKey === activeTemplateConfigItem.key) return;
+    void handleLoadTemplateConfig(activeTemplateConfigItem);
+  }, [
+    activeTemplateConfigItem,
+    editingTemplateKey,
+    handleLoadTemplateConfig,
+    templateLoading,
+    templateSaving,
+  ]);
 
   const handleCalibrationPdf = async () => {
     setCalibrationError(null);
@@ -908,11 +933,25 @@ export default function AdminPage() {
       return leftPage - rightPage;
     });
   }, [configuredPageKeys, templatePageKeys]);
+  const masterTemplateProjectTypeOptions = useMemo(
+    () =>
+      normalizeMasterTemplateProjectTypes(
+        masterTemplateSelection.projectTypes,
+        []
+      ),
+    [masterTemplateSelection.projectTypes]
+  );
   const activeMasterPage = useMemo(
     () =>
       masterTemplatePages.find((page) => page.id === selectedMasterPageId) ?? null,
     [masterTemplatePages, selectedMasterPageId]
   );
+  const activeProjectTypeRuleValue = String(
+    activeMasterPage?.conditionValue ?? ""
+  ).trim();
+  const activeProjectTypeRuleHasLegacyValue =
+    Boolean(activeProjectTypeRuleValue) &&
+    !masterTemplateProjectTypeOptions.includes(activeProjectTypeRuleValue);
   const activeCoordsPageKey = activeMasterPage?.coordsPageKey ?? previewPage;
   const previewDocumentUrl = activeMasterPage?.sourcePdf?.url ?? templateFile?.url;
   const previewDocumentPageKey = toPageKey(
@@ -956,6 +995,13 @@ export default function AdminPage() {
       fieldName.toLowerCase().includes(query)
     );
   }, [availableStampFields, fieldSearch]);
+  const filteredBindingCatalog = useMemo(() => {
+    const query = bindingSearch.trim().toLowerCase();
+    if (!query) return availableStampFields;
+    return availableStampFields.filter((fieldName) =>
+      fieldName.toLowerCase().includes(query)
+    );
+  }, [availableStampFields, bindingSearch]);
   const masterTemplatePagesBySection = useMemo(() => {
     const orderedSections = [
       ...masterTemplateSelection.sectionOrder,
@@ -1132,6 +1178,39 @@ export default function AdminPage() {
     });
   };
 
+  const updateMasterTemplateProjectType = (index: number, nextValue: string) => {
+    setMasterTemplateSelection((prev) => {
+      if (index < 0 || index >= prev.projectTypes.length) return prev;
+      const nextProjectTypes = prev.projectTypes.slice();
+      nextProjectTypes[index] = nextValue;
+      return {
+        ...prev,
+        projectTypes: nextProjectTypes,
+      };
+    });
+  };
+
+  const addMasterTemplateProjectType = () => {
+    setMasterTemplateSelection((prev) => ({
+      ...prev,
+      projectTypes: [...prev.projectTypes, ""],
+    }));
+  };
+
+  const removeMasterTemplateProjectType = (index: number) => {
+    setMasterTemplateSelection((prev) => {
+      if (prev.projectTypes.length <= 1) return prev;
+      if (index < 0 || index >= prev.projectTypes.length) return prev;
+      const nextProjectTypes = prev.projectTypes.filter(
+        (_, entryIndex) => entryIndex !== index
+      );
+      return {
+        ...prev,
+        projectTypes: nextProjectTypes,
+      };
+    });
+  };
+
   const handleTemplateDragStart = (
     event: DragEvent<HTMLElement>,
     sourcePdf: UploadedFile
@@ -1164,6 +1243,48 @@ export default function AdminPage() {
     } catch {
       // Ignore invalid drag payloads.
     }
+  };
+
+  const handleCalibrationFieldDragStart = (
+    event: DragEvent<HTMLElement>,
+    fieldName: string
+  ) => {
+    event.dataTransfer.setData(CALIBRATION_FIELD_MIME, fieldName);
+    event.dataTransfer.setData("text/plain", fieldName);
+    event.dataTransfer.effectAllowed = "copy";
+  };
+
+  const toggleActiveMasterPageBinding = (fieldName: string) => {
+    if (!activeMasterPage) return;
+    const binding = String(fieldName ?? "").trim();
+    if (!binding) return;
+    const currentBindings = Array.isArray(activeMasterPage.dataBindings)
+      ? activeMasterPage.dataBindings
+      : [];
+    const nextBindings = currentBindings.includes(binding)
+      ? currentBindings.filter((entry) => entry !== binding)
+      : [...currentBindings, binding];
+    updateMasterTemplatePage(activeMasterPage.id, {
+      dataBindings: nextBindings,
+    });
+  };
+
+  const placeBindingOnActiveMasterPage = (
+    fieldName: string,
+    placement?: { x: number; y: number }
+  ) => {
+    if (!activeMasterPage) return;
+    const binding = String(fieldName ?? "").trim();
+    if (!binding) return;
+    const currentBindings = Array.isArray(activeMasterPage.dataBindings)
+      ? activeMasterPage.dataBindings
+      : [];
+    if (!currentBindings.includes(binding)) {
+      updateMasterTemplatePage(activeMasterPage.id, {
+        dataBindings: [...currentBindings, binding],
+      });
+    }
+    addFieldToCurrentPage(binding, placement);
   };
 
   const addFieldToCurrentPage = (
@@ -1625,50 +1746,20 @@ export default function AdminPage() {
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2 md:col-span-2">
                     <label className="text-xs text-muted-foreground">
-                      Load existing template
+                      Active template
                     </label>
-                    {libraries.template_config.items.length ? (
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Select
-                          value={selectedTemplateKey || "__none__"}
-                          onValueChange={(value) =>
-                            setSelectedTemplateKey(value === "__none__" ? "" : value)
-                          }
-                        >
-                          <SelectTrigger className="min-w-[240px] flex-1">
-                            <SelectValue placeholder="Select a saved template" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="__none__">Select a saved template</SelectItem>
-                            {libraries.template_config.items.map((item) => (
-                              <SelectItem key={item.key} value={item.key}>
-                                {item.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            const selected = libraries.template_config.items.find(
-                              (item) => item.key === selectedTemplateKey
-                            );
-                            if (selected) {
-                              handleLoadTemplateConfig(selected);
-                            }
-                          }}
-                          disabled={!selectedTemplateKey || templateLoading}
-                        >
-                          {templateLoading ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : null}
-                          Load
-                        </Button>
+                    {activeTemplateConfigItem ? (
+                      <div className="rounded-lg border border-border/60 bg-background/80 px-3 py-2 text-xs text-muted-foreground">
+                        <span className="font-medium text-foreground">
+                          {activeTemplateConfigItem.name}
+                        </span>{" "}
+                        · Updated{" "}
+                        {new Date(activeTemplateConfigItem.uploadedAt).toLocaleString()}
                       </div>
                     ) : (
                       <div className="text-xs text-muted-foreground">
-                        No templates yet. Save one to enable editing.
+                        No template saved yet. Save once to set the active team
+                        template.
                       </div>
                     )}
                   </div>
@@ -1722,29 +1813,18 @@ export default function AdminPage() {
                   <span>{configuredPageKeys.length} configured page(s)</span>
                 </div>
                 <div className="flex flex-wrap gap-3">
-                  <Button
-                    variant="accent"
-                    onClick={() => handleSaveTemplate()}
-                    disabled={templateSaving}
-                  >
+                  <Button variant="accent" onClick={handleSaveTemplate} disabled={templateSaving}>
                     {templateSaving ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
                       <FileDown className="h-4 w-4" />
                     )}
-                    {templateSaving ? "Saving..." : "Save new template"}
+                    {templateSaving
+                      ? "Saving..."
+                      : editingTemplateKey
+                        ? "Update team template"
+                        : "Save team template"}
                   </Button>
-                  {editingTemplateKey ? (
-                    <Button
-                      variant="outline"
-                      onClick={() =>
-                        handleSaveTemplate({ replaceKey: editingTemplateKey })
-                      }
-                      disabled={templateSaving}
-                    >
-                      Update existing template
-                    </Button>
-                  ) : null}
                 </div>
               </CardContent>
             </Card>
@@ -1789,43 +1869,58 @@ export default function AdminPage() {
                 <div className="grid gap-4 rounded-xl border border-border/60 bg-background/70 p-4 lg:grid-cols-[0.9fr_1.1fr]">
                   <div className="space-y-3">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
-                      Selector fields
+                      Project type routing
                     </p>
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <div className="space-y-2">
-                        <label className="text-xs text-muted-foreground">
-                          Project type field key
-                        </label>
-                        <Input
-                          value={masterTemplateSelection.projectTypeField}
-                          onChange={(event) =>
-                            setMasterTemplateSelection((prev) => ({
-                              ...prev,
-                              projectTypeField: event.target.value.trim(),
-                            }))
-                          }
-                          placeholder={DEFAULT_PROJECT_TYPE_FIELD}
-                        />
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                          Project types table
+                        </p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={addMasterTemplateProjectType}
+                        >
+                          <Plus className="h-4 w-4" />
+                          Add project type
+                        </Button>
                       </div>
                       <div className="space-y-2">
-                        <label className="text-xs text-muted-foreground">
-                          Product type field key
-                        </label>
-                        <Input
-                          value={masterTemplateSelection.productTypeField}
-                          onChange={(event) =>
-                            setMasterTemplateSelection((prev) => ({
-                              ...prev,
-                              productTypeField: event.target.value.trim(),
-                            }))
-                          }
-                          placeholder={DEFAULT_PRODUCT_TYPE_FIELD}
-                        />
+                        {masterTemplateSelection.projectTypes.map(
+                          (projectType, index) => (
+                            <div
+                              key={`project-type-${index}`}
+                              className="flex items-center gap-2"
+                            >
+                              <Input
+                                value={projectType}
+                                onChange={(event) =>
+                                  updateMasterTemplateProjectType(
+                                    index,
+                                    event.target.value
+                                  )
+                                }
+                                placeholder={`Project type ${index + 1}`}
+                              />
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() =>
+                                  removeMasterTemplateProjectType(index)
+                                }
+                                disabled={
+                                  masterTemplateSelection.projectTypes.length <= 1
+                                }
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          )
+                        )}
                       </div>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                      These keys are read from estimate/workbook data to decide
-                      which template page gets selected per section.
+                      Project type rules use this table as dropdown options.
                     </p>
                   </div>
                   <div className="space-y-3">
@@ -2227,7 +2322,41 @@ export default function AdminPage() {
                               <label className="text-xs text-muted-foreground">
                                 Match value
                               </label>
-                              {activeMasterPage.inclusionMode === "vendor" &&
+                              {activeMasterPage.inclusionMode ===
+                              "project_type" ? (
+                                <Select
+                                  value={
+                                    activeProjectTypeRuleValue || "__any_project_type__"
+                                  }
+                                  onValueChange={(value) =>
+                                    updateMasterTemplatePage(activeMasterPage.id, {
+                                      conditionValue:
+                                        value === "__any_project_type__"
+                                          ? ""
+                                          : value,
+                                    })
+                                  }
+                                >
+                                  <SelectTrigger className="w-full">
+                                    <SelectValue placeholder="Select project type" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="__any_project_type__">
+                                      Any project type
+                                    </SelectItem>
+                                    {masterTemplateProjectTypeOptions.map((option) => (
+                                      <SelectItem key={option} value={option}>
+                                        {option}
+                                      </SelectItem>
+                                    ))}
+                                    {activeProjectTypeRuleHasLegacyValue ? (
+                                      <SelectItem value={activeProjectTypeRuleValue}>
+                                        {activeProjectTypeRuleValue} (legacy)
+                                      </SelectItem>
+                                    ) : null}
+                                  </SelectContent>
+                                </Select>
+                              ) : activeMasterPage.inclusionMode === "vendor" &&
                               vendorRuleOptions.length ? (
                                 <Select
                                   value={activeMasterPage.conditionValue ?? "__none__"}
@@ -2270,9 +2399,7 @@ export default function AdminPage() {
                                     })
                                   }
                                   placeholder={
-                                    activeMasterPage.inclusionMode === "project_type"
-                                      ? "Residential replacement"
-                                      : activeMasterPage.inclusionMode === "product_type"
+                                    activeMasterPage.inclusionMode === "product_type"
                                         ? "WinDoor, Marvin, Simonton"
                                         : "Match value"
                                   }
@@ -2330,20 +2457,82 @@ export default function AdminPage() {
                           </div>
                           <div className="space-y-2 md:col-span-2">
                             <label className="text-xs text-muted-foreground">
-                              Data bindings (comma-separated)
+                              Data bindings
                             </label>
                             <Input
-                              value={(activeMasterPage.dataBindings ?? []).join(", ")}
-                              onChange={(event) =>
-                                updateMasterTemplatePage(activeMasterPage.id, {
-                                  dataBindings: event.target.value
-                                    .split(",")
-                                    .map((value) => value.trim())
-                                    .filter(Boolean),
-                                })
-                              }
-                              placeholder="prepared_for, project_name, vendor_name"
+                              uiSize="xs"
+                              placeholder="Search data bindings"
+                              value={bindingSearch}
+                              onChange={(event) => setBindingSearch(event.target.value)}
                             />
+                            <ScrollArea className="h-40 rounded-lg border border-border/60 bg-background/80">
+                              <div className="space-y-1 p-2">
+                                {filteredBindingCatalog.map((fieldName) => {
+                                  const isBound = Boolean(
+                                    activeMasterPage.dataBindings?.includes(fieldName)
+                                  );
+                                  const isPlaced = Boolean(previewPageFields[fieldName]);
+                                  return (
+                                    <button
+                                      key={fieldName}
+                                      type="button"
+                                      draggable
+                                      onDragStart={(event) =>
+                                        handleCalibrationFieldDragStart(
+                                          event,
+                                          fieldName
+                                        )
+                                      }
+                                      onDoubleClick={() =>
+                                        placeBindingOnActiveMasterPage(fieldName)
+                                      }
+                                      onClick={() => {
+                                        setSelectedField(fieldName);
+                                        toggleActiveMasterPageBinding(fieldName);
+                                      }}
+                                      className={cn(
+                                        "flex w-full items-center justify-between rounded-md border px-2 py-1 text-left text-xs transition",
+                                        isBound
+                                          ? "border-accent/70 bg-accent/10 text-foreground"
+                                          : "border-border/60 bg-background hover:border-accent/40"
+                                      )}
+                                    >
+                                      <span className="truncate">{fieldName}</span>
+                                      <span className="text-[10px] text-muted-foreground">
+                                        {isPlaced ? "placed" : "drag"}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                                {!filteredBindingCatalog.length ? (
+                                  <p className="px-1 py-2 text-xs text-muted-foreground">
+                                    No matching bindings.
+                                  </p>
+                                ) : null}
+                              </div>
+                            </ScrollArea>
+                            <p className="text-[11px] text-muted-foreground">
+                              Click to toggle a binding. Drag onto the PDF to place
+                              coordinates.
+                            </p>
+                            {(activeMasterPage.dataBindings ?? []).length ? (
+                              <div className="flex flex-wrap gap-2">
+                                {(activeMasterPage.dataBindings ?? []).map(
+                                  (binding) => (
+                                    <button
+                                      key={binding}
+                                      type="button"
+                                      onClick={() =>
+                                        toggleActiveMasterPageBinding(binding)
+                                      }
+                                      className="rounded-full border border-border/60 bg-background px-2 py-0.5 text-[11px] text-foreground hover:border-accent/40"
+                                    >
+                                      {binding} ×
+                                    </button>
+                                  )
+                                )}
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                         <PdfCalibrationViewer
@@ -2356,7 +2545,7 @@ export default function AdminPage() {
                             updateCoordField(activeCoordsPageKey, field, { x, y })
                           }
                           onDropField={(field, x, y) =>
-                            addFieldToCurrentPage(field, { x, y })
+                            placeBindingOnActiveMasterPage(field, { x, y })
                           }
                           onDocumentInfo={handlePdfDocumentInfo}
                           showGrid={showGrid}
@@ -2520,14 +2709,9 @@ export default function AdminPage() {
                                 key={fieldName}
                                 type="button"
                                 draggable
-                                onDragStart={(event) => {
-                                  event.dataTransfer.setData(
-                                    "application/x-calibration-field",
-                                    fieldName
-                                  );
-                                  event.dataTransfer.setData("text/plain", fieldName);
-                                  event.dataTransfer.effectAllowed = "copy";
-                                }}
+                                onDragStart={(event) =>
+                                  handleCalibrationFieldDragStart(event, fieldName)
+                                }
                                 onDoubleClick={() => addFieldToCurrentPage(fieldName)}
                                 onClick={() => setSelectedField(fieldName)}
                                 className={cn(
@@ -3321,6 +3505,23 @@ function normalizeMasterTemplateSectionOrder(
   return normalized;
 }
 
+function normalizeMasterTemplateProjectTypes(
+  value: unknown,
+  fallback: string[] = DEFAULT_MASTER_TEMPLATE_PROJECT_TYPES
+) {
+  const source = Array.isArray(value) ? value : fallback;
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  source.forEach((entry) => {
+    const projectType = String(entry ?? "").trim();
+    if (!projectType || seen.has(projectType)) return;
+    seen.add(projectType);
+    normalized.push(projectType);
+  });
+  if (normalized.length) return normalized;
+  return fallback.slice();
+}
+
 function buildMasterTemplateConfig(
   pages: MasterTemplatePageDraft[],
   selection: MasterTemplateSelectionDraft
@@ -3359,12 +3560,9 @@ function buildMasterTemplateConfig(
   return {
     version: 2,
     selection: {
-      projectTypeField:
-        String(selection.projectTypeField ?? "").trim() ||
-        DEFAULT_PROJECT_TYPE_FIELD,
-      productTypeField:
-        String(selection.productTypeField ?? "").trim() ||
-        DEFAULT_PRODUCT_TYPE_FIELD,
+      projectTypeField: DEFAULT_PROJECT_TYPE_FIELD,
+      productTypeField: DEFAULT_PRODUCT_TYPE_FIELD,
+      projectTypes: normalizeMasterTemplateProjectTypes(selection.projectTypes),
       sectionOrder: normalizeMasterTemplateSectionOrder(selection.sectionOrder),
     },
     pages: normalizedPages,
@@ -3423,11 +3621,10 @@ function normalizeLoadedMasterTemplateSelection(
   masterTemplate: MasterTemplateConfig | undefined
 ): MasterTemplateSelectionDraft {
   const selection = masterTemplate?.selection;
-  const projectTypeField = String(selection?.projectTypeField ?? "").trim();
-  const productTypeField = String(selection?.productTypeField ?? "").trim();
   return {
-    projectTypeField: projectTypeField || DEFAULT_PROJECT_TYPE_FIELD,
-    productTypeField: productTypeField || DEFAULT_PRODUCT_TYPE_FIELD,
+    projectTypeField: DEFAULT_PROJECT_TYPE_FIELD,
+    productTypeField: DEFAULT_PRODUCT_TYPE_FIELD,
+    projectTypes: normalizeMasterTemplateProjectTypes(selection?.projectTypes),
     sectionOrder: normalizeMasterTemplateSectionOrder(selection?.sectionOrder),
   };
 }
@@ -3462,6 +3659,12 @@ function formatMasterTemplateRuleSummary(page: MasterTemplatePageDraft) {
     return value ? `Product contains: ${value}` : "Product contains: any";
   }
   return "Always include";
+}
+
+function getMostRecentLibraryItem(items: LibraryItem[]) {
+  return items
+    .slice()
+    .sort((left, right) => right.uploadedAt - left.uploadedAt)[0];
 }
 
 // formatting helpers moved to lib/formatting
