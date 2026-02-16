@@ -1093,7 +1093,7 @@ export default function AdminPage() {
     const sourcePdf = options?.sourcePdf ?? templateFile ?? undefined;
     const nextInclusionMode: MasterTemplateInclusionMode =
       nextSection === "product"
-        ? "product_type"
+        ? "product"
         : nextSection === "custom"
           ? "always"
           : "project_type";
@@ -2189,7 +2189,7 @@ export default function AdminPage() {
                                   sectionKey: value as MasterTemplateSectionKey,
                                   inclusionMode:
                                     value === "product"
-                                      ? "product_type"
+                                      ? "product"
                                       : value === "custom"
                                         ? activeMasterPage.inclusionMode
                                         : "project_type",
@@ -2219,7 +2219,11 @@ export default function AdminPage() {
                               Match rule
                             </label>
                             <Select
-                              value={activeMasterPage.inclusionMode}
+                              value={
+                                activeMasterPage.inclusionMode === "product_type"
+                                  ? "product"
+                                  : activeMasterPage.inclusionMode
+                              }
                               onValueChange={(value) =>
                                 updateMasterTemplatePage(activeMasterPage.id, {
                                   inclusionMode:
@@ -2235,17 +2239,12 @@ export default function AdminPage() {
                                 <SelectItem value="project_type">
                                   Match project type
                                 </SelectItem>
-                                <SelectItem value="product_type">
-                                  Match product type
+                                <SelectItem value="product">
+                                  Match product
                                 </SelectItem>
+                                <SelectItem value="vendor">Match vendor</SelectItem>
                                 <SelectItem value="field">
                                   Match any field
-                                </SelectItem>
-                                <SelectItem value="vendor">
-                                  Legacy: vendor contains
-                                </SelectItem>
-                                <SelectItem value="product">
-                                  Legacy: product contains
                                 </SelectItem>
                               </SelectContent>
                             </Select>
@@ -2385,7 +2384,10 @@ export default function AdminPage() {
                                     })
                                   }
                                   placeholder={
-                                    activeMasterPage.inclusionMode === "product_type"
+                                    activeMasterPage.inclusionMode === "product"
+                                      ? "ES, PGT, Simonton"
+                                      : activeMasterPage.inclusionMode ===
+                                          "product_type"
                                         ? "WinDoor, Marvin, Simonton"
                                         : "Match value"
                                   }
@@ -3440,7 +3442,7 @@ function makeId() {
 function normalizeInclusionMode(value: unknown): MasterTemplateInclusionMode {
   const normalized = String(value ?? "always").trim().toLowerCase();
   if (normalized === "project_type") return "project_type";
-  if (normalized === "product_type") return "product_type";
+  if (normalized === "product_type") return "product";
   if (normalized === "product") return "product";
   if (normalized === "vendor") return "vendor";
   if (normalized === "field") return "field";
@@ -3597,7 +3599,7 @@ function normalizeLoadedMasterTemplatePages(
     sectionKey:
       DEFAULT_MASTER_TEMPLATE_SECTION_ORDER[index] ?? ("custom" as const),
     inclusionMode:
-      index === 1 ? ("product_type" as const) : ("project_type" as const),
+      index === 1 ? ("product" as const) : ("project_type" as const),
     isFallback: false,
     dataBindings: [],
   }));
@@ -3632,7 +3634,7 @@ function formatMasterTemplateRuleSummary(page: MasterTemplatePageDraft) {
     return value ? `Project type: ${value}` : "Project type: any";
   }
   if (mode === "product_type") {
-    return value ? `Product type: ${value}` : "Product type: any";
+    return value ? `Product: ${value}` : "Product: any";
   }
   if (mode === "field") {
     const field = String(page.conditionField ?? "").trim() || "field";
@@ -3642,7 +3644,7 @@ function formatMasterTemplateRuleSummary(page: MasterTemplatePageDraft) {
     return value ? `Vendor contains: ${value}` : "Vendor contains: any";
   }
   if (mode === "product") {
-    return value ? `Product contains: ${value}` : "Product contains: any";
+    return value ? `Product: ${value}` : "Product: any";
   }
   return "Always include";
 }
