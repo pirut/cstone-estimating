@@ -266,6 +266,12 @@ export default function AdminPage() {
   const [draggedBindingField, setDraggedBindingField] = useState<string | null>(
     null
   );
+  const [fieldInspector, setFieldInspector] = useState<{
+    fieldName: string;
+    clientX: number;
+    clientY: number;
+  } | null>(null);
+  const fieldInspectorRef = useRef<HTMLDivElement | null>(null);
   const [coordsEditorError, setCoordsEditorError] = useState<string | null>(null);
   const [templateName, setTemplateName] = useState(DEFAULT_TEAM_TEMPLATE_NAME);
   const [templateVersion, setTemplateVersion] = useState(1);
@@ -914,6 +920,22 @@ export default function AdminPage() {
     updateCoordField(coordsPageKey, selectedField, { x: nextX, y: nextY });
   };
 
+  const nudgeField = (fieldName: string, dx: number, dy: number) => {
+    const normalizedField = String(fieldName ?? "").trim();
+    if (!normalizedField) return;
+    const coordsPageKey =
+      masterTemplatePages.find((page) => page.id === selectedMasterPageId)
+        ?.coordsPageKey ?? previewPage;
+    const fields = coordsConfig[coordsPageKey] as
+      | Record<string, CoordField>
+      | undefined;
+    const current = fields?.[normalizedField];
+    if (!current) return;
+    const nextX = (current.x ?? 0) + dx;
+    const nextY = (current.y ?? 0) + dy;
+    updateCoordField(coordsPageKey, normalizedField, { x: nextX, y: nextY });
+  };
+
   const snapSelectedField = () => {
     if (!selectedField || gridSize <= 0) return;
     const coordsPageKey =
@@ -927,6 +949,22 @@ export default function AdminPage() {
     const nextX = snapToGridValue(current.x ?? 0, gridSize);
     const nextY = snapToGridValue(current.y ?? 0, gridSize);
     updateCoordField(coordsPageKey, selectedField, { x: nextX, y: nextY });
+  };
+
+  const snapFieldToGrid = (fieldName: string) => {
+    const normalizedField = String(fieldName ?? "").trim();
+    if (!normalizedField || gridSize <= 0) return;
+    const coordsPageKey =
+      masterTemplatePages.find((page) => page.id === selectedMasterPageId)
+        ?.coordsPageKey ?? previewPage;
+    const fields = coordsConfig[coordsPageKey] as
+      | Record<string, CoordField>
+      | undefined;
+    const current = fields?.[normalizedField];
+    if (!current) return;
+    const nextX = snapToGridValue(current.x ?? 0, gridSize);
+    const nextY = snapToGridValue(current.y ?? 0, gridSize);
+    updateCoordField(coordsPageKey, normalizedField, { x: nextX, y: nextY });
   };
 
   const configuredPageKeys = useMemo(
@@ -985,6 +1023,28 @@ export default function AdminPage() {
   const selectedFieldSpec = selectedField
     ? previewPageFields[selectedField]
     : undefined;
+  const inspectorFieldName = fieldInspector?.fieldName ?? null;
+  const inspectorFieldSpec = inspectorFieldName
+    ? previewPageFields[inspectorFieldName]
+    : undefined;
+  const fieldInspectorPosition = useMemo(() => {
+    if (!fieldInspector) return null;
+    const panelWidth = 360;
+    const panelHeight = 440;
+    const viewportWidth =
+      typeof window !== "undefined" ? window.innerWidth : fieldInspector.clientX;
+    const viewportHeight =
+      typeof window !== "undefined" ? window.innerHeight : fieldInspector.clientY;
+    const left = Math.max(
+      12,
+      Math.min(fieldInspector.clientX + 12, viewportWidth - panelWidth - 12)
+    );
+    const top = Math.max(
+      12,
+      Math.min(fieldInspector.clientY + 12, viewportHeight - panelHeight - 12)
+    );
+    return { left, top };
+  }, [fieldInspector]);
   const availableStampFields = useMemo(() => {
     const result: string[] = [];
     const seen = new Set<string>();
@@ -1309,6 +1369,20 @@ export default function AdminPage() {
     addFieldToCurrentPage(binding, placement);
   };
 
+  const openFieldInspector = (
+    fieldName: string,
+    position: { clientX: number; clientY: number }
+  ) => {
+    const normalizedField = String(fieldName ?? "").trim();
+    if (!normalizedField) return;
+    setSelectedField(normalizedField);
+    setFieldInspector({
+      fieldName: normalizedField,
+      clientX: position.clientX,
+      clientY: position.clientY,
+    });
+  };
+
   const addFieldToCurrentPage = (
     fieldName: string,
     placement?: { x: number; y: number }
@@ -1455,6 +1529,38 @@ export default function AdminPage() {
       setSelectedField(fieldNames[0]);
     }
   }, [previewPageFields, selectedField]);
+
+  useEffect(() => {
+    if (!fieldInspector) return;
+    if (!previewPageFields[fieldInspector.fieldName]) {
+      setFieldInspector(null);
+    }
+  }, [fieldInspector, previewPageFields]);
+
+  useEffect(() => {
+    if (!fieldInspector) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        fieldInspectorRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setFieldInspector(null);
+    };
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setFieldInspector(null);
+      }
+    };
+    window.addEventListener("pointerdown", handlePointerDown);
+    window.addEventListener("keydown", handleEscape);
+    return () => {
+      window.removeEventListener("pointerdown", handlePointerDown);
+      window.removeEventListener("keydown", handleEscape);
+    };
+  }, [fieldInspector]);
 
   useEffect(() => {
     if (!availableStampFields.length) {
@@ -2562,6 +2668,9 @@ export default function AdminPage() {
                           dragFallbackField={draggedBindingField}
                           selectedField={selectedField}
                           onSelectField={setSelectedField}
+                          onFieldContextMenu={(field, position) =>
+                            openFieldInspector(field, position)
+                          }
                           onChangeCoord={(field, x, y) =>
                             updateCoordField(activeCoordsPageKey, field, { x, y })
                           }
@@ -3065,6 +3174,205 @@ export default function AdminPage() {
           </TabsContent>
         </Tabs>
       </div>
+      {fieldInspector &&
+      inspectorFieldName &&
+      inspectorFieldSpec &&
+      fieldInspectorPosition ? (
+        <div
+          ref={fieldInspectorRef}
+          className="fixed z-50 w-[360px] rounded-2xl border border-border/70 bg-card/95 p-4 shadow-elevated backdrop-blur"
+          style={{
+            left: `${fieldInspectorPosition.left}px`,
+            top: `${fieldInspectorPosition.top}px`,
+          }}
+        >
+          <div className="mb-3 flex items-start justify-between gap-2">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                Placement editor
+              </p>
+              <p className="text-sm font-semibold text-foreground">
+                {formatFieldLabel(inspectorFieldName)}
+              </p>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setFieldInspector(null)}
+            >
+              Close
+            </Button>
+          </div>
+          <div className="space-y-3">
+            <div className="grid gap-2 sm:grid-cols-2">
+              <NumberField
+                label="X"
+                value={inspectorFieldSpec.x}
+                onChange={(value) =>
+                  updateCoordField(activeCoordsPageKey, inspectorFieldName, {
+                    x: value,
+                  })
+                }
+              />
+              <NumberField
+                label="Y"
+                value={inspectorFieldSpec.y}
+                onChange={(value) =>
+                  updateCoordField(activeCoordsPageKey, inspectorFieldName, {
+                    y: value,
+                  })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <label className="text-xs text-muted-foreground">
+                Nudge controls
+              </label>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => nudgeField(inspectorFieldName, -nudgeStep, 0)}
+                  aria-label="Nudge left"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => nudgeField(inspectorFieldName, 0, nudgeStep)}
+                  aria-label="Nudge up"
+                >
+                  <ArrowUp className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => nudgeField(inspectorFieldName, 0, -nudgeStep)}
+                  aria-label="Nudge down"
+                >
+                  <ArrowDown className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => nudgeField(inspectorFieldName, nudgeStep, 0)}
+                  aria-label="Nudge right"
+                >
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => snapFieldToGrid(inspectorFieldName)}
+                  disabled={gridSize <= 0}
+                >
+                  Snap
+                </Button>
+              </div>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <NumberField
+                label="Size"
+                value={inspectorFieldSpec.size}
+                onChange={(value) =>
+                  updateCoordField(activeCoordsPageKey, inspectorFieldName, {
+                    size: value,
+                  })
+                }
+              />
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Font</label>
+                <Select
+                  value={inspectorFieldSpec.font ?? "WorkSans"}
+                  onValueChange={(value) =>
+                    updateCoordField(activeCoordsPageKey, inspectorFieldName, {
+                      font: value,
+                    })
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select font" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {fontOptions.map((font) => (
+                      <SelectItem key={font} value={font}>
+                        {font}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Align</label>
+                <Select
+                  value={String(inspectorFieldSpec.align ?? "left")}
+                  onValueChange={(value) =>
+                    updateCoordField(activeCoordsPageKey, inspectorFieldName, {
+                      align: value,
+                    })
+                  }
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="Select align" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="left">Left</SelectItem>
+                    <SelectItem value="center">Center</SelectItem>
+                    <SelectItem value="right">Right</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Color</label>
+                <Input
+                  type="color"
+                  value={inspectorFieldSpec.color ?? "#111111"}
+                  onChange={(event) =>
+                    updateCoordField(activeCoordsPageKey, inspectorFieldName, {
+                      color: event.target.value,
+                    })
+                  }
+                />
+              </div>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-3">
+              <NumberField
+                label="Max width"
+                value={inspectorFieldSpec.max_width}
+                onChange={(value) =>
+                  updateCoordField(activeCoordsPageKey, inspectorFieldName, {
+                    max_width: value > 0 ? value : undefined,
+                  })
+                }
+              />
+              <NumberField
+                label="Min size"
+                value={inspectorFieldSpec.min_size}
+                onChange={(value) =>
+                  updateCoordField(activeCoordsPageKey, inspectorFieldName, {
+                    min_size: value > 0 ? value : undefined,
+                  })
+                }
+              />
+              <NumberField
+                label="Opacity"
+                value={inspectorFieldSpec.opacity}
+                onChange={(value) =>
+                  updateCoordField(activeCoordsPageKey, inspectorFieldName, {
+                    opacity:
+                      Number.isFinite(value) && value > 0
+                        ? Math.min(value, 1)
+                        : undefined,
+                  })
+                }
+              />
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 

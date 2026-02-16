@@ -28,6 +28,10 @@ type ViewerProps = {
   dragFallbackField?: string | null;
   selectedField?: string | null;
   onSelectField: (field: string) => void;
+  onFieldContextMenu?: (
+    field: string,
+    position: { clientX: number; clientY: number }
+  ) => void;
   onChangeCoord: (field: string, x: number, y: number) => void;
   onDropField?: (field: string, x: number, y: number) => void;
   snapToGrid?: boolean;
@@ -57,6 +61,7 @@ export function PdfCalibrationViewer({
   dragFallbackField,
   selectedField,
   onSelectField,
+  onFieldContextMenu,
   onChangeCoord,
   onDropField,
   snapToGrid = false,
@@ -277,6 +282,7 @@ export function PdfCalibrationViewer({
     event: React.PointerEvent<SVGTextElement>,
     fieldName: string
   ) => {
+    if (event.button !== 0) return;
     event.stopPropagation();
     setIsDragging(fieldName);
     onSelectField(fieldName);
@@ -403,6 +409,15 @@ export function PdfCalibrationViewer({
                 onPointerDown={(event) =>
                   handlePointerDown(event, overlay.name)
                 }
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onSelectField(overlay.name);
+                  onFieldContextMenu?.(overlay.name, {
+                    clientX: event.clientX,
+                    clientY: event.clientY,
+                  });
+                }}
               >
                 {overlay.text}
               </text>
