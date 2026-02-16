@@ -105,7 +105,12 @@ export function PdfCalibrationViewer({
         const size = Number(spec.size ?? 10);
         const maxWidth = spec.max_width ? Number(spec.max_width) : undefined;
         const minSize = spec.min_size ? Number(spec.min_size) : 8;
-        const rawText = labelMap?.[name] ?? name;
+        const mappedValue = labelMap?.[name];
+        const mappedText =
+          mappedValue === null || mappedValue === undefined
+            ? ""
+            : String(mappedValue);
+        const rawText = mappedText.trim() ? mappedText : name;
         const fitted = fitPreviewText(
           rawText,
           fontFamily,
