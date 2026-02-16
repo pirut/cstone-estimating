@@ -1563,10 +1563,7 @@ export default function AdminPage() {
     window.addEventListener("resize", updatePosition);
     const handlePointerDown = (event: PointerEvent) => {
       const target = event.target;
-      if (
-        target instanceof HTMLElement &&
-        fieldInspectorRef.current?.contains(target)
-      ) {
+      if (target instanceof Node && fieldInspectorRef.current?.contains(target)) {
         return;
       }
       setFieldInspector(null);
