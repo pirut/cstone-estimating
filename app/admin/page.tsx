@@ -2077,7 +2077,7 @@ export default function AdminPage() {
                                         </p>
                                         <p className="text-[11px] text-muted-foreground">
                                           {page.sourcePdf?.name ?? "No PDF"} · page{" "}
-                                          {page.sourcePage} · {page.coordsPageKey}
+                                          {page.sourcePage}
                                           {page.isFallback ? " · fallback" : ""}
                                         </p>
                                       </div>
@@ -2162,20 +2162,6 @@ export default function AdminPage() {
                                 })
                               }
                               placeholder="Vendor cover sheet"
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <label className="text-xs text-muted-foreground">
-                              Coordinates page key
-                            </label>
-                            <Input
-                              value={activeMasterPage.coordsPageKey}
-                              onChange={(event) =>
-                                updateMasterTemplatePage(activeMasterPage.id, {
-                                  coordsPageKey: event.target.value.trim(),
-                                })
-                              }
-                              placeholder="page_1"
                             />
                           </div>
                           <div className="space-y-2">
