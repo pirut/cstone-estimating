@@ -2,6 +2,8 @@ export type CoordSpec = {
   x?: number;
   y?: number;
   size?: number;
+  line_height?: number;
+  lineHeight?: number;
   align?: string;
   max_width?: number;
   min_size?: number;

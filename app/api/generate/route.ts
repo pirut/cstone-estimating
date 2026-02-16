@@ -947,12 +947,6 @@ function buildDerivedProductFieldValues({
     });
 
     const detailsBlock = buildSelectedProductDetailsBlock({
-      productName,
-      productType,
-      vendor:
-        derived.selected_product_vendor ||
-        stringifyUnknown(selectedProduct.vendor) ||
-        "",
       selectedProduct,
     });
     if (detailsBlock.trim()) {
@@ -976,14 +970,8 @@ function normalizeFieldKey(value: string) {
 }
 
 function buildSelectedProductDetailsBlock({
-  productName,
-  productType,
-  vendor,
   selectedProduct,
 }: {
-  productName: string;
-  productType: string;
-  vendor: string;
   selectedProduct: Record<string, unknown>;
 }) {
   const lineValue = (value: unknown) => {
@@ -992,23 +980,37 @@ function buildSelectedProductDetailsBlock({
     if (text.toLowerCase() === "true") return "Yes";
     return text;
   };
-  const lines = [
-    ["Product", productName],
-    ["Product type", productType],
-    ["Vendor", vendor],
-    ["Interior frame color", lineValue(selectedProduct.interior_frame_color)],
-    ["Exterior frame color", lineValue(selectedProduct.exterior_frame_color)],
-    ["Glass make up", lineValue(selectedProduct.glass_makeup)],
-    [
-      "Stainless operating hardware",
-      lineValue(selectedProduct.stainless_operating_hardware),
-    ],
-    ["Screens", lineValue(selectedProduct.has_screens)],
-    ["Door hardware color", lineValue(selectedProduct.door_hardware_color)],
-    ["Door hinge color", lineValue(selectedProduct.door_hinge_color)],
-    ["Window hardware color", lineValue(selectedProduct.window_hardware_color)],
-  ];
-  return lines.map(([label, value]) => `${label}: ${value}`).join("\n");
+  const lines: string[] = [];
+  const splitFinish = isTruthyValue(selectedProduct.split_finish);
+  const interiorFrameColor = lineValue(selectedProduct.interior_frame_color);
+  const exteriorFrameColor = lineValue(selectedProduct.exterior_frame_color);
+
+  if (splitFinish) {
+    if (interiorFrameColor) lines.push(interiorFrameColor);
+    if (exteriorFrameColor && exteriorFrameColor !== interiorFrameColor) {
+      lines.push(exteriorFrameColor);
+    }
+  } else {
+    const frameColor = interiorFrameColor || exteriorFrameColor;
+    if (frameColor) lines.push(frameColor);
+  }
+
+  const addLine = (value: unknown) => {
+    const normalized = lineValue(value);
+    if (normalized) lines.push(normalized);
+  };
+  const addFlag = (value: unknown, label: string) => {
+    if (isTruthyValue(value)) lines.push(label);
+  };
+
+  addLine(selectedProduct.glass_makeup);
+  addFlag(selectedProduct.stainless_operating_hardware, "Stainless operating hardware");
+  addFlag(selectedProduct.has_screens, "Screens");
+  addLine(selectedProduct.door_hardware_color);
+  addLine(selectedProduct.door_hinge_color);
+  addLine(selectedProduct.window_hardware_color);
+
+  return lines.join("\n");
 }
 
 function mergeMissingFieldValues(
@@ -1034,6 +1036,12 @@ function stringifyUnknown(value: unknown) {
     return String(value);
   }
   return "";
+}
+
+function isTruthyValue(value: unknown) {
+  if (typeof value === "boolean") return value;
+  const normalized = stringifyUnknown(value).trim().toLowerCase();
+  return normalized === "true" || normalized === "yes" || normalized === "1";
 }
 
 function compareContains(value: string, query: string) {
@@ -1110,6 +1118,23 @@ async function stampPdf(
 
       const fitted = fitText(value, font, size, maxWidth, minSize);
       const textWidth = font.widthOfTextAtSize(fitted.text, fitted.size);
+      const explicitLineHeightValue = Number(
+        spec.line_height ??
+          (spec as CoordSpec & { lineHeight?: number }).lineHeight
+      );
+      const hasExplicitLineHeight =
+        Number.isFinite(explicitLineHeightValue) && explicitLineHeightValue > 0;
+      const isMultiline = fitted.text.includes("\n");
+      const isProductDetailsField =
+        fieldName === "selected_product_details_block" ||
+        fieldName === "product_details_block";
+      const lineHeight = hasExplicitLineHeight
+        ? explicitLineHeightValue
+        : isMultiline
+          ? isProductDetailsField
+            ? fitted.size * 0.9
+            : fitted.size * 1.05
+          : undefined;
 
       let drawX = x;
       if (align === "right") {
@@ -1147,6 +1172,7 @@ async function stampPdf(
         x: drawX,
         y,
         size: fitted.size,
+        ...(lineHeight ? { lineHeight } : {}),
         font,
         color: parseColor(spec.color, rgb(0, 0, 0)),
         opacity: clampOpacity(spec.opacity),
