@@ -25,6 +25,7 @@ type ViewerProps = {
   pdfUrl?: string | null;
   pageKey: string;
   fields: Record<string, CoordField>;
+  dragFallbackField?: string | null;
   selectedField?: string | null;
   onSelectField: (field: string) => void;
   onChangeCoord: (field: string, x: number, y: number) => void;
@@ -53,6 +54,7 @@ export function PdfCalibrationViewer({
   pdfUrl,
   pageKey,
   fields,
+  dragFallbackField,
   selectedField,
   onSelectField,
   onChangeCoord,
@@ -292,6 +294,7 @@ export function PdfCalibrationViewer({
   const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
     if (!onDropField) return;
     event.preventDefault();
+    event.stopPropagation();
     event.dataTransfer.dropEffect = "copy";
     setIsDropTarget(true);
   };
@@ -303,9 +306,12 @@ export function PdfCalibrationViewer({
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
     if (!onDropField) return;
     event.preventDefault();
+    event.stopPropagation();
     const fieldName =
       event.dataTransfer.getData("application/x-calibration-field") ||
-      event.dataTransfer.getData("text/plain");
+      event.dataTransfer.getData("text/plain") ||
+      event.dataTransfer.getData("text") ||
+      dragFallbackField;
     const normalizedField = String(fieldName ?? "").trim();
     if (!normalizedField) {
       setIsDropTarget(false);

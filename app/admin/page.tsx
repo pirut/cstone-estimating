@@ -263,6 +263,9 @@ export default function AdminPage() {
   const [customFieldToAdd, setCustomFieldToAdd] = useState("");
   const [fieldSearch, setFieldSearch] = useState("");
   const [bindingSearch, setBindingSearch] = useState("");
+  const [draggedBindingField, setDraggedBindingField] = useState<string | null>(
+    null
+  );
   const [coordsEditorError, setCoordsEditorError] = useState<string | null>(null);
   const [templateName, setTemplateName] = useState(DEFAULT_TEAM_TEMPLATE_NAME);
   const [templateVersion, setTemplateVersion] = useState(1);
@@ -1264,8 +1267,12 @@ export default function AdminPage() {
     event: DragEvent<HTMLElement>,
     fieldName: string
   ) => {
+    const normalizedField = String(fieldName ?? "").trim();
+    if (!normalizedField) return;
+    setDraggedBindingField(normalizedField);
     event.dataTransfer.setData(CALIBRATION_FIELD_MIME, fieldName);
     event.dataTransfer.setData("text/plain", fieldName);
+    event.dataTransfer.setData("text", fieldName);
     event.dataTransfer.effectAllowed = "copy";
   };
 
@@ -2474,9 +2481,10 @@ export default function AdminPage() {
                                   );
                                   const isPlaced = Boolean(previewPageFields[fieldName]);
                                   return (
-                                    <button
+                                    <div
                                       key={fieldName}
-                                      type="button"
+                                      role="button"
+                                      tabIndex={0}
                                       draggable
                                       onDragStart={(event) =>
                                         handleCalibrationFieldDragStart(
@@ -2484,6 +2492,7 @@ export default function AdminPage() {
                                           fieldName
                                         )
                                       }
+                                      onDragEnd={() => setDraggedBindingField(null)}
                                       onDoubleClick={() =>
                                         placeBindingOnActiveMasterPage(fieldName)
                                       }
@@ -2491,8 +2500,18 @@ export default function AdminPage() {
                                         setSelectedField(fieldName);
                                         toggleActiveMasterPageBinding(fieldName);
                                       }}
+                                      onKeyDown={(event) => {
+                                        if (
+                                          event.key === "Enter" ||
+                                          event.key === " "
+                                        ) {
+                                          event.preventDefault();
+                                          setSelectedField(fieldName);
+                                          toggleActiveMasterPageBinding(fieldName);
+                                        }
+                                      }}
                                       className={cn(
-                                        "flex w-full items-center justify-between rounded-md border px-2 py-1 text-left text-xs transition",
+                                        "flex w-full cursor-pointer items-center justify-between rounded-md border px-2 py-1 text-left text-xs transition focus:outline-none focus:ring-2 focus:ring-accent/40",
                                         isBound
                                           ? "border-accent/70 bg-accent/10 text-foreground"
                                           : "border-border/60 bg-background hover:border-accent/40"
@@ -2502,7 +2521,7 @@ export default function AdminPage() {
                                       <span className="text-[10px] text-muted-foreground">
                                         {isPlaced ? "placed" : "drag"}
                                       </span>
-                                    </button>
+                                    </div>
                                   );
                                 })}
                                 {!filteredBindingCatalog.length ? (
@@ -2540,14 +2559,16 @@ export default function AdminPage() {
                           pdfUrl={previewDocumentUrl}
                           pageKey={previewDocumentPageKey}
                           fields={previewPageFields}
+                          dragFallbackField={draggedBindingField}
                           selectedField={selectedField}
                           onSelectField={setSelectedField}
                           onChangeCoord={(field, x, y) =>
                             updateCoordField(activeCoordsPageKey, field, { x, y })
                           }
-                          onDropField={(field, x, y) =>
-                            placeBindingOnActiveMasterPage(field, { x, y })
-                          }
+                          onDropField={(field, x, y) => {
+                            setDraggedBindingField(null);
+                            placeBindingOnActiveMasterPage(field, { x, y });
+                          }}
                           onDocumentInfo={handlePdfDocumentInfo}
                           showGrid={showGrid}
                           snapToGrid={snapToGrid}
@@ -2713,6 +2734,7 @@ export default function AdminPage() {
                                 onDragStart={(event) =>
                                   handleCalibrationFieldDragStart(event, fieldName)
                                 }
+                                onDragEnd={() => setDraggedBindingField(null)}
                                 onDoubleClick={() => addFieldToCurrentPage(fieldName)}
                                 onClick={() => setSelectedField(fieldName)}
                                 className={cn(
