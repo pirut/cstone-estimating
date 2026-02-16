@@ -999,13 +999,10 @@ function buildSelectedProductDetailsBlock({
     const normalized = lineValue(value);
     if (normalized) lines.push(normalized);
   };
-  const addFlag = (value: unknown, label: string) => {
-    if (isTruthyValue(value)) lines.push(label);
-  };
 
   addLine(selectedProduct.glass_makeup);
-  addFlag(selectedProduct.stainless_operating_hardware, "Stainless operating hardware");
-  addFlag(selectedProduct.has_screens, "Screens");
+  addLine(selectedProduct.stainless_operating_hardware);
+  addLine(selectedProduct.has_screens);
   addLine(selectedProduct.door_hardware_color);
   addLine(selectedProduct.door_hinge_color);
   addLine(selectedProduct.window_hardware_color);
