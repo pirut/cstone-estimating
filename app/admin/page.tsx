@@ -1311,19 +1311,23 @@ export default function AdminPage() {
       setCoordsEditorError("Enter or select a field key to add.");
       return;
     }
-    if (!parsePageKey(activeCoordsPageKey)) {
-      setCoordsEditorError("Select a valid page before adding fields.");
-      return;
+    const normalizedPageKey =
+      String(activeCoordsPageKey ?? "").trim() || toPageKey(1);
+    if (!activeCoordsPageKey && activeMasterPage) {
+      updateMasterTemplatePage(activeMasterPage.id, {
+        coordsPageKey: normalizedPageKey,
+      });
+      setPreviewPage(normalizedPageKey);
     }
     setCoordsConfig((prev) => {
       const page =
-        (prev[activeCoordsPageKey] as Record<string, CoordField> | undefined) ??
+        (prev[normalizedPageKey] as Record<string, CoordField> | undefined) ??
         {};
       if (page[nextField]) {
         if (!placement) return prev;
         return {
           ...prev,
-          [activeCoordsPageKey]: {
+          [normalizedPageKey]: {
             ...page,
             [nextField]: {
               ...page[nextField],
@@ -1335,7 +1339,7 @@ export default function AdminPage() {
       }
       return {
         ...prev,
-        [activeCoordsPageKey]: {
+        [normalizedPageKey]: {
           ...page,
           [nextField]: {
             x: placement?.x ?? 36,

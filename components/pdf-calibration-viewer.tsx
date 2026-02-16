@@ -301,13 +301,18 @@ export function PdfCalibrationViewer({
   };
 
   const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
-    if (!onDropField || !viewportRef.current) return;
+    if (!onDropField) return;
     event.preventDefault();
     const fieldName =
       event.dataTransfer.getData("application/x-calibration-field") ||
       event.dataTransfer.getData("text/plain");
     const normalizedField = String(fieldName ?? "").trim();
     if (!normalizedField) {
+      setIsDropTarget(false);
+      return;
+    }
+    if (!viewportRef.current) {
+      onDropField(normalizedField, snapValue(36), snapValue(36));
       setIsDropTarget(false);
       return;
     }
