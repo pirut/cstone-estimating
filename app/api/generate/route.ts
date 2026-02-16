@@ -5,6 +5,12 @@ import * as XLSX from "xlsx";
 import mappingDefault from "@/config/mapping.json";
 import coordinatesDefault from "@/config/coordinates.json";
 import { downloadBuffer, downloadJson } from "@/lib/server/download";
+import { getDocumentGenerationProvider } from "@/lib/server/document-provider";
+import {
+  buildPandaDocDraft,
+  getPandaDocMissingEnvVars,
+  type PandaDocRecipientInput,
+} from "@/lib/server/pandadoc";
 import { formatValue } from "@/lib/formatting";
 import { computeEstimate, DEFAULT_DRAFT } from "@/lib/estimate-calculator";
 import {
@@ -68,11 +74,26 @@ type TemplateAssembly = {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
+    const documentProvider = getDocumentGenerationProvider();
+    const usePandaDoc = documentProvider === "pandadoc";
     const workbookUrl = String(body.workbookUrl || "").trim();
     const templatePdfUrl = String(body.templatePdfUrl || "").trim();
     const mappingUrl = String(body.mappingUrl || "").trim();
     const coordsUrl = String(body.coordsUrl || "").trim();
     const estimateUrl = String(body.estimateUrl || "").trim();
+    const pandadocConfig =
+      body.pandadoc && typeof body.pandadoc === "object"
+        ? (body.pandadoc as Record<string, unknown>)
+        : null;
+    const pandadocTemplateUuid = String(
+      pandadocConfig?.templateUuid || ""
+    ).trim();
+    const pandadocDocumentName = String(
+      pandadocConfig?.documentName || ""
+    ).trim();
+    const pandadocRecipient = normalizePandaDocRecipient(
+      pandadocConfig?.recipient
+    );
     const estimatePayload =
       body.estimate && typeof body.estimate === "object" ? body.estimate : null;
     const mappingOverride =
@@ -87,19 +108,19 @@ export async function POST(request: NextRequest) {
     const hasMasterTemplatePages = masterTemplate.pages.length > 0;
 
     if (
-      (!templatePdfUrl && !hasMasterTemplatePages) ||
+      (!usePandaDoc && !templatePdfUrl && !hasMasterTemplatePages) ||
       (!workbookUrl && !estimateUrl && !estimatePayload)
     ) {
       return NextResponse.json(
         {
           error:
-            "Provide templatePdfUrl or masterTemplate pages and either workbookUrl or estimate data.",
+            "Provide estimate data/workbook and (for local PDF mode) templatePdfUrl or masterTemplate pages.",
         },
         { status: 400 }
       );
     }
 
-    const templateBuffer = templatePdfUrl
+    const templateBuffer = !usePandaDoc && templatePdfUrl
       ? await downloadBuffer(templatePdfUrl, "Template PDF", {
           baseUrl: request.nextUrl.origin,
           timeoutMs: DOWNLOAD_TIMEOUT_MS,
@@ -114,14 +135,16 @@ export async function POST(request: NextRequest) {
             timeoutMs: DOWNLOAD_TIMEOUT_MS,
           })
         : mappingDefault;
-    const coordsConfig = coordsOverride
-      ? coordsOverride
-      : coordsUrl
-        ? await downloadJson(coordsUrl, "Coordinates JSON", {
-            baseUrl: request.nextUrl.origin,
-            timeoutMs: DOWNLOAD_TIMEOUT_MS,
-          })
-        : coordinatesDefault;
+    const coordsConfig = usePandaDoc
+      ? coordinatesDefault
+      : coordsOverride
+        ? coordsOverride
+        : coordsUrl
+          ? await downloadJson(coordsUrl, "Coordinates JSON", {
+              baseUrl: request.nextUrl.origin,
+              timeoutMs: DOWNLOAD_TIMEOUT_MS,
+            })
+          : coordinatesDefault;
 
     let fieldValues: Record<string, string> = {};
     let estimateDataForRules: Record<string, unknown> | null = null;
@@ -149,6 +172,36 @@ export async function POST(request: NextRequest) {
       });
       fieldValues = buildFieldValues(workbookBuffer, mappingConfig);
       sourceValuesForRules = { ...fieldValues };
+    }
+
+    if (usePandaDoc) {
+      const draftPayload = buildPandaDocDraft({
+        fieldValues,
+        templateUuid: pandadocTemplateUuid,
+        documentName: pandadocDocumentName,
+        recipient: pandadocRecipient,
+      });
+      const missingConfig = [...getPandaDocMissingEnvVars()];
+      if (!draftPayload.templateUuid) {
+        missingConfig.push("PANDADOC_TEMPLATE_UUID");
+      }
+      if (!draftPayload.recipients.length) {
+        missingConfig.push("PANDADOC_RECIPIENT_EMAIL");
+      }
+      const uniqueMissingConfig = Array.from(new Set(missingConfig));
+      const isConfigComplete = uniqueMissingConfig.length === 0;
+
+      return NextResponse.json(
+        {
+          error: isConfigComplete
+            ? "PandaDoc provider is enabled and draft payload is ready, but API create/send is not implemented yet."
+            : `PandaDoc provider is enabled but missing configuration: ${uniqueMissingConfig.join(", ")}.`,
+          provider: documentProvider,
+          status: isConfigComplete ? "draft_ready" : "missing_config",
+          pandadocDraft: draftPayload,
+        },
+        { status: 501 }
+      );
     }
 
     let templateAssembly: TemplateAssembly | null = null;
@@ -197,6 +250,17 @@ export async function POST(request: NextRequest) {
 }
 
 // downloadBuffer/downloadJson moved to lib/server/download
+
+function normalizePandaDocRecipient(value: unknown): PandaDocRecipientInput | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const recipient = value as Record<string, unknown>;
+  return {
+    email: String(recipient.email ?? "").trim() || undefined,
+    firstName: String(recipient.firstName ?? "").trim() || undefined,
+    lastName: String(recipient.lastName ?? "").trim() || undefined,
+    role: String(recipient.role ?? "").trim() || undefined,
+  };
+}
 
 function buildFieldValues(workbookBuffer: Buffer, mappingConfig: any) {
   const workbook = XLSX.read(workbookBuffer, {

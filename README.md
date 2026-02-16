@@ -66,6 +66,19 @@ DOWNLOAD_ALLOWLIST_SUFFIXES=uploadthing.com,utfs.io,ufs.sh
 ALLOW_PRIVATE_DOWNLOADS=false
 ```
 
+Document generation provider (preparing PandaDoc rollout):
+
+```
+# Default: local_pdf
+DOCUMENT_GENERATION_PROVIDER=local_pdf
+
+# PandaDoc prep vars (used when DOCUMENT_GENERATION_PROVIDER=pandadoc)
+PANDADOC_API_KEY=...
+PANDADOC_TEMPLATE_UUID=...
+PANDADOC_RECIPIENT_EMAIL=...
+PANDADOC_RECIPIENT_ROLE=Client
+```
+
 Admin access is controlled by Clerk + InstantDB team roles. Only users with
 `owner` or `admin` membership on the org team can access `/team-admin` (team
 management + calibration dashboard tab).
