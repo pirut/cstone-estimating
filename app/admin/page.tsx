@@ -1343,12 +1343,34 @@ export default function AdminPage() {
     const currentBindings = Array.isArray(activeMasterPage.dataBindings)
       ? activeMasterPage.dataBindings
       : [];
-    const nextBindings = currentBindings.includes(binding)
+    const isRemoving = currentBindings.includes(binding);
+    const nextBindings = isRemoving
       ? currentBindings.filter((entry) => entry !== binding)
       : [...currentBindings, binding];
     updateMasterTemplatePage(activeMasterPage.id, {
       dataBindings: nextBindings,
     });
+    if (!isRemoving) return;
+
+    const coordsPageKey = String(activeCoordsPageKey ?? "").trim();
+    if (!coordsPageKey) return;
+    setCoordsConfig((prev) => {
+      const page =
+        (prev[coordsPageKey] as Record<string, CoordField> | undefined) ?? {};
+      if (!page[binding]) return prev;
+      const nextPage = { ...page };
+      delete nextPage[binding];
+      return {
+        ...prev,
+        [coordsPageKey]: nextPage,
+      };
+    });
+    if (selectedField === binding) {
+      setSelectedField(null);
+    }
+    if (fieldInspector?.fieldName === binding) {
+      setFieldInspector(null);
+    }
   };
 
   const placeBindingOnActiveMasterPage = (
