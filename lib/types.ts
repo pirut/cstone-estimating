@@ -85,6 +85,24 @@ export type MasterTemplateConfig = {
   pages: MasterTemplatePage[];
 };
 
+export type PandaDocBindingTargetType = "token" | "field";
+
+export type PandaDocTemplateBinding = {
+  id: string;
+  sourceKey: string;
+  targetType: PandaDocBindingTargetType;
+  targetName: string;
+  targetFieldType?: string;
+  role?: string;
+};
+
+export type PandaDocTemplateConfig = {
+  templateUuid: string;
+  templateName?: string;
+  recipientRole?: string;
+  bindings: PandaDocTemplateBinding[];
+};
+
 export type TemplateConfig = {
   version: number;
   id: string;
@@ -93,6 +111,7 @@ export type TemplateConfig = {
   description?: string;
   templatePdf?: { name: string; url: string };
   masterTemplate?: MasterTemplateConfig;
+  pandadoc?: PandaDocTemplateConfig;
   coords: Record<string, any>;
   mapping?: Record<string, any>;
   createdAt: string;

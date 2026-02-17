@@ -46,6 +46,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type {
+  PandaDocBindingTargetType,
+  PandaDocTemplateBinding,
+  PandaDocTemplateConfig,
   MasterTemplateConfig,
   MasterTemplateInclusionMode,
   MasterTemplatePage,
@@ -134,6 +137,42 @@ type MasterTemplateSelectionDraft = {
   sectionOrder: MasterTemplateSectionKey[];
 };
 
+type PandaDocGenerationResponse = {
+  document?: {
+    id?: string;
+    name?: string;
+    status?: string;
+    appUrl?: string;
+    sharedLink?: string;
+  };
+  session?: {
+    id?: string;
+    url?: string;
+    expiresAt?: string;
+  };
+  businessCentralSync?: {
+    status?: string;
+  };
+};
+
+type PandaDocTemplateListItem = {
+  id: string;
+  name: string;
+  dateModified?: string;
+  dateCreated?: string;
+  version?: string;
+};
+
+type PandaDocTemplateDetails = {
+  id: string;
+  name: string;
+  roles: Array<{ id: string; name: string; signingOrder?: string }>;
+  tokens: Array<{ name: string }>;
+  fields: Array<{ name: string; mergeField?: string; type?: string }>;
+};
+
+type PandaDocTemplateFieldDetails = PandaDocTemplateDetails["fields"][number];
+
 const LIBRARY_CONFIG: Record<
   AdminLibraryType,
   { label: string; description: string; endpoint: AdminLibraryType }
@@ -212,6 +251,7 @@ const GENERATED_MASTER_BINDING_FIELDS = [
     (field) => `selected_product_${field.key}` as const
   ),
 ];
+const PANDADOC_TEMPLATE_LIST_COUNT = 50;
 
 export default function AdminPage() {
   const [isEmbedded, setIsEmbedded] = useState(false);
@@ -298,10 +338,36 @@ export default function AdminPage() {
   const [coordsConfig, setCoordsConfig] = useState<CoordsConfig>(() =>
     cloneJson(coordinatesDefault as CoordsConfig)
   );
+  const [pandaDocTemplateQuery, setPandaDocTemplateQuery] = useState("");
+  const [pandaDocTemplates, setPandaDocTemplates] = useState<
+    PandaDocTemplateListItem[]
+  >([]);
+  const [pandaDocTemplatesLoading, setPandaDocTemplatesLoading] = useState(false);
+  const [pandaDocTemplatesError, setPandaDocTemplatesError] = useState<
+    string | null
+  >(null);
+  const [pandaDocTemplateUuid, setPandaDocTemplateUuid] = useState("");
+  const [pandaDocTemplateName, setPandaDocTemplateName] = useState("");
+  const [pandaDocTemplateDetails, setPandaDocTemplateDetails] =
+    useState<PandaDocTemplateDetails | null>(null);
+  const [pandaDocTemplateDetailsLoading, setPandaDocTemplateDetailsLoading] =
+    useState(false);
+  const [pandaDocTemplateDetailsError, setPandaDocTemplateDetailsError] =
+    useState<string | null>(null);
+  const [pandaDocRecipientRole, setPandaDocRecipientRole] = useState("");
+  const [pandaDocBindings, setPandaDocBindings] = useState<
+    PandaDocTemplateBinding[]
+  >([]);
+  const [pandaDocBindingStatus, setPandaDocBindingStatus] = useState<
+    string | null
+  >(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
   const [calibrationError, setCalibrationError] = useState<string | null>(null);
+  const [testSignerEmail, setTestSignerEmail] = useState("");
+  const [lastGeneration, setLastGeneration] =
+    useState<PandaDocGenerationResponse | null>(null);
   const activeTemplateConfigItem = useMemo(
     () => getMostRecentLibraryItem(libraries.template_config.items),
     [libraries.template_config.items]
@@ -337,6 +403,12 @@ export default function AdminPage() {
   const normalizedOrgTeamName = preferredOrgTeamName.toLowerCase();
   const teamDomain = (allowedDomain || emailDomain || "").trim();
   const teamLookupDomain = teamDomain || "__none__";
+
+  useEffect(() => {
+    if (testSignerEmail.trim()) return;
+    if (!emailAddress) return;
+    setTestSignerEmail(emailAddress);
+  }, [emailAddress, testSignerEmail]);
 
   const teamQuery = instantAppId
     ? {
@@ -407,10 +479,10 @@ export default function AdminPage() {
   const progressSteps = useMemo(
     () => [
       { label: "Downloading workbook", value: 0.2 },
-      { label: "Downloading template", value: 0.4 },
+      { label: "Preparing PandaDoc variables", value: 0.45 },
       { label: "Reading Excel data", value: 0.58 },
-      { label: "Stamping PDF pages", value: 0.78 },
-      { label: "Finalizing download", value: 0.9 },
+      { label: "Creating PandaDoc document", value: 0.78 },
+      { label: "Starting signing session", value: 0.9 },
     ],
     []
   );
@@ -568,21 +640,102 @@ export default function AdminPage() {
     });
   }, [hasTeamAdminAccess]);
 
+  const loadPandaDocTemplates = useCallback(async (query: string) => {
+    setPandaDocTemplatesLoading(true);
+    setPandaDocTemplatesError(null);
+    try {
+      const searchParams = new URLSearchParams();
+      searchParams.set("count", String(PANDADOC_TEMPLATE_LIST_COUNT));
+      if (query.trim()) {
+        searchParams.set("q", query.trim());
+      }
+      const response = await fetch(
+        `/api/pandadoc/templates?${searchParams.toString()}`,
+        { cache: "no-store" }
+      );
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        throw new Error(data?.error || "Failed to load PandaDoc templates.");
+      }
+      const results = Array.isArray(data?.results) ? data.results : [];
+      setPandaDocTemplates(results as PandaDocTemplateListItem[]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unknown error.";
+      setPandaDocTemplatesError(message);
+      setPandaDocTemplates([]);
+    } finally {
+      setPandaDocTemplatesLoading(false);
+    }
+  }, []);
+
+  const loadPandaDocTemplateDetails = useCallback(
+    async (templateId: string, options?: { applySelection?: boolean }) => {
+      const normalizedId = String(templateId ?? "").trim();
+      if (!normalizedId) {
+        setPandaDocTemplateDetails(null);
+        setPandaDocTemplateDetailsError(null);
+        setPandaDocTemplateDetailsLoading(false);
+        return;
+      }
+      setPandaDocTemplateDetailsLoading(true);
+      setPandaDocTemplateDetailsError(null);
+      try {
+        const response = await fetch(
+          `/api/pandadoc/templates/${encodeURIComponent(normalizedId)}`,
+          { cache: "no-store" }
+        );
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(data?.error || "Failed to load PandaDoc template.");
+        }
+        const template = data?.template as PandaDocTemplateDetails | undefined;
+        if (!template?.id) {
+          throw new Error("PandaDoc template response was empty.");
+        }
+        setPandaDocTemplateDetails(template);
+        if (options?.applySelection) {
+          setPandaDocTemplateUuid(template.id);
+          setPandaDocTemplateName(template.name || "");
+          setPandaDocRecipientRole((currentRole) => {
+            if (currentRole.trim()) return currentRole;
+            return String(template.roles[0]?.name ?? "").trim();
+          });
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error.";
+        setPandaDocTemplateDetailsError(message);
+        setPandaDocTemplateDetails(null);
+      } finally {
+        setPandaDocTemplateDetailsLoading(false);
+      }
+    },
+    []
+  );
+
+  useEffect(() => {
+    if (!hasTeamAdminAccess) return;
+    void loadPandaDocTemplates("");
+  }, [hasTeamAdminAccess, loadPandaDocTemplates]);
+
   const handleGenerate = async () => {
     setCalibrationError(null);
-    const masterTemplate = buildMasterTemplateConfig(
-      masterTemplatePages,
-      masterTemplateSelection
-    );
-    const hasMasterPages = masterTemplate.pages.length > 0;
+    setLastGeneration(null);
     if (!workbookFile) {
       setCalibrationError("Upload the workbook before generating.");
       return;
     }
-    if (!templateFile && !hasMasterPages) {
-      setCalibrationError("Select a template PDF or configure master template pages.");
+    const normalizedSignerEmail = testSignerEmail.trim().toLowerCase();
+    if (!normalizedSignerEmail) {
+      setCalibrationError("Enter a signer email before generating.");
       return;
     }
+    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(normalizedSignerEmail)) {
+      setCalibrationError("Enter a valid signer email address.");
+      return;
+    }
+    const normalizedBindings = normalizePandaDocBindingsForSave(pandaDocBindings);
+    const resolvedTemplateUuid = String(pandaDocTemplateUuid ?? "").trim();
+    const resolvedRecipientRole = String(pandaDocRecipientRole ?? "").trim();
 
     setIsGenerating(true);
     setProgress(0.1);
@@ -593,16 +746,21 @@ export default function AdminPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           workbookUrl: workbookFile.url,
-          templatePdfUrl: templateFile?.url,
-          masterTemplate: hasMasterPages ? masterTemplate : undefined,
           mappingOverride: mappingConfig,
-          coordsOverride: coordsConfig,
+          pandadoc: {
+            templateUuid: resolvedTemplateUuid || undefined,
+            recipientRole: resolvedRecipientRole || undefined,
+            bindings: normalizedBindings,
+            recipient: { email: normalizedSignerEmail },
+            createSession: true,
+            send: true,
+          },
         }),
       });
 
       if (!response.ok) {
         const contentType = response.headers.get("content-type") || "";
-        let message = "Failed to generate PDF.";
+        let message = "Failed to generate PandaDoc document.";
         if (contentType.includes("application/json")) {
           const data = await response.json();
           message = data?.error || message;
@@ -613,15 +771,17 @@ export default function AdminPage() {
         throw new Error(message);
       }
 
-      const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = "Cornerstone Proposal - Filled.pdf";
-      link.click();
-      window.URL.revokeObjectURL(url);
+      const data = (await response.json()) as PandaDocGenerationResponse;
+      setLastGeneration(data);
+      const launchUrl =
+        data.session?.url ||
+        data.document?.sharedLink ||
+        data.document?.appUrl;
+      if (launchUrl) {
+        window.open(launchUrl, "_blank", "noopener,noreferrer");
+      }
       setProgress(1);
-      setProgressLabel("Download ready");
+      setProgressLabel("PandaDoc ready");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unknown error.";
       setCalibrationError(message);
@@ -642,11 +802,25 @@ export default function AdminPage() {
       masterTemplatePages,
       masterTemplateSelection
     );
+    const normalizedBindings = normalizePandaDocBindingsForSave(pandaDocBindings);
+    const resolvedTemplateUuid = String(pandaDocTemplateUuid ?? "").trim();
+    const resolvedPandaDocTemplateName = String(pandaDocTemplateName ?? "").trim();
+    const resolvedRecipientRole = String(pandaDocRecipientRole ?? "").trim();
+    const pandadocTemplateConfig: PandaDocTemplateConfig | undefined =
+      resolvedTemplateUuid || normalizedBindings.length || resolvedRecipientRole
+        ? {
+            templateUuid: resolvedTemplateUuid,
+            templateName: resolvedPandaDocTemplateName || undefined,
+            recipientRole: resolvedRecipientRole || undefined,
+            bindings: normalizedBindings,
+          }
+        : undefined;
     const hasMasterPages = masterTemplate.pages.length > 0;
     const hasTemplatePdf = Boolean(templateFile?.url);
-    if (!hasTemplatePdf && !hasMasterPages) {
+    const hasPandaDocTemplate = Boolean(pandadocTemplateConfig?.templateUuid);
+    if (!hasTemplatePdf && !hasMasterPages && !hasPandaDocTemplate) {
       setTemplateSaveError(
-        "Select a template PDF or create at least one master template page."
+        "Select a template PDF, build at least one master page, or choose a PandaDoc template."
       );
       return;
     }
@@ -675,6 +849,7 @@ export default function AdminPage() {
           description: templateDescription.trim() || undefined,
           templatePdf: hasTemplatePdf ? templateFile : undefined,
           masterTemplate: hasMasterPages ? masterTemplate : undefined,
+          pandadoc: pandadocTemplateConfig,
           coords: coordsConfig,
           mapping: mappingConfig,
         }),
@@ -721,12 +896,23 @@ export default function AdminPage() {
         description?: string;
         templatePdf?: { name?: string; url?: string };
         masterTemplate?: MasterTemplateConfig;
+        pandadoc?: {
+          templateUuid?: string;
+          templateName?: string;
+          recipientRole?: string;
+          bindings?: unknown;
+        };
         coords?: Record<string, any>;
         mapping?: Record<string, any>;
       };
+      const normalizedPandaDocConfig = normalizePandaDocTemplateConfig(
+        data.pandadoc
+      );
       if (
         !data?.coords ||
-        (!data?.templatePdf?.url && !data?.masterTemplate?.pages?.length)
+        (!data?.templatePdf?.url &&
+          !data?.masterTemplate?.pages?.length &&
+          !normalizedPandaDocConfig?.templateUuid)
       ) {
         throw new Error("Template configuration is incomplete.");
       }
@@ -751,6 +937,16 @@ export default function AdminPage() {
       }
       if (data.mapping) {
         setMappingConfig(data.mapping as MappingConfig);
+      }
+      setPandaDocTemplateUuid(normalizedPandaDocConfig?.templateUuid ?? "");
+      setPandaDocTemplateName(normalizedPandaDocConfig?.templateName ?? "");
+      setPandaDocRecipientRole(normalizedPandaDocConfig?.recipientRole ?? "");
+      setPandaDocBindings(normalizedPandaDocConfig?.bindings ?? []);
+      setPandaDocBindingStatus(null);
+      if (normalizedPandaDocConfig?.templateUuid) {
+        void loadPandaDocTemplateDetails(normalizedPandaDocConfig.templateUuid);
+      } else {
+        setPandaDocTemplateDetails(null);
       }
       const loadedMasterPages = normalizeLoadedMasterTemplatePages(
         data.masterTemplate,
@@ -778,7 +974,7 @@ export default function AdminPage() {
     } finally {
       setTemplateLoading(false);
     }
-  }, []);
+  }, [loadPandaDocTemplateDetails]);
 
   useEffect(() => {
     if (!activeTemplateConfigItem) return;
@@ -1072,6 +1268,246 @@ export default function AdminPage() {
       fieldName.toLowerCase().includes(query)
     );
   }, [availableStampFields, bindingSearch]);
+  const pandaDocFieldTypeByName = useMemo(() => {
+    const map = new Map<string, string>();
+    (pandaDocTemplateDetails?.fields ?? []).forEach((field) => {
+      const fieldName = String(field.name ?? "").trim();
+      const mergeField = String(field.mergeField ?? "").trim();
+      const fieldType = String(field.type ?? "").trim();
+      if (fieldName) {
+        map.set(fieldName, fieldType);
+      }
+      if (mergeField) {
+        map.set(mergeField, fieldType);
+      }
+    });
+    return map;
+  }, [pandaDocTemplateDetails?.fields]);
+  const pandaDocTokenNameOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const names: string[] = [];
+    (pandaDocTemplateDetails?.tokens ?? []).forEach((token) => {
+      const tokenName = String(token.name ?? "").trim();
+      if (!tokenName || seen.has(tokenName)) return;
+      seen.add(tokenName);
+      names.push(tokenName);
+    });
+    pandaDocBindings.forEach((binding) => {
+      if (binding.targetType !== "token") return;
+      const tokenName = String(binding.targetName ?? "").trim();
+      if (!tokenName || seen.has(tokenName)) return;
+      seen.add(tokenName);
+      names.push(tokenName);
+    });
+    return names.sort((left, right) => left.localeCompare(right));
+  }, [pandaDocBindings, pandaDocTemplateDetails?.tokens]);
+  const pandaDocFieldNameOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const names: string[] = [];
+    (pandaDocTemplateDetails?.fields ?? []).forEach((field) => {
+      const options = [
+        String(field.name ?? "").trim(),
+        String(field.mergeField ?? "").trim(),
+      ].filter(Boolean);
+      options.forEach((option) => {
+        if (seen.has(option)) return;
+        seen.add(option);
+        names.push(option);
+      });
+    });
+    pandaDocBindings.forEach((binding) => {
+      if (binding.targetType !== "field") return;
+      const fieldName = String(binding.targetName ?? "").trim();
+      if (!fieldName || seen.has(fieldName)) return;
+      seen.add(fieldName);
+      names.push(fieldName);
+    });
+    return names.sort((left, right) => left.localeCompare(right));
+  }, [pandaDocBindings, pandaDocTemplateDetails?.fields]);
+  const pandaDocRoleOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const roles: string[] = [];
+    (pandaDocTemplateDetails?.roles ?? []).forEach((role) => {
+      const roleName = String(role.name ?? "").trim();
+      if (!roleName || seen.has(roleName)) return;
+      seen.add(roleName);
+      roles.push(roleName);
+    });
+    pandaDocBindings.forEach((binding) => {
+      const roleName = String(binding.role ?? "").trim();
+      if (!roleName || seen.has(roleName)) return;
+      seen.add(roleName);
+      roles.push(roleName);
+    });
+    const recipientRole = String(pandaDocRecipientRole ?? "").trim();
+    if (recipientRole && !seen.has(recipientRole)) {
+      seen.add(recipientRole);
+      roles.push(recipientRole);
+    }
+    return roles.sort((left, right) => left.localeCompare(right));
+  }, [pandaDocBindings, pandaDocRecipientRole, pandaDocTemplateDetails?.roles]);
+
+  useEffect(() => {
+    if (!pandaDocFieldTypeByName.size) return;
+    setPandaDocBindings((prev) => {
+      let changed = false;
+      const next = prev.map((binding) => {
+        if (binding.targetType !== "field") return binding;
+        const targetName = String(binding.targetName ?? "").trim();
+        if (!targetName) return binding;
+        const resolvedType =
+          String(pandaDocFieldTypeByName.get(targetName) ?? "").trim() || undefined;
+        if (binding.targetFieldType === resolvedType) return binding;
+        changed = true;
+        return {
+          ...binding,
+          targetFieldType: resolvedType,
+        };
+      });
+      return changed ? next : prev;
+    });
+  }, [pandaDocFieldTypeByName]);
+
+  const setPandaDocBinding = useCallback(
+    (
+      bindingId: string,
+      updater: (binding: PandaDocTemplateBinding) => PandaDocTemplateBinding
+    ) => {
+      setPandaDocBindings((prev) =>
+        prev.map((binding) => {
+          if (binding.id !== bindingId) return binding;
+          return updater(binding);
+        })
+      );
+    },
+    []
+  );
+
+  const addPandaDocBinding = useCallback(
+    (targetType: PandaDocBindingTargetType = "token") => {
+      const targetName =
+        targetType === "field"
+          ? pandaDocFieldNameOptions[0] ?? ""
+          : pandaDocTokenNameOptions[0] ?? "";
+      const fieldType =
+        targetType === "field"
+          ? String(pandaDocFieldTypeByName.get(targetName) ?? "").trim() ||
+            undefined
+          : undefined;
+      const role =
+        targetType === "field"
+          ? String(pandaDocRecipientRole ?? "").trim() || undefined
+          : undefined;
+      setPandaDocBindings((prev) => [
+        ...prev,
+        {
+          id: makeId(),
+          sourceKey: availableStampFields[0] ?? "",
+          targetType,
+          targetName,
+          targetFieldType: fieldType,
+          role,
+        },
+      ]);
+      setPandaDocBindingStatus(null);
+    },
+    [
+      availableStampFields,
+      pandaDocFieldNameOptions,
+      pandaDocFieldTypeByName,
+      pandaDocRecipientRole,
+      pandaDocTokenNameOptions,
+    ]
+  );
+
+  const removePandaDocBinding = useCallback((bindingId: string) => {
+    setPandaDocBindings((prev) => prev.filter((binding) => binding.id !== bindingId));
+    setPandaDocBindingStatus(null);
+  }, []);
+
+  const autoMapPandaDocBindings = useCallback(() => {
+    if (!pandaDocTemplateDetails) {
+      setPandaDocBindingStatus("Select a PandaDoc template before auto-mapping.");
+      return;
+    }
+
+    const tokenByKey = new Map<string, string>();
+    const fieldByKey = new Map<string, PandaDocTemplateFieldDetails>();
+
+    pandaDocTemplateDetails.tokens.forEach((token) => {
+      const name = String(token.name ?? "").trim();
+      const key = normalizePandaDocMatchKey(name);
+      if (!key || tokenByKey.has(key)) return;
+      tokenByKey.set(key, name);
+    });
+
+    pandaDocTemplateDetails.fields.forEach((field) => {
+      const fieldName = String(field.name ?? "").trim();
+      const fieldKey = normalizePandaDocMatchKey(fieldName);
+      if (fieldKey && !fieldByKey.has(fieldKey)) {
+        fieldByKey.set(fieldKey, field);
+      }
+      const mergeField = String(field.mergeField ?? "").trim();
+      const mergeKey = normalizePandaDocMatchKey(mergeField);
+      if (mergeKey && !fieldByKey.has(mergeKey)) {
+        fieldByKey.set(mergeKey, field);
+      }
+    });
+
+    const mappedBindings: PandaDocTemplateBinding[] = [];
+    const seenPairs = new Set<string>();
+    const defaultRole = String(pandaDocRecipientRole ?? "").trim() || undefined;
+
+    availableStampFields.forEach((sourceKey) => {
+      const normalizedSourceKey = String(sourceKey ?? "").trim();
+      if (!normalizedSourceKey) return;
+      const lookupKey = normalizePandaDocMatchKey(normalizedSourceKey);
+      if (!lookupKey) return;
+
+      const fieldMatch = fieldByKey.get(lookupKey);
+      if (fieldMatch) {
+        const targetName =
+          String(fieldMatch.mergeField ?? "").trim() ||
+          String(fieldMatch.name ?? "").trim();
+        if (!targetName) return;
+        const dedupe = `${normalizedSourceKey}|field|${targetName}`;
+        if (seenPairs.has(dedupe)) return;
+        seenPairs.add(dedupe);
+        mappedBindings.push({
+          id: makeId(),
+          sourceKey: normalizedSourceKey,
+          targetType: "field",
+          targetName,
+          targetFieldType: String(fieldMatch.type ?? "").trim() || undefined,
+          role: defaultRole,
+        });
+        return;
+      }
+
+      const tokenMatch = tokenByKey.get(lookupKey);
+      if (!tokenMatch) return;
+      const dedupe = `${normalizedSourceKey}|token|${tokenMatch}`;
+      if (seenPairs.has(dedupe)) return;
+      seenPairs.add(dedupe);
+      mappedBindings.push({
+        id: makeId(),
+        sourceKey: normalizedSourceKey,
+        targetType: "token",
+        targetName: tokenMatch,
+      });
+    });
+
+    setPandaDocBindings(mappedBindings);
+    if (!mappedBindings.length) {
+      setPandaDocBindingStatus("No matching PandaDoc tokens/fields were found.");
+      return;
+    }
+    setPandaDocBindingStatus(
+      `Auto-mapped ${mappedBindings.length} binding${
+        mappedBindings.length === 1 ? "" : "s"
+      }.`
+    );
+  }, [availableStampFields, pandaDocRecipientRole, pandaDocTemplateDetails]);
   const masterTemplatePagesBySection = useMemo(() => {
     const orderedSections = [
       ...masterTemplateSelection.sectionOrder,
@@ -1603,6 +2039,25 @@ export default function AdminPage() {
     }
   }, [availableStampFields, fieldToAdd]);
 
+  const handleSelectPandaDocTemplate = useCallback(
+    (templateId: string) => {
+      const normalizedId = String(templateId ?? "").trim();
+      if (!normalizedId) {
+        setPandaDocTemplateUuid("");
+        setPandaDocTemplateName("");
+        setPandaDocTemplateDetails(null);
+        setPandaDocTemplateDetailsError(null);
+        return;
+      }
+      const match = pandaDocTemplates.find((template) => template.id === normalizedId);
+      setPandaDocTemplateUuid(normalizedId);
+      setPandaDocTemplateName(match?.name ?? "");
+      setPandaDocTemplateDetailsError(null);
+      void loadPandaDocTemplateDetails(normalizedId, { applySelection: true });
+    },
+    [loadPandaDocTemplateDetails, pandaDocTemplates]
+  );
+
   const handlePdfDocumentInfo = useCallback(
     (info: { pageCount: number }) => {
       const nextCount = Number(info.pageCount ?? 0);
@@ -1983,6 +2438,374 @@ export default function AdminPage() {
                         : "Save team template"}
                   </Button>
                 </div>
+              </CardContent>
+            </Card>
+
+            <Card className="border-border/60 bg-card/80 shadow-elevated">
+              <CardHeader>
+                <CardTitle className="text-2xl font-serif">
+                  PandaDoc Mapping Dashboard
+                </CardTitle>
+                <CardDescription>
+                  Link your app data bindings to PandaDoc template tokens and
+                  fields.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {pandaDocTemplatesError ? (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    {pandaDocTemplatesError}
+                  </div>
+                ) : null}
+                {pandaDocTemplateDetailsError ? (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+                    {pandaDocTemplateDetailsError}
+                  </div>
+                ) : null}
+                {pandaDocBindingStatus ? (
+                  <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                    {pandaDocBindingStatus}
+                  </div>
+                ) : null}
+                {pandaDocTemplateDetailsLoading ? (
+                  <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+                    Loading PandaDoc template schema...
+                  </div>
+                ) : null}
+
+                <div className="grid gap-3 lg:grid-cols-[1fr_auto_auto]">
+                  <Input
+                    value={pandaDocTemplateQuery}
+                    onChange={(event) =>
+                      setPandaDocTemplateQuery(event.target.value)
+                    }
+                    placeholder="Search PandaDoc templates"
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={() => void loadPandaDocTemplates(pandaDocTemplateQuery)}
+                    disabled={pandaDocTemplatesLoading}
+                  >
+                    {pandaDocTemplatesLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4" />
+                    )}
+                    Search
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setPandaDocTemplateQuery("");
+                      void loadPandaDocTemplates("");
+                    }}
+                    disabled={pandaDocTemplatesLoading}
+                  >
+                    Reset
+                  </Button>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-xs text-muted-foreground">
+                      PandaDoc template
+                    </label>
+                    <Select
+                      value={pandaDocTemplateUuid || "__none__"}
+                      onValueChange={(value) =>
+                        handleSelectPandaDocTemplate(
+                          value === "__none__" ? "" : value
+                        )
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select PandaDoc template" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">No template selected</SelectItem>
+                        {pandaDocTemplateUuid &&
+                        !pandaDocTemplates.some(
+                          (template) => template.id === pandaDocTemplateUuid
+                        ) ? (
+                          <SelectItem value={pandaDocTemplateUuid}>
+                            {pandaDocTemplateName || pandaDocTemplateUuid}
+                          </SelectItem>
+                        ) : null}
+                        {pandaDocTemplates.map((template) => (
+                          <SelectItem key={template.id} value={template.id}>
+                            {template.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[11px] text-muted-foreground">
+                      {pandaDocTemplateName
+                        ? `Selected: ${pandaDocTemplateName}`
+                        : "Pick a PandaDoc template to load roles, tokens, and fields."}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs text-muted-foreground">
+                      Recipient role
+                    </label>
+                    <Select
+                      value={pandaDocRecipientRole || "__none__"}
+                      onValueChange={(value) =>
+                        setPandaDocRecipientRole(
+                          value === "__none__" ? "" : value
+                        )
+                      }
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Recipient role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">No role override</SelectItem>
+                        {pandaDocRoleOptions.map((role) => (
+                          <SelectItem key={role} value={role}>
+                            {role}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[11px] text-muted-foreground">
+                      Uses PandaDoc role for the signer and mapped fields.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-4 rounded-xl border border-border/60 bg-background/70 p-3 md:grid-cols-3">
+                  <div className="rounded-lg border border-border/60 bg-background px-3 py-2">
+                    <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                      Tokens
+                    </p>
+                    <p className="mt-1 text-lg font-semibold text-foreground">
+                      {pandaDocTemplateDetails?.tokens.length ?? 0}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border/60 bg-background px-3 py-2">
+                    <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                      Fields
+                    </p>
+                    <p className="mt-1 text-lg font-semibold text-foreground">
+                      {pandaDocTemplateDetails?.fields.length ?? 0}
+                    </p>
+                  </div>
+                  <div className="rounded-lg border border-border/60 bg-background px-3 py-2">
+                    <p className="text-[11px] uppercase tracking-[0.22em] text-muted-foreground">
+                      Bindings
+                    </p>
+                    <p className="mt-1 text-lg font-semibold text-foreground">
+                      {pandaDocBindings.length}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={autoMapPandaDocBindings}
+                    disabled={pandaDocTemplateDetailsLoading}
+                  >
+                    Auto-map by name
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => addPandaDocBinding("token")}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add token binding
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => addPandaDocBinding("field")}
+                  >
+                    <Plus className="h-4 w-4" />
+                    Add field binding
+                  </Button>
+                </div>
+
+                <ScrollArea className="h-[320px] rounded-lg border border-border/60 bg-background/80">
+                  <div className="space-y-2 p-2">
+                    {pandaDocBindings.length ? (
+                      pandaDocBindings.map((binding) => (
+                        <div
+                          key={binding.id}
+                          className="grid gap-2 rounded-lg border border-border/60 bg-background p-2 lg:grid-cols-[1.2fr_0.7fr_1.2fr_0.9fr_auto]"
+                        >
+                          <Select
+                            value={binding.sourceKey || "__none__"}
+                            onValueChange={(value) => {
+                              setPandaDocBinding(binding.id, (current) => ({
+                                ...current,
+                                sourceKey: value === "__none__" ? "" : value,
+                              }));
+                              setPandaDocBindingStatus(null);
+                            }}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Source binding" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Select source</SelectItem>
+                              {availableStampFields.map((fieldName) => (
+                                <SelectItem key={fieldName} value={fieldName}>
+                                  {fieldName}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <Select
+                            value={binding.targetType}
+                            onValueChange={(value) => {
+                              const nextTargetType =
+                                value === "field" ? "field" : "token";
+                              setPandaDocBinding(binding.id, (current) => {
+                                const defaultTargetName =
+                                  nextTargetType === "field"
+                                    ? pandaDocFieldNameOptions[0] ?? ""
+                                    : pandaDocTokenNameOptions[0] ?? "";
+                                const targetName =
+                                  current.targetType === nextTargetType
+                                    ? current.targetName
+                                    : defaultTargetName;
+                                return {
+                                  ...current,
+                                  targetType: nextTargetType,
+                                  targetName,
+                                  targetFieldType:
+                                    nextTargetType === "field"
+                                      ? String(
+                                          pandaDocFieldTypeByName.get(targetName) ?? ""
+                                        ).trim() || undefined
+                                      : undefined,
+                                  role:
+                                    nextTargetType === "field"
+                                      ? current.role || pandaDocRecipientRole || undefined
+                                      : undefined,
+                                };
+                              });
+                              setPandaDocBindingStatus(null);
+                            }}
+                          >
+                            <SelectTrigger className="w-full">
+                              <SelectValue placeholder="Target type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="token">Token</SelectItem>
+                              <SelectItem value="field">Field</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Input
+                            value={binding.targetName}
+                            onChange={(event) => {
+                              const nextTargetName = event.target.value;
+                              setPandaDocBinding(binding.id, (current) => ({
+                                ...current,
+                                targetName: nextTargetName,
+                                targetFieldType:
+                                  current.targetType === "field"
+                                    ? String(
+                                        pandaDocFieldTypeByName.get(nextTargetName) ?? ""
+                                      ).trim() || undefined
+                                    : undefined,
+                              }));
+                              setPandaDocBindingStatus(null);
+                            }}
+                            placeholder={
+                              binding.targetType === "field"
+                                ? "PandaDoc field name"
+                                : "PandaDoc token name"
+                            }
+                          />
+                          {binding.targetType === "field" ? (
+                            <Select
+                              value={binding.role || "__none__"}
+                              onValueChange={(value) => {
+                                setPandaDocBinding(binding.id, (current) => ({
+                                  ...current,
+                                  role: value === "__none__" ? undefined : value,
+                                }));
+                                setPandaDocBindingStatus(null);
+                              }}
+                            >
+                              <SelectTrigger className="w-full">
+                                <SelectValue placeholder="Field role" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="__none__">No role override</SelectItem>
+                                {pandaDocRoleOptions.map((role) => (
+                                  <SelectItem key={role} value={role}>
+                                    {role}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <div className="rounded-md border border-border/60 bg-muted/30 px-2 py-2 text-[11px] text-muted-foreground">
+                              {binding.targetFieldType
+                                ? `Type: ${binding.targetFieldType}`
+                                : "Token mapping"}
+                            </div>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => removePandaDocBinding(binding.id)}
+                            aria-label="Remove binding"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-md border border-dashed border-border/60 px-3 py-3 text-xs text-muted-foreground">
+                        No PandaDoc mappings yet. Auto-map by name or add bindings
+                        manually.
+                      </div>
+                    )}
+                  </div>
+                </ScrollArea>
+
+                {Boolean(
+                  pandaDocTokenNameOptions.length || pandaDocFieldNameOptions.length
+                ) && (
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <div className="space-y-2 rounded-lg border border-border/60 bg-background/70 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                        Template tokens
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {pandaDocTokenNameOptions.slice(0, 24).map((tokenName) => (
+                          <span
+                            key={tokenName}
+                            className="rounded-full border border-border/60 bg-background px-2 py-0.5 text-[11px] text-foreground"
+                          >
+                            {tokenName}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                    <div className="space-y-2 rounded-lg border border-border/60 bg-background/70 p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                        Template fields
+                      </p>
+                      <div className="flex flex-wrap gap-1">
+                        {pandaDocFieldNameOptions.slice(0, 24).map((fieldName) => (
+                          <span
+                            key={fieldName}
+                            className="rounded-full border border-border/60 bg-background px-2 py-0.5 text-[11px] text-foreground"
+                          >
+                            {fieldName}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
 
@@ -3155,7 +3978,7 @@ export default function AdminPage() {
                   Test Generation
                 </CardTitle>
                 <CardDescription>
-                  Generate a proposal with the current mapping and coordinates.
+                  Create a PandaDoc document using the current variable mapping.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -3164,6 +3987,22 @@ export default function AdminPage() {
                     {calibrationError}
                   </div>
                 ) : null}
+                <div className="space-y-2">
+                  <label
+                    htmlFor="admin-signer-email"
+                    className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground"
+                  >
+                    Signer email
+                  </label>
+                  <Input
+                    id="admin-signer-email"
+                    type="email"
+                    value={testSignerEmail}
+                    onChange={(event) => setTestSignerEmail(event.target.value)}
+                    placeholder="client@example.com"
+                    autoComplete="email"
+                  />
+                </div>
                 {isGenerating ? (
                   <div className="space-y-2 rounded-lg border border-border/60 bg-muted/40 px-4 py-3">
                     <div className="text-[11px] uppercase tracking-[0.3em] text-muted-foreground">
@@ -3188,7 +4027,7 @@ export default function AdminPage() {
                     ) : (
                       <ArrowDownToLine className="h-4 w-4" />
                     )}
-                    {isGenerating ? "Generating..." : "Generate with overrides"}
+                    {isGenerating ? "Generating..." : "Generate PandaDoc"}
                   </Button>
                   <Button
                     variant="outline"
@@ -3201,6 +4040,35 @@ export default function AdminPage() {
                     Clear uploads
                   </Button>
                 </div>
+                {lastGeneration?.document?.id ? (
+                  <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 px-4 py-3 text-sm">
+                    <p className="font-medium text-foreground">
+                      Last document: {lastGeneration.document.name ?? lastGeneration.document.id}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Status: {lastGeneration.document.status ?? "unknown"}
+                      {lastGeneration.businessCentralSync?.status
+                        ? ` · Business Central sync: ${lastGeneration.businessCentralSync.status}`
+                        : ""}
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {lastGeneration.session?.url ? (
+                        <Button asChild size="sm" variant="outline">
+                          <a href={lastGeneration.session.url} target="_blank" rel="noreferrer">
+                            Open signing session
+                          </a>
+                        </Button>
+                      ) : null}
+                      {lastGeneration.document?.appUrl ? (
+                        <Button asChild size="sm" variant="outline">
+                          <a href={lastGeneration.document.appUrl} target="_blank" rel="noreferrer">
+                            Open PandaDoc
+                          </a>
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
               </CardContent>
             </Card>
           </TabsContent>
@@ -3811,6 +4679,72 @@ function makeId() {
     return crypto.randomUUID();
   }
   return `page-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function normalizePandaDocTargetType(
+  value: unknown
+): PandaDocBindingTargetType {
+  return String(value ?? "").trim().toLowerCase() === "field" ? "field" : "token";
+}
+
+function normalizePandaDocBindingsForSave(
+  value: unknown
+): PandaDocTemplateBinding[] {
+  if (!Array.isArray(value)) return [];
+  const normalized: PandaDocTemplateBinding[] = [];
+  const seen = new Set<string>();
+
+  value.forEach((entry, index) => {
+    if (!entry || typeof entry !== "object") return;
+    const binding = entry as Record<string, unknown>;
+    const sourceKey = String(binding.sourceKey ?? "").trim();
+    const targetName = String(binding.targetName ?? "").trim();
+    if (!sourceKey || !targetName) return;
+    const targetType = normalizePandaDocTargetType(binding.targetType);
+    const role = String(binding.role ?? "").trim() || undefined;
+    const targetFieldType =
+      String(binding.targetFieldType ?? "").trim() || undefined;
+    const dedupeKey = `${sourceKey}|${targetType}|${targetName}|${role ?? ""}`;
+    if (seen.has(dedupeKey)) return;
+    seen.add(dedupeKey);
+    normalized.push({
+      id: String(binding.id ?? `binding-${index + 1}`).trim() || `binding-${index + 1}`,
+      sourceKey,
+      targetType,
+      targetName,
+      targetFieldType,
+      role,
+    });
+  });
+
+  return normalized;
+}
+
+function normalizePandaDocTemplateConfig(
+  value: unknown
+): PandaDocTemplateConfig | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const source = value as Record<string, unknown>;
+  const templateUuid = String(source.templateUuid ?? "").trim();
+  const templateName = String(source.templateName ?? "").trim();
+  const recipientRole = String(source.recipientRole ?? "").trim();
+  const bindings = normalizePandaDocBindingsForSave(source.bindings);
+  if (!templateUuid && !bindings.length && !recipientRole) {
+    return undefined;
+  }
+  return {
+    templateUuid,
+    templateName: templateName || undefined,
+    recipientRole: recipientRole || undefined,
+    bindings,
+  };
+}
+
+function normalizePandaDocMatchKey(value: unknown) {
+  return String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
 }
 
 function normalizeInclusionMode(value: unknown): MasterTemplateInclusionMode {

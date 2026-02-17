@@ -6,6 +6,9 @@ import type {
   MasterTemplatePage,
   MasterTemplateSectionKey,
   MasterTemplateSelectionConfig,
+  PandaDocBindingTargetType,
+  PandaDocTemplateBinding,
+  PandaDocTemplateConfig,
 } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -33,6 +36,7 @@ type TemplatePayload = {
   description?: string;
   templatePdf?: { name?: string; url?: string };
   masterTemplate?: unknown;
+  pandadoc?: unknown;
   coords?: Record<string, any>;
   mapping?: Record<string, any>;
 };
@@ -45,6 +49,7 @@ type TemplateConfig = {
   description?: string;
   templatePdf?: { name: string; url: string };
   masterTemplate?: MasterTemplateConfig;
+  pandadoc?: PandaDocTemplateConfig;
   coords: Record<string, any>;
   mapping?: Record<string, any>;
   createdAt: string;
@@ -60,14 +65,16 @@ export async function POST(request: NextRequest) {
 
     const templatePdf = body.templatePdf;
     const normalizedMasterTemplate = normalizeMasterTemplate(body.masterTemplate);
+    const normalizedPandaDocTemplate = normalizePandaDocTemplate(body.pandadoc);
     const hasTemplatePdf = Boolean(templatePdf?.url);
     const hasMasterTemplatePages =
       normalizedMasterTemplate.pages.length > 0;
-    if (!hasTemplatePdf && !hasMasterTemplatePages) {
+    const hasPandaDocTemplate = Boolean(normalizedPandaDocTemplate?.templateUuid);
+    if (!hasTemplatePdf && !hasMasterTemplatePages && !hasPandaDocTemplate) {
       return NextResponse.json(
         {
           error:
-            "Provide either a template PDF URL or at least one master template page.",
+            "Provide either a template PDF URL, master template pages, or PandaDoc template settings.",
         },
         { status: 400 }
       );
@@ -87,7 +94,7 @@ export async function POST(request: NextRequest) {
     const templateVersion = normalizeTemplateVersion(body.templateVersion);
     const id = slugify(name);
     const config: TemplateConfig = {
-      version: hasMasterTemplatePages ? 2 : 1,
+      version: hasPandaDocTemplate ? 3 : hasMasterTemplatePages ? 2 : 1,
       id,
       name,
       templateVersion,
@@ -99,6 +106,7 @@ export async function POST(request: NextRequest) {
           }
         : undefined,
       masterTemplate: hasMasterTemplatePages ? normalizedMasterTemplate : undefined,
+      pandadoc: normalizedPandaDocTemplate,
       coords,
       mapping,
       createdAt: new Date().toISOString(),
@@ -211,6 +219,61 @@ function normalizeMasterTemplate(value: unknown): MasterTemplateConfig {
     selection,
     pages,
   };
+}
+
+function normalizePandaDocTemplate(value: unknown): PandaDocTemplateConfig | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const source = value as Record<string, unknown>;
+  const templateUuid = String(source.templateUuid ?? "").trim();
+  const templateName = String(source.templateName ?? "").trim();
+  const recipientRole = String(source.recipientRole ?? "").trim();
+  const bindings = normalizePandaDocBindings(source.bindings);
+
+  if (!templateUuid && !bindings.length && !recipientRole) {
+    return undefined;
+  }
+
+  return {
+    templateUuid,
+    templateName: templateName || undefined,
+    recipientRole: recipientRole || undefined,
+    bindings,
+  };
+}
+
+function normalizePandaDocBindings(value: unknown): PandaDocTemplateBinding[] {
+  if (!Array.isArray(value)) return [];
+  const normalized: PandaDocTemplateBinding[] = [];
+  const seen = new Set<string>();
+
+  value.forEach((entry, index) => {
+    if (!entry || typeof entry !== "object") return;
+    const binding = entry as Record<string, unknown>;
+    const sourceKey = String(binding.sourceKey ?? "").trim();
+    const targetName = String(binding.targetName ?? "").trim();
+    if (!sourceKey || !targetName) return;
+    const targetType = normalizePandaDocTargetType(binding.targetType);
+    const role = String(binding.role ?? "").trim() || undefined;
+    const targetFieldType = String(binding.targetFieldType ?? "").trim() || undefined;
+    const dedupeKey = `${sourceKey}|${targetType}|${targetName}|${role ?? ""}`;
+    if (seen.has(dedupeKey)) return;
+    seen.add(dedupeKey);
+    normalized.push({
+      id: String(binding.id ?? `binding-${index + 1}`).trim() || `binding-${index + 1}`,
+      sourceKey,
+      targetType,
+      targetName,
+      targetFieldType,
+      role,
+    });
+  });
+
+  return normalized;
+}
+
+function normalizePandaDocTargetType(value: unknown): PandaDocBindingTargetType {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  return normalized === "field" ? "field" : "token";
 }
 
 function normalizeMasterTemplatePage(value: unknown, index: number) {
