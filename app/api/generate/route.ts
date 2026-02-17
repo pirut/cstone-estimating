@@ -82,6 +82,9 @@ function isRecoverablePandaDocUpdateError(message: string) {
     normalized.includes("not editable") ||
     normalized.includes("expected document.draft") ||
     normalized.includes("removed") ||
+    normalized.includes("(403)") ||
+    normalized.includes("permission to view this document") ||
+    normalized.includes("permission_error") ||
     normalized.includes("(404)") ||
     normalized.includes("not found")
   );

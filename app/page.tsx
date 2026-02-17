@@ -649,9 +649,14 @@ export default function HomePage() {
       : undefined;
   const resolvedTrackedDocumentStatus =
     activeTrackedDocumentStatus ?? activeTrackedPandaDocDocument?.status;
+  const trackedDocumentIsArchived = Boolean(
+    activeTrackedDocumentId &&
+      resolvedTrackedDocumentStatus === "document.archived"
+  );
   const trackedDocumentNeedsDraftRevert = Boolean(
     activeTrackedDocumentId &&
       resolvedTrackedDocumentStatus &&
+      !trackedDocumentIsArchived &&
       resolvedTrackedDocumentStatus !== "document.draft"
   );
   const selectedHistoryEstimate = useMemo(
@@ -2561,6 +2566,14 @@ export default function HomePage() {
                   Current document status is{" "}
                   {formatPandaDocStatus(resolvedTrackedDocumentStatus)}. Regenerate
                   will move it back to Draft so revisions can be applied.
+                </p>
+              ) : null}
+              {activeTrackedPandaDocDocument?.documentId &&
+              trackedDocumentIsArchived ? (
+                <p className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-900">
+                  The linked document is no longer accessible (assumed archived).
+                  Regenerate will create a replacement document and continue
+                  tracking from there.
                 </p>
               ) : null}
               {activeTrackedPandaDocDocument?.documentId &&
