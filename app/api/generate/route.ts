@@ -172,23 +172,34 @@ export async function POST(request: NextRequest) {
       mappingConfig
     );
 
-    const draftPayload = buildPandaDocDraft({
+    const updateDraftPayload = buildPandaDocDraft({
       fieldValues,
       templateUuid: pandadocTemplateUuid,
       documentName: pandadocDocumentName,
       recipient: pandadocRecipient,
       recipientRole: pandadocRecipientRole,
       bindings: pandadocBindings,
+      useEnvRecipient: !pandadocDocumentId,
+    });
+    const createDraftPayload = buildPandaDocDraft({
+      fieldValues,
+      templateUuid: pandadocTemplateUuid,
+      documentName: pandadocDocumentName,
+      recipient: pandadocRecipient,
+      recipientRole: pandadocRecipientRole,
+      bindings: pandadocBindings,
+      useEnvRecipient: true,
     });
 
     const missingConfig = [...getPandaDocMissingEnvVars()];
     const templateRequired = !pandadocDocumentId;
-    if (templateRequired && !draftPayload.templateUuid) {
+    if (templateRequired && !createDraftPayload.templateUuid) {
       missingConfig.push("PANDADOC_TEMPLATE_UUID");
     }
     const mayNeedCreate =
-      !pandadocDocumentId || (allowCreateFallback && Boolean(draftPayload.templateUuid));
-    if ((sendDocument || createSession || mayNeedCreate) && !draftPayload.recipients.length) {
+      !pandadocDocumentId ||
+      (allowCreateFallback && Boolean(createDraftPayload.templateUuid));
+    if (mayNeedCreate && !createDraftPayload.recipients.length) {
       missingConfig.push("PANDADOC_RECIPIENT_EMAIL or pandadoc.recipient.email");
     }
 
@@ -200,28 +211,37 @@ export async function POST(request: NextRequest) {
           ).join(", ")}.`,
           provider: "pandadoc",
           status: "missing_config",
-          pandadocDraft: draftPayload,
+          pandadocDraft: pandadocDocumentId ? updateDraftPayload : createDraftPayload,
         },
         { status: 400 }
       );
     }
 
-    const recipientEmail = draftPayload.recipients[0]?.email;
+    const updateRecipientEmail = updateDraftPayload.recipients[0]?.email;
+    const createRecipientEmail = createDraftPayload.recipients[0]?.email;
     const sendConfig = {
       message: sendMessage,
       subject: sendSubject,
       silent: sendSilent,
     };
-    const generationCommon = {
-      draft: draftPayload,
+    const generationUpdateCommon = {
+      draft: updateDraftPayload,
       sendDocument,
-      createSession: createSession && Boolean(recipientEmail),
+      createSession: createSession && Boolean(updateRecipientEmail || createRecipientEmail),
       sessionLifetimeSeconds,
-      recipientEmail,
+      recipientEmail: updateRecipientEmail || createRecipientEmail,
+      sendOptions: sendConfig,
+    };
+    const generationCreateCommon = {
+      draft: createDraftPayload,
+      sendDocument,
+      createSession: createSession && Boolean(createRecipientEmail),
+      sessionLifetimeSeconds,
+      recipientEmail: createRecipientEmail,
       sendOptions: sendConfig,
     };
     const canFallbackCreate =
-      allowCreateFallback && Boolean(draftPayload.templateUuid);
+      allowCreateFallback && Boolean(createDraftPayload.templateUuid);
 
     let generation: Awaited<ReturnType<typeof createPandaDocDocument>>;
     let operation: "created" | "updated" = "created";
@@ -231,7 +251,7 @@ export async function POST(request: NextRequest) {
     if (pandadocDocumentId) {
       try {
         generation = await updatePandaDocDocument({
-          ...generationCommon,
+          ...generationUpdateCommon,
           documentId: pandadocDocumentId,
         });
         operation = "updated";
@@ -242,12 +262,12 @@ export async function POST(request: NextRequest) {
         if (!canFallbackCreate || !isRecoverablePandaDocUpdateError(updateMessage)) {
           throw updateError;
         }
-        generation = await createPandaDocDocument(generationCommon);
+        generation = await createPandaDocDocument(generationCreateCommon);
         operation = "created";
         fallbackFromDocumentId = pandadocDocumentId;
       }
     } else {
-      generation = await createPandaDocDocument(generationCommon);
+      generation = await createPandaDocDocument(generationCreateCommon);
       operation = "created";
     }
 

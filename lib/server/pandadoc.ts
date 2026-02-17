@@ -50,6 +50,7 @@ type BuildPandaDocDraftOptions = {
   recipient?: PandaDocRecipientInput;
   recipientRole?: string;
   bindings?: PandaDocTemplateBinding[];
+  useEnvRecipient?: boolean;
 };
 
 export type PandaDocSendOptions = {
@@ -516,6 +517,7 @@ export function buildPandaDocDraft(
     recipient,
     recipientRole,
     bindings,
+    useEnvRecipient = true,
   } = options;
 
   const envTemplateUuid = coerceString(process.env.PANDADOC_TEMPLATE_UUID);
@@ -532,7 +534,7 @@ export function buildPandaDocDraft(
     DEFAULT_RECIPIENT_ROLE;
   const resolvedEmail =
     coerceString(recipient?.email) ||
-    coerceString(process.env.PANDADOC_RECIPIENT_EMAIL);
+    (useEnvRecipient ? coerceString(process.env.PANDADOC_RECIPIENT_EMAIL) : "");
   const firstName =
     coerceString(recipient?.firstName) || defaultRecipient.firstName;
   const lastName = coerceString(recipient?.lastName) || defaultRecipient.lastName;
@@ -794,9 +796,6 @@ export async function updatePandaDocDocument(
     name: draft.name,
     metadata: draft.metadata,
   };
-  if (draft.recipients.length > 0) {
-    updatePayload.recipients = draft.recipients;
-  }
   if (draft.tokens.length > 0) {
     updatePayload.tokens = draft.tokens;
   }
