@@ -1588,7 +1588,7 @@ export function EstimateBuilderCard({
             <div className="rounded-xl border border-accent/30 bg-accent/10 px-3 py-3 text-sm text-foreground">
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-accent" />
-                Ready to generate. Your totals and schedule are synced into PandaDoc.
+                Ready to generate. Your totals and schedule are ready to sync to PandaDoc.
               </div>
             </div>
           </section>
