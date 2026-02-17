@@ -286,15 +286,8 @@ export function computeEstimate(
 function buildProductFeaturesBlock(products: ProductItem[]) {
   const lines: string[] = [];
 
-  products.forEach((product, index) => {
+  products.forEach((product) => {
     const productLines: string[] = [];
-
-    const productName = String(product.name ?? "").trim();
-    if (productName) {
-      productLines.push(`Product: ${productName}`);
-    } else if (products.length > 1) {
-      productLines.push(`Product ${index + 1}`);
-    }
 
     PRODUCT_FEATURE_SELECT_FIELDS.forEach((field) => {
       const value = String(product[field.key] ?? "").trim();
