@@ -1,13 +1,12 @@
 {
   "name": "cstone-estimating",
-  "version": "0.1.108",
+  "version": "0.1.109",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint",
-    "calibrate": "node scripts/calibrate.js"
+    "lint": "next lint"
   },
   "dependencies": {
     "@clerk/nextjs": "^6.37.2",

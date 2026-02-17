@@ -10,7 +10,6 @@ import {
 import Link from "next/link";
 import { BrandMark } from "@/components/brand-mark";
 import { EstimateBuilderCard } from "@/components/estimate-builder-card";
-import { UploadCard } from "@/components/upload-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -36,7 +35,6 @@ import type {
   LibraryType,
   TemplateConfig,
   UploadedFile,
-  UploadState,
 } from "@/lib/types";
 import { db, instantAppId } from "@/lib/instant";
 import {
@@ -285,7 +283,6 @@ export default function HomePage() {
   const { user } = useOptionalUser();
   const { isLoading: instantLoading, user: instantUser, error: instantAuthError } =
     db.useAuth();
-  const [uploads, setUploads] = useState<UploadState>({});
   const [error, setError] = useState<string | null>(null);
   const [templateConfig, setTemplateConfig] = useState<TemplateConfig | null>(null);
   const [loadedTemplateConfigKey, setLoadedTemplateConfigKey] = useState<
@@ -297,10 +294,6 @@ export default function HomePage() {
   const [showProgress, setShowProgress] = useState(false);
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState<string | null>(null);
-  const [estimateMode, setEstimateMode] = useState<"workbook" | "estimate">(
-    "estimate"
-  );
-  const [showWorkbookImport, setShowWorkbookImport] = useState(false);
   const [isPlanningLinesCopying, setIsPlanningLinesCopying] = useState(false);
   const [estimateValues, setEstimateValues] = useState<
     Record<string, string | number>
@@ -621,36 +614,19 @@ export default function HomePage() {
   );
   const hasEstimateValues = manualEstimateProgress.complete;
   const hasEstimateInput = manualEstimateProgress.started;
-  const canGenerate = Boolean(
-    (estimateMode === "workbook" ? uploads.workbook : hasEstimateValues) &&
-      signerEmail.trim()
-  );
+  const canGenerate = Boolean(hasEstimateValues && signerEmail.trim());
   const canDownloadPlanningLines = Boolean(
-    uploads.workbook?.url ||
-      estimatePayload ||
-      Object.keys(estimateValues).length
+    estimatePayload || Object.keys(estimateValues).length
   );
   const progressSteps = useMemo(
     () => [
-      {
-        label:
-          estimateMode === "estimate"
-            ? "Loading estimate values"
-            : "Downloading workbook",
-        value: 0.2,
-      },
+      { label: "Loading estimate values", value: 0.2 },
       { label: "Preparing PandaDoc variables", value: 0.45 },
-      {
-        label:
-          estimateMode === "estimate"
-            ? "Formatting estimate fields"
-            : "Reading Excel data",
-        value: 0.58,
-      },
+      { label: "Formatting estimate fields", value: 0.58 },
       { label: "Creating PandaDoc document", value: 0.78 },
       { label: "Starting signing session", value: 0.9 },
     ],
-    [estimateMode]
+    []
   );
 
   useEffect(() => {
@@ -869,23 +845,19 @@ export default function HomePage() {
     }
 
     if (canGenerate) {
-      const inputLabel = estimateMode === "estimate" ? "Estimate" : "Workbook";
       return {
         label: "Ready to generate",
-        helper: `${inputLabel} is ready.`,
+        helper: "Estimate is ready.",
         tone: "ready" as const,
       };
     }
 
     return {
-      label: estimateMode === "estimate" ? "Awaiting estimate" : "Awaiting uploads",
-      helper:
-        estimateMode === "estimate"
-          ? "Enter estimate details."
-          : "Upload a workbook.",
+      label: "Awaiting estimate",
+      helper: "Enter estimate details.",
       tone: "idle" as const,
     };
-  }, [isGenerating, canGenerate, estimateMode]);
+  }, [isGenerating, canGenerate]);
 
   const statusClassName = cn(
     "border px-4 py-1 text-[10px] tracking-[0.32em]",
@@ -898,12 +870,8 @@ export default function HomePage() {
   const workflowMilestones = [
     {
       id: "input",
-      label:
-        estimateMode === "estimate"
-          ? "Manual estimate is complete"
-          : "Workbook is selected",
-      done:
-        estimateMode === "estimate" ? hasEstimateValues : Boolean(uploads.workbook),
+      label: "Manual estimate is complete",
+      done: hasEstimateValues,
     },
     {
       id: "recipient",
@@ -940,14 +908,13 @@ export default function HomePage() {
       payload,
       totals,
       templateName: templateConfig?.name,
-      templateUrl: templateConfig?.templatePdf?.url,
+      templateUrl: undefined,
     };
   }, [
     estimateName,
     estimatePayload,
     estimateValues,
     templateConfig?.name,
-    templateConfig?.templatePdf?.url,
   ]);
 
   const persistGeneratedEstimateVersion = useCallback(async () => {
@@ -1049,13 +1016,6 @@ export default function HomePage() {
   ]);
 
   const buildPlanningLinesRequestBody = (format: string) => {
-    if (uploads.workbook?.url) {
-      return {
-        workbookUrl: uploads.workbook.url,
-        format,
-      };
-    }
-
     const estimateSource =
       estimatePayload ??
       (Object.keys(estimateValues).length
@@ -1066,7 +1026,7 @@ export default function HomePage() {
         : null);
 
     if (!estimateSource) {
-      throw new Error("Upload a workbook or complete a manual estimate first.");
+      throw new Error("Complete a manual estimate first.");
     }
 
     return {
@@ -1137,11 +1097,7 @@ export default function HomePage() {
   const handleGenerate = async () => {
     setError(null);
     setLastGeneration(null);
-    if (estimateMode === "workbook" && !uploads.workbook) {
-      setError("Upload the workbook to continue.");
-      return;
-    }
-    if (estimateMode === "estimate" && !hasEstimateValues) {
+    if (!hasEstimateValues) {
       setError("Enter at least one estimate value or load a saved estimate.");
       return;
     }
@@ -1179,19 +1135,14 @@ export default function HomePage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          workbookUrl:
-            estimateMode === "workbook" ? uploads.workbook?.url : undefined,
           mappingOverride,
-          estimate:
-            estimateMode === "estimate"
-              ? {
-                  ...(estimatePayload ?? {}),
-                  name: estimateName.trim(),
-                  values:
-                    estimatePayload?.values ??
-                    (Object.keys(estimateValues).length ? estimateValues : undefined),
-                }
-              : undefined,
+          estimate: {
+            ...(estimatePayload ?? {}),
+            name: estimateName.trim(),
+            values:
+              estimatePayload?.values ??
+              (Object.keys(estimateValues).length ? estimateValues : undefined),
+          },
           pandadoc: {
             templateUuid: templateUuid || undefined,
             recipientRole: templateRecipientRole || undefined,
@@ -1231,18 +1182,16 @@ export default function HomePage() {
       setProgressLabel("PandaDoc ready");
       generationSucceeded = true;
 
-      if (estimateMode === "estimate") {
-        try {
-          await persistGeneratedEstimateVersion();
-        } catch (historyErr) {
-          const message =
-            historyErr instanceof Error
-              ? historyErr.message
-              : "Unable to save generated version.";
-          setError(
-            `PandaDoc was created, but version history update failed: ${message}`
-          );
-        }
+      try {
+        await persistGeneratedEstimateVersion();
+      } catch (historyErr) {
+        const message =
+          historyErr instanceof Error
+            ? historyErr.message
+            : "Unable to save generated version.";
+        setError(
+          `PandaDoc was created, but version history update failed: ${message}`
+        );
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
@@ -1284,7 +1233,7 @@ export default function HomePage() {
     const totals =
       payload.totals && typeof payload.totals === "object" ? payload.totals : null;
     const templateName = templateConfig?.name;
-    const templateUrl = templateConfig?.templatePdf?.url;
+    const templateUrl = undefined;
 
     try {
       if (editingEstimateId) {
@@ -1469,7 +1418,6 @@ export default function HomePage() {
   };
 
   const handleLoadTeamEstimate = (estimate: any) => {
-    setEstimateMode("estimate");
     setError(null);
     setHistoryError(null);
     setEstimateName(estimate?.title ?? "");
@@ -1550,7 +1498,6 @@ export default function HomePage() {
           .link({ team: activeTeam.id, owner: instantUser.id })
       );
 
-      setEstimateMode("estimate");
       setEstimateName(revision.title);
       setLoadedEstimatePayload(revision.payload);
       setEditingEstimateId(estimate.id);
@@ -1600,62 +1547,12 @@ export default function HomePage() {
     }
   };
 
-  const handleLibrarySelect = (type: LibraryType, item: { name: string; url: string }) => {
-    if (!item.url) {
-      setError("Selected item has no URL. Try refreshing the library.");
-      return;
-    }
-    setError(null);
-    setUploads((prev) => ({
-      ...prev,
-      [type]: { name: item.name, url: item.url },
-    }));
-    if (type === "template") {
-      setTemplateConfig(null);
-      setLoadedTemplateConfigKey(null);
-    }
-  };
-
-  const handleLibraryDeleteAll = async (type: LibraryType) => {
-    setLibrary((prev) => ({
-      ...prev,
-      [type]: { ...prev[type], loading: true, error: null },
-    }));
-
-    try {
-      const response = await fetch(`/api/library?type=${type}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        const data = await response.json().catch(() => null);
-        const message = data?.error || "Failed to delete files.";
-        throw new Error(message);
-      }
-      setLibrary((prev) => ({
-        ...prev,
-        [type]: { ...prev[type], items: [] },
-      }));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error.";
-      setLibrary((prev) => ({
-        ...prev,
-        [type]: { ...prev[type], error: message },
-      }));
-    } finally {
-      setLibrary((prev) => ({
-        ...prev,
-        [type]: { ...prev[type], loading: false },
-      }));
-    }
-  };
-
   const activeTemplateConfigItem = useMemo(
     () => getMostRecentLibraryItem(library.template_config.items),
     [library.template_config.items]
   );
 
   useEffect(() => {
-    void loadLibrary("workbook");
     void loadLibrary("template_config");
   }, []);
 
@@ -1674,17 +1571,6 @@ export default function HomePage() {
       const data = (await response.json()) as TemplateConfig;
       setTemplateConfig(data);
       setLoadedTemplateConfigKey(item.key);
-      setUploads((prev) => {
-        if (!data.templatePdf?.url) {
-          const next = { ...prev };
-          delete next.template;
-          return next;
-        }
-        return {
-          ...prev,
-          template: { name: data.templatePdf.name, url: data.templatePdf.url },
-        };
-      });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setTemplateConfigError(message);
@@ -2334,7 +2220,6 @@ export default function HomePage() {
                 templateConfig?.masterTemplate?.selection?.projectTypes
               }
               onActivate={() => {
-                setEstimateMode("estimate");
                 setError(null);
               }}
             />
@@ -2373,83 +2258,6 @@ export default function HomePage() {
                 </span>
               ) : null}
             </div>
-            <Card className="rounded-3xl border-border/60 bg-card/80 shadow-elevated">
-              <CardHeader>
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="space-y-1">
-                    <Badge variant="muted" className="bg-muted/80 text-[10px]">
-                      Advanced
-                    </Badge>
-                    <CardTitle className="text-xl font-serif">
-                      Workbook Import
-                    </CardTitle>
-                    <CardDescription>
-                      Optional fallback for legacy workbook-driven jobs.
-                    </CardDescription>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setShowWorkbookImport((prev) => !prev)}
-                    >
-                      {showWorkbookImport
-                        ? "Hide workbook tools"
-                        : "Show workbook tools"}
-                    </Button>
-                    {estimateMode === "workbook" ? (
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => setEstimateMode("estimate")}
-                      >
-                        Use manual estimate
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {showWorkbookImport ? (
-                  <UploadCard
-                    title="Excel Workbook"
-                    description="Job info + bid sheet values (.xlsx)."
-                    endpoint="workbook"
-                    tag="Optional"
-                    selected={uploads.workbook}
-                    allowedContent=".xlsx only"
-                    uploadLabel="Drop the workbook here or browse"
-                    library={library.workbook}
-                    onUpload={(file) => {
-                      setError(null);
-                      setUploads((prev) => ({ ...prev, workbook: file }));
-                      setEstimateMode("workbook");
-                      setShowWorkbookImport(true);
-                      void loadLibrary("workbook");
-                    }}
-                    onError={setError}
-                    onSelectLibrary={(item) => {
-                      handleLibrarySelect("workbook", item);
-                      setEstimateMode("workbook");
-                      setShowWorkbookImport(true);
-                    }}
-                    onRefreshLibrary={() => loadLibrary("workbook")}
-                    onDeleteLibrary={() => handleLibraryDeleteAll("workbook")}
-                  />
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Workbook upload is hidden by default to keep the primary
-                    workflow focused on manual estimates.
-                  </p>
-                )}
-                {uploads.workbook ? (
-                  <p className="text-xs text-muted-foreground">
-                    Current workbook:{" "}
-                    <span className="text-foreground">{uploads.workbook.name}</span>
-                  </p>
-                ) : null}
-              </CardContent>
-            </Card>
           </div>
           {templateCard}
         </section>
@@ -2533,26 +2341,17 @@ export default function HomePage() {
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-muted-foreground">Input source</span>
                   <span className="text-right font-medium text-foreground">
-                    {estimateMode === "estimate" ? "Manual estimate" : "Workbook"}
+                    Manual estimate
                   </span>
                 </div>
-                {estimateMode === "estimate" ? (
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-muted-foreground">Estimate</span>
-                    <span className="text-right font-medium text-foreground">
-                      {estimateName.trim() ||
-                        selectedEstimate?.name ||
-                        (hasEstimateInput ? "Manual entry" : "Not started")}
-                    </span>
-                  </div>
-                ) : (
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-muted-foreground">Workbook</span>
-                    <span className="text-right font-medium text-foreground">
-                      {uploads.workbook?.name ?? "Not selected"}
-                    </span>
-                  </div>
-                )}
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">Estimate</span>
+                  <span className="text-right font-medium text-foreground">
+                    {estimateName.trim() ||
+                      selectedEstimate?.name ||
+                      (hasEstimateInput ? "Manual entry" : "Not started")}
+                  </span>
+                </div>
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-muted-foreground">Preset</span>
                   <span className="text-right font-medium text-foreground">
@@ -2651,18 +2450,9 @@ export default function HomePage() {
 
         <footer className="flex flex-wrap items-center justify-between gap-4 text-xs text-muted-foreground">
           <span>
-            UploadThing handles file storage. Files can be re-used from the
-            library tabs in each section.
+            Estimate snapshots and PandaDoc generation are now the primary flow.
           </span>
           <div className="flex items-center gap-4">
-            {hasTeamAdminAccess ? (
-              <Link
-                className="hover:text-foreground"
-                href="/admin"
-              >
-                Calibration dashboard
-              </Link>
-            ) : null}
             <span>Cornerstone Proposal Generator · v{APP_VERSION}</span>
           </div>
         </footer>

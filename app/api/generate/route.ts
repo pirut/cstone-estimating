@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import * as XLSX from "xlsx";
 import mappingDefault from "@/config/mapping.json";
-import { downloadBuffer, downloadJson } from "@/lib/server/download";
+import { downloadJson } from "@/lib/server/download";
 import {
   buildPandaDocDraft,
   createPandaDocDocument,
@@ -78,7 +77,6 @@ function normalizePandaDocBindings(value: unknown): PandaDocTemplateBinding[] {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const workbookUrl = String(body.workbookUrl || "").trim();
     const mappingUrl = String(body.mappingUrl || "").trim();
     const estimateUrl = String(body.estimateUrl || "").trim();
 
@@ -125,9 +123,9 @@ export async function POST(request: NextRequest) {
     const sendSubject = String(pandadocConfig?.subject ?? "").trim() || undefined;
     const sendSilent = toBoolean(pandadocConfig?.silent, false);
 
-    if (!workbookUrl && !estimateUrl && !estimatePayload) {
+    if (!estimateUrl && !estimatePayload) {
       return NextResponse.json(
-        { error: "Provide either workbookUrl or estimate data." },
+        { error: "Provide estimate data." },
         { status: 400 }
       );
     }
@@ -141,23 +139,17 @@ export async function POST(request: NextRequest) {
           })
         : mappingDefault;
 
-    let fieldValues: Record<string, string> = {};
-    if (estimatePayload || estimateUrl) {
-      const estimateData = estimatePayload
-        ? estimatePayload
-        : await downloadJson(estimateUrl, "Estimate JSON", {
-            baseUrl: request.nextUrl.origin,
-            timeoutMs: DOWNLOAD_TIMEOUT_MS,
-          });
-      const sourceValues = extractEstimateValues(estimateData);
-      fieldValues = buildFieldValuesFromSourceValues(sourceValues, mappingConfig);
-    } else {
-      const workbookBuffer = await downloadBuffer(workbookUrl, "Workbook", {
+    const estimateData = estimatePayload
+      ? estimatePayload
+      : await downloadJson(estimateUrl, "Estimate JSON", {
         baseUrl: request.nextUrl.origin,
         timeoutMs: DOWNLOAD_TIMEOUT_MS,
       });
-      fieldValues = buildFieldValues(workbookBuffer, mappingConfig);
-    }
+    const sourceValues = extractEstimateValues(estimateData);
+    const fieldValues = buildFieldValuesFromSourceValues(
+      sourceValues,
+      mappingConfig
+    );
 
     const draftPayload = buildPandaDocDraft({
       fieldValues,
@@ -228,36 +220,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function buildFieldValues(workbookBuffer: Buffer, mappingConfig: any) {
-  const workbook = XLSX.read(workbookBuffer, {
-    type: "buffer",
-    cellDates: true,
-  });
-
-  const missingValue = mappingConfig.missing_value ?? "";
-  const preparedByMap = mappingConfig.prepared_by_map ?? {};
-  const fieldSpecs = (mappingConfig.fields ?? {}) as Record<
-    string,
-    { sheet?: string; cell?: string; format?: string }
-  >;
-
-  const values: Record<string, string> = {};
-
-  for (const [fieldName, spec] of Object.entries(fieldSpecs)) {
-    const sheetName = String(spec.sheet || "");
-    const cell = String(spec.cell || "");
-    const format = String(spec.format || "text");
-    const raw = getCellValue(workbook, sheetName, cell);
-    values[fieldName] = formatValue(raw, format, preparedByMap, missingValue);
-  }
-
-  const planSetDate = values.plan_set_date;
-  values.plan_set_date_line =
-    planSetDate && planSetDate !== missingValue ? planSetDate : missingValue;
-
-  return values;
-}
-
 function buildFieldValuesFromSourceValues(
   sourceValues: Record<string, unknown>,
   mappingConfig: any
@@ -315,17 +277,4 @@ function extractEstimateValues(estimateData: any) {
   }
 
   return estimateData as Record<string, unknown>;
-}
-
-function getCellValue(
-  workbook: XLSX.WorkBook,
-  sheetName: string,
-  cell: string
-) {
-  if (!sheetName || !cell) return null;
-  const sheet = workbook.Sheets[sheetName];
-  if (!sheet) return null;
-  const cellData = sheet[cell];
-  if (!cellData) return null;
-  return cellData.v ?? null;
 }

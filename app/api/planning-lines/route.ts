@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { downloadBuffer } from "@/lib/server/download";
 import {
   buildPlanningLinesFromEstimate,
-  buildPlanningLinesFromWorkbookBuffer,
   planningLinesRowsToTsv,
   planningLinesToCsv,
   planningLinesToTsv,
@@ -11,33 +9,22 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const DOWNLOAD_TIMEOUT_MS = 20000;
-
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const workbookUrl = String(body.workbookUrl || "").trim();
     const estimateData =
       body.estimate && typeof body.estimate === "object" ? body.estimate : null;
     const format = String(body.format || "csv").trim().toLowerCase();
 
-    if (!workbookUrl && !estimateData) {
+    if (!estimateData) {
       return NextResponse.json(
-        { error: "Either workbookUrl or estimate data is required." },
+        { error: "Estimate data is required." },
         { status: 400 }
       );
     }
 
     const omitUserId = format === "tsv" || format === "tsv_rows";
-    const lines = workbookUrl
-      ? buildPlanningLinesFromWorkbookBuffer(
-          await downloadBuffer(workbookUrl, "Workbook", {
-            baseUrl: request.nextUrl.origin,
-            timeoutMs: DOWNLOAD_TIMEOUT_MS,
-          }),
-          { omitUserId }
-        )
-      : buildPlanningLinesFromEstimate(estimateData, { omitUserId });
+    const lines = buildPlanningLinesFromEstimate(estimateData, { omitUserId });
 
     if (format === "json") {
       return NextResponse.json({ lines });

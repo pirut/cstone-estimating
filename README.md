@@ -1,6 +1,6 @@
 # Cornerstone Proposal Generator (Next.js)
 
-A web-focused app that uploads proposal inputs with UploadThing and generates Cornerstone proposal documents in PandaDoc.
+A web-focused app that builds proposals from manual estimate data and generates Cornerstone proposal documents in PandaDoc.
 
 ## Setup
 
@@ -83,8 +83,7 @@ PANDADOC_READY_POLL_INTERVAL_MS=1200
 ```
 
 Admin access is controlled by Clerk + InstantDB team roles. Only users with
-`owner` or `admin` membership on the org team can access `/team-admin` (team
-management + calibration dashboard tab).
+`owner` or `admin` membership on the org team can access `/team-admin`.
 
 ## Run locally
 
@@ -96,17 +95,9 @@ Open `http://localhost:3000`.
 
 ## Generate PandaDoc proposals
 
-1) Build estimate variables in the app (manual estimate or workbook upload).
+1) Build estimate variables in the app with the manual estimate builder.
 2) Provide the signer email in the Generate step.
 3) Click **Generate PandaDoc**.
-
-## Legacy Calibration PDF (optional)
-
-```bash
-npm run calibrate -- --template "/path/to/Cornerstone Proposal.pdf" --output calibration.pdf
-```
-
-Update `config/coordinates.json` with calibrated `x`/`y` values.
 
 ## Legacy Python version
 
