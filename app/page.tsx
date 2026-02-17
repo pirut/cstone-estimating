@@ -206,6 +206,22 @@ function formatRelativeTime(timestamp: number | null | undefined) {
   return new Date(timestamp).toLocaleDateString();
 }
 
+function stripTemplateVersionSuffixes(name: string) {
+  return name.replace(/(?:\s*\(v\d+\))+$/gi, "").trim();
+}
+
+function formatTemplateDisplayName(name: string, templateVersion?: number) {
+  const baseName = stripTemplateVersionSuffixes(name);
+  if (
+    typeof templateVersion === "number" &&
+    Number.isFinite(templateVersion) &&
+    templateVersion > 0
+  ) {
+    return `${baseName} (v${Math.trunc(templateVersion)})`;
+  }
+  return baseName;
+}
+
 function getMostRecentLibraryItem(items: LibraryItem[]) {
   return items
     .slice()
@@ -1707,7 +1723,12 @@ export default function HomePage() {
           <span>
             Active preset:{" "}
             <span className="text-foreground">
-              {templateConfig?.name ?? "None"}
+              {templateConfig
+                ? formatTemplateDisplayName(
+                    templateConfig.name,
+                    templateConfig.templateVersion
+                  )
+                : "None"}
             </span>
           </span>
           <Button
@@ -2392,7 +2413,12 @@ export default function HomePage() {
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-muted-foreground">Preset</span>
                   <span className="text-right font-medium text-foreground">
-                    {templateConfig?.name ?? "Not selected"}
+                    {templateConfig
+                      ? formatTemplateDisplayName(
+                          templateConfig.name,
+                          templateConfig.templateVersion
+                        )
+                      : "Not selected"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-4">

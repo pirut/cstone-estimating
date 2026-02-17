@@ -68,7 +68,10 @@ async function hydrateTemplateNames(items: LibraryItem[]) {
     items.map(async (item) => {
       const metadata = await readTemplateMetadata(item.url);
       if (!metadata?.name) return item;
-      return { ...item, name: metadata.name };
+      return {
+        ...item,
+        name: formatTemplateDisplayName(metadata.name, metadata.templateVersion),
+      };
     })
   );
   return next;
@@ -94,6 +97,22 @@ async function readTemplateMetadata(url: string) {
   } catch {
     return null;
   }
+}
+
+function stripTemplateVersionSuffixes(name: string) {
+  return name.replace(/(?:\s*\(v\d+\))+$/gi, "").trim();
+}
+
+function formatTemplateDisplayName(name: string, templateVersion?: number) {
+  const baseName = stripTemplateVersionSuffixes(name);
+  if (
+    typeof templateVersion === "number" &&
+    Number.isFinite(templateVersion) &&
+    templateVersion > 0
+  ) {
+    return `${baseName} (v${Math.trunc(templateVersion)})`;
+  }
+  return baseName;
 }
 
 export async function DELETE(request: NextRequest) {
