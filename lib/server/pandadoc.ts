@@ -635,19 +635,27 @@ export async function createPandaDocDocument(
     sendOptions,
   } = options;
 
+  const createPayload: Record<string, unknown> = {
+    name: draft.name,
+    template_uuid: draft.templateUuid,
+    metadata: draft.metadata,
+  };
+  if (draft.recipients.length > 0) {
+    createPayload.recipients = draft.recipients;
+  }
+  if (draft.tokens.length > 0) {
+    createPayload.tokens = draft.tokens;
+  }
+  if (Object.keys(draft.fields).length > 0) {
+    createPayload.fields = draft.fields;
+  }
+
   const createResponse = await pandadocRequest<PandaDocCreateResponse>(
     "/documents",
     {
       method: "POST",
       expectedStatus: [201, 202],
-      body: {
-        name: draft.name,
-        template_uuid: draft.templateUuid,
-        recipients: draft.recipients,
-        tokens: draft.tokens,
-        fields: draft.fields,
-        metadata: draft.metadata,
-      },
+      body: createPayload,
     }
   );
 
@@ -728,12 +736,16 @@ export async function updatePandaDocDocument(
 
   const updatePayload: Record<string, unknown> = {
     name: draft.name,
-    tokens: draft.tokens,
-    fields: draft.fields,
     metadata: draft.metadata,
   };
   if (draft.recipients.length > 0) {
     updatePayload.recipients = draft.recipients;
+  }
+  if (draft.tokens.length > 0) {
+    updatePayload.tokens = draft.tokens;
+  }
+  if (Object.keys(draft.fields).length > 0) {
+    updatePayload.fields = draft.fields;
   }
 
   await pandadocRequest<Record<string, never>>(
