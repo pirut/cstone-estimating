@@ -87,6 +87,8 @@ Admin access is controlled by Clerk + InstantDB team roles. Only users with
 
 Use `/admin` to manage PandaDoc variable bindings (source keys to PandaDoc
 tokens/fields) stored in the active `template_config` preset.
+Use `/api/field-catalog?format=csv` (or `format=json`) to export the current
+source field catalog for your team.
 
 ## Run locally
 

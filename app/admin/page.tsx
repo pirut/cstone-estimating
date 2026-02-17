@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import mappingDefault from "@/config/mapping.json";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { getSourceFieldKeys } from "@/lib/field-catalog";
 import type { PandaDocTemplateBinding, TemplateConfig } from "@/lib/types";
 import { Loader2, Plus, RefreshCw, Save, Trash2, WandSparkles } from "lucide-react";
 
@@ -48,12 +48,7 @@ type PandaDocTemplateDetails = {
   fields: Array<{ name: string; mergeField?: string; type?: string }>;
 };
 
-const SOURCE_KEYS = Array.from(
-  new Set([
-    ...Object.keys((mappingDefault as { fields?: Record<string, unknown> }).fields ?? {}),
-    "plan_set_date_line",
-  ])
-).sort((a, b) => a.localeCompare(b));
+const SOURCE_KEYS = getSourceFieldKeys();
 
 function normalizedKey(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -606,6 +601,29 @@ export default function AdminPage() {
               ) : (
                 "Select a PandaDoc template to load roles, tokens, and fields."
               )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
+          <CardHeader>
+            <CardTitle className="text-xl font-serif">Field Catalog Export</CardTitle>
+            <CardDescription>
+              Export the full source field list your team should use for PandaDoc
+              variables and bindings.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              {SOURCE_KEYS.length} source field keys are available.
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="secondary" size="sm">
+                <a href="/api/field-catalog?format=csv">Download CSV</a>
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <a href="/api/field-catalog?format=json&download=1">Download JSON</a>
+              </Button>
             </div>
           </CardContent>
         </Card>
