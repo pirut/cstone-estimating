@@ -305,7 +305,6 @@ export default function HomePage() {
   const [selectedEstimate, setSelectedEstimate] = useState<UploadedFile | null>(
     null
   );
-  const [signerEmail, setSignerEmail] = useState("");
   const [lastGeneration, setLastGeneration] =
     useState<PandaDocGenerationResponse | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -378,12 +377,6 @@ export default function HomePage() {
   const normalizedOrgTeamName = preferredOrgTeamName.toLowerCase();
   const teamDomain = (allowedDomain || emailDomain || "").trim();
   const teamLookupDomain = teamDomain || "__none__";
-
-  useEffect(() => {
-    if (signerEmail.trim()) return;
-    if (!emailAddress) return;
-    setSignerEmail(emailAddress);
-  }, [emailAddress, signerEmail]);
 
   const teamQuery = instantAppId
     ? {
@@ -614,7 +607,7 @@ export default function HomePage() {
   );
   const hasEstimateValues = manualEstimateProgress.complete;
   const hasEstimateInput = manualEstimateProgress.started;
-  const canGenerate = Boolean(hasEstimateValues && signerEmail.trim());
+  const canGenerate = Boolean(hasEstimateValues);
   const canDownloadPlanningLines = Boolean(
     estimatePayload || Object.keys(estimateValues).length
   );
@@ -874,11 +867,6 @@ export default function HomePage() {
       done: hasEstimateValues,
     },
     {
-      id: "recipient",
-      label: "Signer email is set",
-      done: Boolean(signerEmail.trim()),
-    },
-    {
       id: "generate",
       label: "PandaDoc is ready to generate",
       done: canGenerate,
@@ -1101,15 +1089,6 @@ export default function HomePage() {
       setError("Enter at least one estimate value or load a saved estimate.");
       return;
     }
-    const normalizedSignerEmail = signerEmail.trim().toLowerCase();
-    if (!normalizedSignerEmail) {
-      setError("Enter a signer email before generating.");
-      return;
-    }
-    if (!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(normalizedSignerEmail)) {
-      setError("Enter a valid signer email address.");
-      return;
-    }
 
     const mappingOverride = templateConfig?.mapping;
     const templatePandaDocConfig = templateConfig?.pandadoc;
@@ -1147,9 +1126,8 @@ export default function HomePage() {
             templateUuid: templateUuid || undefined,
             recipientRole: templateRecipientRole || undefined,
             bindings: templateBindings,
-            recipient: { email: normalizedSignerEmail },
-            createSession: true,
-            send: true,
+            createSession: false,
+            send: false,
           },
         }),
       });
@@ -2322,22 +2300,6 @@ export default function HomePage() {
                 </div>
               ) : null}
               <div className="space-y-3 text-sm">
-                <div className="space-y-2">
-                  <label
-                    htmlFor="signer-email"
-                    className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground"
-                  >
-                    Signer email
-                  </label>
-                  <Input
-                    id="signer-email"
-                    type="email"
-                    value={signerEmail}
-                    onChange={(event) => setSignerEmail(event.target.value)}
-                    placeholder="client@example.com"
-                    autoComplete="email"
-                  />
-                </div>
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-muted-foreground">Input source</span>
                   <span className="text-right font-medium text-foreground">
@@ -2437,7 +2399,8 @@ export default function HomePage() {
                 </div>
               ) : null}
               <p className="text-xs text-muted-foreground">
-                Documents are created in PandaDoc and opened automatically.
+                Documents are created in PandaDoc. Add recipients and send from
+                PandaDoc.
               </p>
             </CardContent>
           </Card>

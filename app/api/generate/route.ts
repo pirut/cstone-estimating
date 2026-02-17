@@ -164,7 +164,7 @@ export async function POST(request: NextRequest) {
     if (!draftPayload.templateUuid) {
       missingConfig.push("PANDADOC_TEMPLATE_UUID");
     }
-    if (!draftPayload.recipients.length) {
+    if ((sendDocument || createSession) && !draftPayload.recipients.length) {
       missingConfig.push("PANDADOC_RECIPIENT_EMAIL or pandadoc.recipient.email");
     }
 
