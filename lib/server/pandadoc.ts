@@ -1,3 +1,5 @@
+import type { PandaDocTemplateBinding } from "@/lib/types";
+
 const REQUIRED_PANDADOC_ENV_VARS = ["PANDADOC_API_KEY"] as const;
 const DEFAULT_RECIPIENT_ROLE = "Client";
 const DEFAULT_API_BASE_URL = "https://api.pandadoc.com/public/v1";
@@ -27,6 +29,13 @@ export type PandaDocDraft = {
     name: string;
     value: string;
   }>;
+  fields: Record<
+    string,
+    {
+      value: string | number | boolean;
+      role?: string;
+    }
+  >;
   metadata: {
     source: string;
     preparedAt: string;
@@ -38,6 +47,8 @@ type BuildPandaDocDraftOptions = {
   templateUuid?: string;
   documentName?: string;
   recipient?: PandaDocRecipientInput;
+  recipientRole?: string;
+  bindings?: PandaDocTemplateBinding[];
 };
 
 export type PandaDocSendOptions = {
@@ -122,6 +133,45 @@ type PandaDocDetailsResponse = {
   recipients?: PandaDocRecipientDetails[];
 };
 
+type PandaDocTemplateListResponse = {
+  results?: Array<{
+    id?: string;
+    name?: string;
+    date_modified?: string;
+    date_created?: string;
+    version?: string;
+  }>;
+};
+
+type PandaDocTemplateDetailsResponse = {
+  id?: string;
+  name?: string;
+  tokens?: Array<{ name?: string; value?: string }>;
+  fields?: Array<{
+    field_id?: string;
+    name?: string;
+    merge_field?: string;
+    type?: string;
+  }>;
+  roles?: Array<{ id?: string; name?: string; signing_order?: string | null }>;
+};
+
+export type PandaDocTemplateListItem = {
+  id: string;
+  name: string;
+  dateModified?: string;
+  dateCreated?: string;
+  version?: string;
+};
+
+export type PandaDocTemplateDetails = {
+  id: string;
+  name: string;
+  roles: Array<{ id: string; name: string; signingOrder?: string }>;
+  tokens: Array<{ name: string }>;
+  fields: Array<{ name: string; mergeField?: string; type?: string }>;
+};
+
 function coerceString(value: unknown) {
   return String(value ?? "").trim();
 }
@@ -181,6 +231,61 @@ function buildTokens(fieldValues: Record<string, string>) {
       value: coerceString(value),
     }))
     .filter((token) => token.name.length > 0);
+}
+
+function valueForBinding(
+  fieldValues: Record<string, string>,
+  binding: PandaDocTemplateBinding
+) {
+  const raw = coerceString(fieldValues[binding.sourceKey]);
+  const type = coerceString(binding.targetFieldType).toLowerCase();
+  if (!raw) return raw;
+  if (type === "checkbox") {
+    const normalized = raw.toLowerCase();
+    return ["true", "yes", "1", "y", "checked"].includes(normalized);
+  }
+  if (type === "number") {
+    const parsed = Number(raw.replace(/[$,]/g, "").trim());
+    return Number.isFinite(parsed) ? parsed : raw;
+  }
+  return raw;
+}
+
+function buildTokensFromBindings(
+  fieldValues: Record<string, string>,
+  bindings: PandaDocTemplateBinding[]
+) {
+  return bindings
+    .filter((binding) => binding.targetType === "token")
+    .map((binding) => ({
+      name: coerceString(binding.targetName),
+      value: coerceString(fieldValues[binding.sourceKey]),
+    }))
+    .filter((token) => token.name.length > 0);
+}
+
+function buildFieldsFromBindings(
+  fieldValues: Record<string, string>,
+  bindings: PandaDocTemplateBinding[]
+) {
+  const fields: Record<
+    string,
+    {
+      value: string | number | boolean;
+      role?: string;
+    }
+  > = {};
+  bindings
+    .filter((binding) => binding.targetType === "field")
+    .forEach((binding) => {
+      const fieldName = coerceString(binding.targetName);
+      if (!fieldName) return;
+      fields[fieldName] = {
+        value: valueForBinding(fieldValues, binding),
+        role: coerceString(binding.role) || undefined,
+      };
+    });
+  return fields;
 }
 
 function getApiKey() {
@@ -368,7 +473,14 @@ export function getPandaDocMissingEnvVars(): string[] {
 export function buildPandaDocDraft(
   options: BuildPandaDocDraftOptions
 ): PandaDocDraft {
-  const { fieldValues, templateUuid, documentName, recipient } = options;
+  const {
+    fieldValues,
+    templateUuid,
+    documentName,
+    recipient,
+    recipientRole,
+    bindings,
+  } = options;
 
   const envTemplateUuid = coerceString(process.env.PANDADOC_TEMPLATE_UUID);
   const resolvedTemplateUuid = coerceString(templateUuid) || envTemplateUuid;
@@ -378,6 +490,7 @@ export function buildPandaDocDraft(
 
   const defaultRecipient = inferRecipientName(fieldValues);
   const resolvedRole =
+    coerceString(recipientRole) ||
     coerceString(recipient?.role) ||
     coerceString(process.env.PANDADOC_RECIPIENT_ROLE) ||
     DEFAULT_RECIPIENT_ROLE;
@@ -387,6 +500,21 @@ export function buildPandaDocDraft(
   const firstName =
     coerceString(recipient?.firstName) || defaultRecipient.firstName;
   const lastName = coerceString(recipient?.lastName) || defaultRecipient.lastName;
+  const validBindings = Array.isArray(bindings)
+    ? bindings.filter(
+        (binding) =>
+          binding &&
+          typeof binding === "object" &&
+          coerceString(binding.sourceKey) &&
+          coerceString(binding.targetName)
+      )
+    : [];
+  const mappedTokens = validBindings.length
+    ? buildTokensFromBindings(fieldValues, validBindings)
+    : buildTokens(fieldValues);
+  const mappedFields = validBindings.length
+    ? buildFieldsFromBindings(fieldValues, validBindings)
+    : {};
 
   return {
     name: resolvedName,
@@ -401,7 +529,8 @@ export function buildPandaDocDraft(
           },
         ]
       : [],
-    tokens: buildTokens(fieldValues),
+    tokens: mappedTokens,
+    fields: mappedFields,
     metadata: {
       source: "cstone-estimating",
       preparedAt: new Date().toISOString(),
@@ -431,6 +560,7 @@ export async function createPandaDocDocument(
         template_uuid: draft.templateUuid,
         recipients: draft.recipients,
         tokens: draft.tokens,
+        fields: draft.fields,
         metadata: draft.metadata,
       },
     }
@@ -523,5 +653,73 @@ export async function createPandaDocDocument(
         : undefined,
     sendResult,
     session: sessionResult,
+  };
+}
+
+export async function listPandaDocTemplates(query?: string, count = 50) {
+  const normalizedCount = Math.max(1, Math.min(100, Math.trunc(count)));
+  const searchParams = new URLSearchParams();
+  searchParams.set("count", String(normalizedCount));
+  if (coerceString(query)) {
+    searchParams.set("q", coerceString(query));
+  }
+
+  const response = await pandadocRequest<PandaDocTemplateListResponse>(
+    `/templates?${searchParams.toString()}`,
+    {
+      method: "GET",
+      expectedStatus: 200,
+    }
+  );
+
+  const templates: PandaDocTemplateListItem[] = (response.results ?? []).map(
+    (item) => ({
+      id: coerceString(item.id),
+      name: coerceString(item.name),
+      dateModified: coerceString(item.date_modified) || undefined,
+      dateCreated: coerceString(item.date_created) || undefined,
+      version: coerceString(item.version) || undefined,
+    })
+  );
+
+  return templates.filter((item) => Boolean(item.id && item.name));
+}
+
+export async function getPandaDocTemplateDetails(
+  templateId: string
+): Promise<PandaDocTemplateDetails> {
+  const id = coerceString(templateId);
+  if (!id) {
+    throw new Error("PandaDoc template id is required.");
+  }
+
+  const response = await pandadocRequest<PandaDocTemplateDetailsResponse>(
+    `/templates/${encodeURIComponent(id)}/details`,
+    {
+      method: "GET",
+      expectedStatus: 200,
+    }
+  );
+
+  return {
+    id,
+    name: coerceString(response.name) || id,
+    roles: (response.roles ?? [])
+      .map((role) => ({
+        id: coerceString(role.id),
+        name: coerceString(role.name),
+        signingOrder: coerceString(role.signing_order) || undefined,
+      }))
+      .filter((role) => Boolean(role.id && role.name)),
+    tokens: (response.tokens ?? [])
+      .map((token) => ({ name: coerceString(token.name) }))
+      .filter((token) => Boolean(token.name)),
+    fields: (response.fields ?? [])
+      .map((field) => ({
+        name: coerceString(field.merge_field) || coerceString(field.name),
+        mergeField: coerceString(field.merge_field) || undefined,
+        type: coerceString(field.type) || undefined,
+      }))
+      .filter((field) => Boolean(field.name)),
   };
 }

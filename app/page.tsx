@@ -1156,6 +1156,14 @@ export default function HomePage() {
     }
 
     const mappingOverride = templateConfig?.mapping;
+    const templatePandaDocConfig = templateConfig?.pandadoc;
+    const templateBindings = Array.isArray(templatePandaDocConfig?.bindings)
+      ? templatePandaDocConfig.bindings
+      : [];
+    const templateRecipientRole = String(
+      templatePandaDocConfig?.recipientRole ?? ""
+    ).trim();
+    const templateUuid = String(templatePandaDocConfig?.templateUuid ?? "").trim();
     let generationSucceeded = false;
 
     if (progressResetTimeoutRef.current !== null) {
@@ -1185,6 +1193,9 @@ export default function HomePage() {
                 }
               : undefined,
           pandadoc: {
+            templateUuid: templateUuid || undefined,
+            recipientRole: templateRecipientRole || undefined,
+            bindings: templateBindings,
             recipient: { email: normalizedSignerEmail },
             createSession: true,
             send: true,

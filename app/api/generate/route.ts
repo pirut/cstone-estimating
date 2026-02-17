@@ -11,6 +11,7 @@ import {
 import { buildBusinessCentralSyncPreview } from "@/lib/server/business-central-sync";
 import { formatValue } from "@/lib/formatting";
 import { computeEstimate, DEFAULT_DRAFT } from "@/lib/estimate-calculator";
+import type { PandaDocTemplateBinding } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -50,6 +51,30 @@ function normalizePandaDocRecipient(
   };
 }
 
+function normalizePandaDocBindings(value: unknown): PandaDocTemplateBinding[] {
+  if (!Array.isArray(value)) return [];
+  const normalized: PandaDocTemplateBinding[] = [];
+  value.forEach((entry, index) => {
+    if (!entry || typeof entry !== "object") return;
+    const binding = entry as Record<string, unknown>;
+    const sourceKey = String(binding.sourceKey ?? "").trim();
+    const targetName = String(binding.targetName ?? "").trim();
+    if (!sourceKey || !targetName) return;
+    normalized.push({
+      id: String(binding.id ?? `binding-${index + 1}`).trim() || `binding-${index + 1}`,
+      sourceKey,
+      targetType:
+        String(binding.targetType ?? "").trim().toLowerCase() === "field"
+          ? "field"
+          : "token",
+      targetName,
+      targetFieldType: String(binding.targetFieldType ?? "").trim() || undefined,
+      role: String(binding.role ?? "").trim() || undefined,
+    });
+  });
+  return normalized;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -76,6 +101,10 @@ export async function POST(request: NextRequest) {
     const pandadocDocumentName = String(
       pandadocConfig?.documentName ?? ""
     ).trim();
+    const pandadocRecipientRole = String(
+      pandadocConfig?.recipientRole ?? ""
+    ).trim();
+    const pandadocBindings = normalizePandaDocBindings(pandadocConfig?.bindings);
     const pandadocRecipient = normalizePandaDocRecipient(
       pandadocConfig?.recipient
     );
@@ -135,6 +164,8 @@ export async function POST(request: NextRequest) {
       templateUuid: pandadocTemplateUuid,
       documentName: pandadocDocumentName,
       recipient: pandadocRecipient,
+      recipientRole: pandadocRecipientRole,
+      bindings: pandadocBindings,
     });
 
     const missingConfig = [...getPandaDocMissingEnvVars()];
