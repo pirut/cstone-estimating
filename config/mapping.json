@@ -21,6 +21,7 @@
     "mobilization_deposit": {"sheet": "Bid Sheet", "cell": "H78", "format": "currency"},
     "installation_draw_1": {"sheet": "Bid Sheet", "cell": "H80", "format": "currency"},
     "installation_draw_2": {"sheet": "Bid Sheet", "cell": "H82", "format": "currency"},
-    "final_payment": {"sheet": "Bid Sheet", "cell": "H84", "format": "currency"}
+    "final_payment": {"sheet": "Bid Sheet", "cell": "H84", "format": "currency"},
+    "product_features_block": {"format": "text"}
   }
 }

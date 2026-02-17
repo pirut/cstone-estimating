@@ -1,6 +1,7 @@
 
 import {
   EMPTY_PRODUCT_FEATURE_SELECTION,
+  PRODUCT_FEATURE_SELECT_FIELDS,
   type ProductFeatureSelection,
 } from "@/lib/product-features";
 
@@ -230,6 +231,7 @@ export function computeEstimate(
     waterproofingPrice +
     installationPrice -
     (mobilizationDeposit + installationDraw1 + installationDraw2);
+  const productFeaturesBlock = buildProductFeaturesBlock(products);
 
   const pdfValues: Record<string, number | string> = {
     ...draft.info,
@@ -245,6 +247,7 @@ export function computeEstimate(
     installation_draw_1: installationDraw1,
     installation_draw_2: installationDraw2,
     final_payment: finalPayment,
+    product_features_block: productFeaturesBlock,
   };
 
   return {
@@ -278,6 +281,43 @@ export function computeEstimate(
     panelTotals,
     pdfValues,
   };
+}
+
+function buildProductFeaturesBlock(products: ProductItem[]) {
+  const lines: string[] = [];
+
+  products.forEach((product, index) => {
+    const productLines: string[] = [];
+
+    const productName = String(product.name ?? "").trim();
+    if (productName) {
+      productLines.push(`Product: ${productName}`);
+    } else if (products.length > 1) {
+      productLines.push(`Product ${index + 1}`);
+    }
+
+    PRODUCT_FEATURE_SELECT_FIELDS.forEach((field) => {
+      const value = String(product[field.key] ?? "").trim();
+      if (!value) return;
+      productLines.push(`${field.label}: ${value}`);
+    });
+
+    if (product.stainless_operating_hardware) {
+      productLines.push("Stainless operating hardware: Yes");
+    }
+    if (product.has_screens) {
+      productLines.push("Screens: Yes");
+    }
+
+    if (!productLines.length) return;
+    if (lines.length) {
+      lines.push("");
+    }
+    lines.push(...productLines);
+  });
+
+  if (!lines.length) return "No product features selected.";
+  return lines.join("\n");
 }
 
 function normalizePanelTypes(
