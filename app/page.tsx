@@ -86,6 +86,10 @@ type PandaDocGenerationResponse = {
   operation?: "created" | "updated";
   revisedDocumentId?: string;
   fallbackFromDocumentId?: string;
+  revision?: {
+    revertedToDraft?: boolean;
+    previousStatus?: string;
+  };
   document?: {
     id?: string;
     name?: string;
@@ -204,6 +208,17 @@ function formatRelativeTime(timestamp: number | null | undefined) {
     return `${Math.max(1, Math.floor(diffMs / 86_400_000))}d ago`;
   }
   return new Date(timestamp).toLocaleDateString();
+}
+
+function formatPandaDocStatus(status: string | null | undefined) {
+  const normalized = String(status ?? "").trim().toLowerCase();
+  if (!normalized) return "Unknown";
+  const withoutPrefix = normalized.replace(/^document\./, "");
+  return withoutPrefix
+    .split(/[_\s.]+/)
+    .filter(Boolean)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
 }
 
 function stripTemplateVersionSuffixes(name: string) {
@@ -355,6 +370,13 @@ export default function HomePage() {
   );
   const [lastGeneration, setLastGeneration] =
     useState<PandaDocGenerationResponse | null>(null);
+  const [linkedDocumentLive, setLinkedDocumentLive] = useState<{
+    id: string;
+    name?: string;
+    status?: string;
+    loading: boolean;
+    error: string | null;
+  } | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
   const [instantSetupError, setInstantSetupError] = useState<string | null>(null);
   const [teamName, setTeamName] = useState("");
@@ -618,6 +640,20 @@ export default function HomePage() {
         : undefined,
     [activeEditingEstimate, getLatestPandaDocDocumentForEstimate]
   );
+  const activeTrackedDocumentId = String(
+    activeTrackedPandaDocDocument?.documentId ?? ""
+  ).trim();
+  const activeTrackedDocumentStatus =
+    linkedDocumentLive?.id === activeTrackedDocumentId
+      ? linkedDocumentLive?.status
+      : undefined;
+  const resolvedTrackedDocumentStatus =
+    activeTrackedDocumentStatus ?? activeTrackedPandaDocDocument?.status;
+  const trackedDocumentNeedsDraftRevert = Boolean(
+    activeTrackedDocumentId &&
+      resolvedTrackedDocumentStatus &&
+      resolvedTrackedDocumentStatus !== "document.draft"
+  );
   const selectedHistoryEstimate = useMemo(
     () =>
       historyEstimateId ? findTeamEstimateById(historyEstimateId) : null,
@@ -734,6 +770,75 @@ export default function HomePage() {
       setEditingEstimateId(null);
     }
   }, [estimatePayload]);
+
+  useEffect(() => {
+    if (!activeTrackedDocumentId) {
+      setLinkedDocumentLive(null);
+      return;
+    }
+
+    let cancelled = false;
+    setLinkedDocumentLive((previous) => ({
+      id: activeTrackedDocumentId,
+      name:
+        previous?.id === activeTrackedDocumentId
+          ? previous.name
+          : activeTrackedPandaDocDocument?.name,
+      status:
+        previous?.id === activeTrackedDocumentId
+          ? previous.status
+          : activeTrackedPandaDocDocument?.status,
+      loading: true,
+      error: null,
+    }));
+
+    void (async () => {
+      try {
+        const response = await fetch(
+          `/api/pandadoc/documents/${encodeURIComponent(activeTrackedDocumentId)}`,
+          {
+            cache: "no-store",
+          }
+        );
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+          throw new Error(data?.error || "Failed to load PandaDoc status.");
+        }
+        if (cancelled) return;
+        setLinkedDocumentLive({
+          id: activeTrackedDocumentId,
+          name: String(data?.document?.name ?? "").trim() || undefined,
+          status: String(data?.document?.status ?? "").trim() || undefined,
+          loading: false,
+          error: null,
+        });
+      } catch (err) {
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : "Unknown error.";
+        setLinkedDocumentLive((previous) => ({
+          id: activeTrackedDocumentId,
+          name:
+            previous?.id === activeTrackedDocumentId
+              ? previous.name
+              : activeTrackedPandaDocDocument?.name,
+          status:
+            previous?.id === activeTrackedDocumentId
+              ? previous.status
+              : activeTrackedPandaDocDocument?.status,
+          loading: false,
+          error: message,
+        }));
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeTrackedDocumentId,
+    activeTrackedPandaDocDocument?.name,
+    activeTrackedPandaDocDocument?.status,
+  ]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -1239,6 +1344,15 @@ export default function HomePage() {
 
       const data = (await response.json()) as PandaDocGenerationResponse;
       setLastGeneration(data);
+      if (data.document?.id) {
+        setLinkedDocumentLive({
+          id: data.document.id,
+          name: data.document.name,
+          status: data.document.status,
+          loading: false,
+          error: null,
+        });
+      }
 
       const launchUrl =
         data.session?.url ||
@@ -2429,8 +2543,32 @@ export default function HomePage() {
                       : "Create new document"}
                   </span>
                 </div>
+                {activeTrackedPandaDocDocument?.documentId ? (
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-muted-foreground">Linked status</span>
+                    <span className="text-right font-medium text-foreground">
+                      {linkedDocumentLive?.loading
+                        ? "Checking..."
+                        : formatPandaDocStatus(resolvedTrackedDocumentStatus)}
+                    </span>
+                  </div>
+                ) : null}
               </div>
               <Separator />
+              {activeTrackedPandaDocDocument?.documentId &&
+              trackedDocumentNeedsDraftRevert ? (
+                <p className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-900">
+                  Current document status is{" "}
+                  {formatPandaDocStatus(resolvedTrackedDocumentStatus)}. Regenerate
+                  will move it back to Draft so revisions can be applied.
+                </p>
+              ) : null}
+              {activeTrackedPandaDocDocument?.documentId &&
+              linkedDocumentLive?.error ? (
+                <p className="text-xs text-muted-foreground">
+                  Unable to refresh PandaDoc status: {linkedDocumentLive.error}
+                </p>
+              ) : null}
               <div className="flex flex-col gap-3">
                 <Button
                   variant="accent"
@@ -2476,8 +2614,17 @@ export default function HomePage() {
                         ? "Operation: created replacement document"
                         : "Operation: created new document"}
                   </p>
+                  {lastGeneration.revision?.revertedToDraft ? (
+                    <p className="text-xs text-muted-foreground">
+                      Reverted from{" "}
+                      {formatPandaDocStatus(
+                        lastGeneration.revision.previousStatus
+                      )}{" "}
+                      to Draft before applying updates.
+                    </p>
+                  ) : null}
                   <p className="text-xs text-muted-foreground">
-                    Status: {lastGeneration.document.status ?? "unknown"}
+                    Status: {formatPandaDocStatus(lastGeneration.document.status)}
                     {lastGeneration.businessCentralSync?.status
                       ? ` · Business Central sync: ${lastGeneration.businessCentralSync.status}`
                       : ""}
@@ -2512,8 +2659,9 @@ export default function HomePage() {
                 </div>
               ) : null}
               <p className="text-xs text-muted-foreground">
-                For saved projects, this step revises the existing PandaDoc draft
-                when possible. Add recipients and send from PandaDoc.
+                For saved projects, this step revises the linked PandaDoc
+                document. If it is sent, we move it back to Draft and then apply
+                updates. Add recipients and send from PandaDoc.
               </p>
             </CardContent>
           </Card>

@@ -100,6 +100,10 @@ export type PandaDocCreateResult = {
     url: string;
     expiresAt?: string;
   };
+  revision?: {
+    revertedToDraft?: boolean;
+    previousStatus?: string;
+  };
 };
 
 type PandaDocErrorShape = {
@@ -181,6 +185,14 @@ export type PandaDocTemplateDetails = {
   roles: Array<{ id: string; name: string; signingOrder?: string }>;
   tokens: Array<{ name: string }>;
   fields: Array<{ name: string; mergeField?: string; type?: string }>;
+};
+
+export type PandaDocDocumentSummary = {
+  id: string;
+  name: string;
+  status: string;
+  appUrl: string;
+  apiUrl: string;
 };
 
 function coerceString(value: unknown) {
@@ -458,6 +470,19 @@ async function waitForDocumentReady(documentId: string) {
   );
 }
 
+function toDocumentSummary(
+  documentId: string,
+  statusResponse: PandaDocStatusResponse
+): PandaDocDocumentSummary {
+  return {
+    id: documentId,
+    name: coerceString(statusResponse.name) || documentId,
+    status: coerceString(statusResponse.status) || "unknown",
+    appUrl: buildDocumentAppUrl(documentId),
+    apiUrl: `${getApiBaseUrl()}/documents/${documentId}`,
+  };
+}
+
 function extractRecipientByEmail(
   recipients: PandaDocRecipientDetails[] | undefined,
   recipientEmail: string | undefined
@@ -547,6 +572,21 @@ export function buildPandaDocDraft(
       preparedAt: new Date().toISOString(),
     },
   };
+}
+
+export async function getPandaDocDocumentSummary(documentId: string) {
+  const normalizedDocumentId = coerceString(documentId);
+  if (!normalizedDocumentId) {
+    throw new Error("PandaDoc document id is required.");
+  }
+  const response = await pandadocRequest<PandaDocStatusResponse>(
+    `/documents/${encodeURIComponent(normalizedDocumentId)}`,
+    {
+      method: "GET",
+      expectedStatus: 200,
+    }
+  );
+  return toDocumentSummary(normalizedDocumentId, response);
 }
 
 async function sendPandaDocDocument(
@@ -709,6 +749,7 @@ export async function createPandaDocDocument(
         : undefined,
     sendResult,
     session: sessionResult,
+    revision: undefined,
   };
 }
 
@@ -731,7 +772,22 @@ export async function updatePandaDocDocument(
   }
 
   const readyStatus = await waitForDocumentReady(normalizedDocumentId);
-  const editableStatus = coerceString(readyStatus.status) || "unknown";
+  const initialStatus = coerceString(readyStatus.status) || "unknown";
+  let revertedToDraft = false;
+
+  if (initialStatus !== DRAFT_STATUS) {
+    await pandadocRequest<PandaDocStatusResponse>(
+      `/documents/${encodeURIComponent(normalizedDocumentId)}/draft`,
+      {
+        method: "POST",
+        expectedStatus: 200,
+      }
+    );
+    revertedToDraft = true;
+  }
+
+  const editableStatusResponse = await waitForDocumentReady(normalizedDocumentId);
+  const editableStatus = coerceString(editableStatusResponse.status) || "unknown";
   assertDocumentIsDraft(normalizedDocumentId, editableStatus);
 
   const updatePayload: Record<string, unknown> = {
@@ -799,6 +855,10 @@ export async function updatePandaDocDocument(
         : undefined,
     sendResult,
     session: sessionResult,
+    revision: {
+      revertedToDraft,
+      previousStatus: revertedToDraft ? initialStatus : undefined,
+    },
   };
 }
 

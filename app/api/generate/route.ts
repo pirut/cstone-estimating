@@ -81,6 +81,7 @@ function isRecoverablePandaDocUpdateError(message: string) {
   return (
     normalized.includes("not editable") ||
     normalized.includes("expected document.draft") ||
+    normalized.includes("removed") ||
     normalized.includes("(404)") ||
     normalized.includes("not found")
   );
@@ -257,6 +258,7 @@ export async function POST(request: NextRequest) {
         operation,
         revisedDocumentId,
         fallbackFromDocumentId,
+        revision: generation.revision,
         document: generation.document,
         recipient: generation.recipient,
         sendResult: generation.sendResult,
