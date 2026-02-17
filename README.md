@@ -85,6 +85,9 @@ PANDADOC_READY_POLL_INTERVAL_MS=1200
 Admin access is controlled by Clerk + InstantDB team roles. Only users with
 `owner` or `admin` membership on the org team can access `/team-admin`.
 
+Use `/admin` to manage PandaDoc variable bindings (source keys to PandaDoc
+tokens/fields) stored in the active `template_config` preset.
+
 ## Run locally
 
 ```bash

@@ -2450,9 +2450,14 @@ export default function HomePage() {
 
         <footer className="flex flex-wrap items-center justify-between gap-4 text-xs text-muted-foreground">
           <span>
-            Estimate snapshots and PandaDoc generation are now the primary flow.
+            Estimate snapshots and PandaDoc generation are the primary flow.
           </span>
           <div className="flex items-center gap-4">
+            {hasTeamAdminAccess ? (
+              <Link className="hover:text-foreground" href="/admin">
+                PandaDoc mapping dashboard
+              </Link>
+            ) : null}
             <span>Cornerstone Proposal Generator · v{APP_VERSION}</span>
           </div>
         </footer>

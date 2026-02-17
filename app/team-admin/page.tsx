@@ -1304,6 +1304,9 @@ export default function TeamAdminPage() {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <Button asChild variant="accent" size="sm">
+              <Link href="/admin">Open PandaDoc mapping</Link>
+            </Button>
             <Button asChild variant="outline" size="sm">
               <Link href="/">Back to workspace</Link>
             </Button>
