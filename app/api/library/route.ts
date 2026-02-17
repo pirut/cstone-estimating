@@ -68,11 +68,7 @@ async function hydrateTemplateNames(items: LibraryItem[]) {
     items.map(async (item) => {
       const metadata = await readTemplateMetadata(item.url);
       if (!metadata?.name) return item;
-      const versionLabel =
-        typeof metadata.templateVersion === "number"
-          ? ` (v${metadata.templateVersion})`
-          : "";
-      return { ...item, name: `${metadata.name}${versionLabel}` };
+      return { ...item, name: metadata.name };
     })
   );
   return next;

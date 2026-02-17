@@ -1708,9 +1708,6 @@ export default function HomePage() {
             Active preset:{" "}
             <span className="text-foreground">
               {templateConfig?.name ?? "None"}
-              {templateConfig?.templateVersion
-                ? ` (v${templateConfig.templateVersion})`
-                : ""}
             </span>
           </span>
           <Button
@@ -2396,9 +2393,6 @@ export default function HomePage() {
                   <span className="text-muted-foreground">Preset</span>
                   <span className="text-right font-medium text-foreground">
                     {templateConfig?.name ?? "Not selected"}
-                    {templateConfig?.templateVersion
-                      ? ` (v${templateConfig.templateVersion})`
-                      : ""}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
