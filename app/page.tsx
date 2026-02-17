@@ -43,6 +43,7 @@ import {
   getCurrentEstimateVersion,
   getEstimateVersionActionLabel,
   normalizeEstimateVersionHistory,
+  type EstimateVersionPandaDocDocument,
   type EstimateVersionEntry,
 } from "@/lib/estimate-versioning";
 import { InstantAuthSync } from "@/components/instant-auth-sync";
@@ -81,6 +82,10 @@ type EstimateSnapshot = {
 };
 
 type PandaDocGenerationResponse = {
+  status?: "created" | "updated";
+  operation?: "created" | "updated";
+  revisedDocumentId?: string;
+  fallbackFromDocumentId?: string;
   document?: {
     id?: string;
     name?: string;
@@ -103,6 +108,33 @@ type PandaDocGenerationResponse = {
     reason?: string;
   };
 };
+
+function toPandaDocVersionDocument(
+  generation: PandaDocGenerationResponse | null | undefined,
+  updatedAt: number
+): EstimateVersionPandaDocDocument | undefined {
+  const documentId = String(generation?.document?.id ?? "").trim();
+  if (!documentId) return undefined;
+  const operationRaw = String(
+    generation?.operation ?? generation?.status ?? ""
+  )
+    .trim()
+    .toLowerCase();
+  const operation =
+    operationRaw === "updated" || operationRaw === "created"
+      ? (operationRaw as "created" | "updated")
+      : undefined;
+  return {
+    documentId,
+    name: String(generation?.document?.name ?? "").trim() || undefined,
+    status: String(generation?.document?.status ?? "").trim() || undefined,
+    appUrl: String(generation?.document?.appUrl ?? "").trim() || undefined,
+    sharedLink:
+      String(generation?.document?.sharedLink ?? "").trim() || undefined,
+    operation,
+    updatedAt,
+  };
+}
 
 const REQUIRED_MANUAL_INFO_FIELDS = [
   "prepared_for",
@@ -510,6 +542,7 @@ export default function HomePage() {
     return {
       ...baseline,
       id: `${String(estimate.id ?? "estimate")}-baseline`,
+      pandadoc: undefined,
     };
   }, []);
   const getPersistedEstimateHistory = useCallback(
@@ -540,10 +573,34 @@ export default function HomePage() {
       }),
     [getPersistedEstimateHistory]
   );
+  const getLatestPandaDocDocumentForEstimate = useCallback(
+    (estimate: any) => {
+      const history = getPersistedEstimateHistory(estimate);
+      for (let index = history.length - 1; index >= 0; index -= 1) {
+        const candidate = history[index]?.pandadoc;
+        const documentId = String(candidate?.documentId ?? "").trim();
+        if (documentId) return candidate;
+      }
+      return undefined;
+    },
+    [getPersistedEstimateHistory]
+  );
   const findTeamEstimateById = useCallback(
     (estimateId: string) =>
       teamEstimates.find((estimate) => estimate.id === estimateId) ?? null,
     [teamEstimates]
+  );
+  const activeEditingEstimate = useMemo(
+    () =>
+      editingEstimateId ? findTeamEstimateById(editingEstimateId) : null,
+    [editingEstimateId, findTeamEstimateById]
+  );
+  const activeTrackedPandaDocDocument = useMemo(
+    () =>
+      activeEditingEstimate
+        ? getLatestPandaDocDocumentForEstimate(activeEditingEstimate)
+        : undefined,
+    [activeEditingEstimate, getLatestPandaDocDocumentForEstimate]
   );
   const selectedHistoryEstimate = useMemo(
     () =>
@@ -616,7 +673,7 @@ export default function HomePage() {
       { label: "Loading estimate values", value: 0.2 },
       { label: "Preparing PandaDoc variables", value: 0.45 },
       { label: "Formatting estimate fields", value: 0.58 },
-      { label: "Creating PandaDoc document", value: 0.78 },
+      { label: "Creating or revising PandaDoc", value: 0.78 },
       { label: "Starting signing session", value: 0.9 },
     ],
     []
@@ -832,7 +889,7 @@ export default function HomePage() {
     if (isGenerating) {
       return {
         label: "Generating PandaDoc",
-        helper: "Creating the document and preparing signing.",
+        helper: "Creating or revising the document and preparing signing.",
         tone: "loading" as const,
       };
     }
@@ -905,36 +962,76 @@ export default function HomePage() {
     templateConfig?.name,
   ]);
 
-  const persistGeneratedEstimateVersion = useCallback(async () => {
-    if (!instantAppId || !instantUser || !activeTeam || !activeMembership) return;
-    const snapshot = buildCurrentEstimateSnapshot();
-    if (!snapshot.payload) return;
+  const persistGeneratedEstimateVersion = useCallback(
+    async (generation?: PandaDocGenerationResponse | null) => {
+      if (!instantAppId || !instantUser || !activeTeam || !activeMembership) return;
+      const snapshot = buildCurrentEstimateSnapshot();
+      if (!snapshot.payload) return;
 
-    const now = Date.now();
-    if (editingEstimateId) {
-      const existingEstimate = findTeamEstimateById(editingEstimateId);
-      const shouldCreateNewVersion = hasEstimateSnapshotChanges(
-        existingEstimate,
-        snapshot
-      );
-      if (!shouldCreateNewVersion) {
+      const now = Date.now();
+      const pandadocDocument = toPandaDocVersionDocument(generation, now);
+      if (editingEstimateId) {
+        const existingEstimate = findTeamEstimateById(editingEstimateId);
+        const previousPandaDoc =
+          existingEstimate &&
+          getLatestPandaDocDocumentForEstimate(existingEstimate);
+        const previousDocumentId = String(previousPandaDoc?.documentId ?? "").trim();
+        const currentDocumentId = String(pandadocDocument?.documentId ?? "").trim();
+        const hasTrackedDocumentChanged = Boolean(
+          currentDocumentId && currentDocumentId !== previousDocumentId
+        );
+        const shouldCreateNewVersion =
+          hasEstimateSnapshotChanges(existingEstimate, snapshot) ||
+          hasTrackedDocumentChanged;
+        if (!shouldCreateNewVersion) {
+          await db.transact(
+            db.tx.estimates[editingEstimateId]
+              .update({
+                status: "generated",
+                updatedAt: now,
+                lastGeneratedAt: now,
+                templateName: snapshot.templateName,
+                templateUrl: snapshot.templateUrl,
+              })
+              .link({ team: activeTeam.id, owner: instantUser.id })
+          );
+          return;
+        }
+        const history = existingEstimate
+          ? getPersistedEstimateHistory(existingEstimate)
+          : [];
+        const versioned = appendEstimateVersion(history, {
+          action: "generated",
+          createdAt: now,
+          title: snapshot.title,
+          payload: snapshot.payload,
+          totals: snapshot.totals,
+          templateName: snapshot.templateName,
+          templateUrl: snapshot.templateUrl,
+          createdByUserId: instantUser.id,
+          pandadoc: pandadocDocument,
+        });
         await db.transact(
           db.tx.estimates[editingEstimateId]
             .update({
+              title: snapshot.title,
               status: "generated",
               updatedAt: now,
               lastGeneratedAt: now,
               templateName: snapshot.templateName,
               templateUrl: snapshot.templateUrl,
+              payload: snapshot.payload,
+              totals: snapshot.totals,
+              version: versioned.currentVersion,
+              versionHistory: versioned.history,
             })
             .link({ team: activeTeam.id, owner: instantUser.id })
         );
         return;
       }
-      const history = existingEstimate
-        ? getPersistedEstimateHistory(existingEstimate)
-        : [];
-      const versioned = appendEstimateVersion(history, {
+
+      const estimateId = id();
+      const versioned = appendEstimateVersion([], {
         action: "generated",
         createdAt: now,
         title: snapshot.title,
@@ -943,12 +1040,14 @@ export default function HomePage() {
         templateName: snapshot.templateName,
         templateUrl: snapshot.templateUrl,
         createdByUserId: instantUser.id,
+        pandadoc: pandadocDocument,
       });
       await db.transact(
-        db.tx.estimates[editingEstimateId]
-          .update({
+        db.tx.estimates[estimateId]
+          .create({
             title: snapshot.title,
             status: "generated",
+            createdAt: now,
             updatedAt: now,
             lastGeneratedAt: now,
             templateName: snapshot.templateName,
@@ -960,48 +1059,20 @@ export default function HomePage() {
           })
           .link({ team: activeTeam.id, owner: instantUser.id })
       );
-      return;
-    }
-
-    const estimateId = id();
-    const versioned = appendEstimateVersion([], {
-      action: "generated",
-      createdAt: now,
-      title: snapshot.title,
-      payload: snapshot.payload,
-      totals: snapshot.totals,
-      templateName: snapshot.templateName,
-      templateUrl: snapshot.templateUrl,
-      createdByUserId: instantUser.id,
-    });
-    await db.transact(
-      db.tx.estimates[estimateId]
-        .create({
-          title: snapshot.title,
-          status: "generated",
-          createdAt: now,
-          updatedAt: now,
-          lastGeneratedAt: now,
-          templateName: snapshot.templateName,
-          templateUrl: snapshot.templateUrl,
-          payload: snapshot.payload,
-          totals: snapshot.totals,
-          version: versioned.currentVersion,
-          versionHistory: versioned.history,
-        })
-        .link({ team: activeTeam.id, owner: instantUser.id })
-    );
-    setEditingEstimateId(estimateId);
-  }, [
-    activeMembership,
-    activeTeam,
-    buildCurrentEstimateSnapshot,
-    editingEstimateId,
-    findTeamEstimateById,
-    getPersistedEstimateHistory,
-    instantAppId,
-    instantUser,
-  ]);
+      setEditingEstimateId(estimateId);
+    },
+    [
+      activeMembership,
+      activeTeam,
+      buildCurrentEstimateSnapshot,
+      editingEstimateId,
+      findTeamEstimateById,
+      getLatestPandaDocDocumentForEstimate,
+      getPersistedEstimateHistory,
+      instantAppId,
+      instantUser,
+    ]
+  );
 
   const buildPlanningLinesRequestBody = (format: string) => {
     const estimateSource =
@@ -1099,6 +1170,9 @@ export default function HomePage() {
       templatePandaDocConfig?.recipientRole ?? ""
     ).trim();
     const templateUuid = String(templatePandaDocConfig?.templateUuid ?? "").trim();
+    const trackedDocumentId = String(
+      activeTrackedPandaDocDocument?.documentId ?? ""
+    ).trim();
     let generationSucceeded = false;
 
     if (progressResetTimeoutRef.current !== null) {
@@ -1126,6 +1200,8 @@ export default function HomePage() {
             templateUuid: templateUuid || undefined,
             recipientRole: templateRecipientRole || undefined,
             bindings: templateBindings,
+            documentId: trackedDocumentId || undefined,
+            allowCreateFallback: true,
             createSession: false,
             send: false,
           },
@@ -1157,18 +1233,20 @@ export default function HomePage() {
       }
 
       setProgress(1);
-      setProgressLabel("PandaDoc ready");
+      setProgressLabel(
+        data.operation === "updated" ? "PandaDoc revised" : "PandaDoc ready"
+      );
       generationSucceeded = true;
 
       try {
-        await persistGeneratedEstimateVersion();
+        await persistGeneratedEstimateVersion(data);
       } catch (historyErr) {
         const message =
           historyErr instanceof Error
             ? historyErr.message
             : "Unable to save generated version.";
         setError(
-          `PandaDoc was created, but version history update failed: ${message}`
+          `PandaDoc completed, but version history update failed: ${message}`
         );
       }
     } catch (err) {
@@ -2323,6 +2401,14 @@ export default function HomePage() {
                       : ""}
                   </span>
                 </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">Linked PandaDoc</span>
+                  <span className="text-right font-medium text-foreground">
+                    {activeTrackedPandaDocDocument?.documentId
+                      ? `Revising ${activeTrackedPandaDocDocument.name ?? activeTrackedPandaDocDocument.documentId}`
+                      : "Create new document"}
+                  </span>
+                </div>
               </div>
               <Separator />
               <div className="flex flex-col gap-3">
@@ -2364,6 +2450,13 @@ export default function HomePage() {
                     Last document: {lastGeneration.document.name ?? lastGeneration.document.id}
                   </p>
                   <p className="text-xs text-muted-foreground">
+                    {lastGeneration.operation === "updated"
+                      ? "Operation: revised existing document"
+                      : lastGeneration.fallbackFromDocumentId
+                        ? "Operation: created replacement document"
+                        : "Operation: created new document"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
                     Status: {lastGeneration.document.status ?? "unknown"}
                     {lastGeneration.businessCentralSync?.status
                       ? ` · Business Central sync: ${lastGeneration.businessCentralSync.status}`
@@ -2399,8 +2492,8 @@ export default function HomePage() {
                 </div>
               ) : null}
               <p className="text-xs text-muted-foreground">
-                Documents are created in PandaDoc. Add recipients and send from
-                PandaDoc.
+                For saved projects, this step revises the existing PandaDoc draft
+                when possible. Add recipients and send from PandaDoc.
               </p>
             </CardContent>
           </Card>

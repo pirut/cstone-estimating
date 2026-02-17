@@ -104,6 +104,11 @@ Open `http://localhost:3000`.
 2) Provide the signer email in the Generate step.
 3) Click **Generate PandaDoc**.
 
+For team-saved projects, generation now tracks the PandaDoc document ID in
+estimate version history. Future generations for that same project try to revise
+the existing PandaDoc draft first, and only create a replacement document if the
+tracked document is no longer editable.
+
 ## Legacy Python version
 
 The prior Flask implementation is kept in `legacy/` for reference.

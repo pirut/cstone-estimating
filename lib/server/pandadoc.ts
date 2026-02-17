@@ -8,6 +8,7 @@ const DEFAULT_READY_TIMEOUT_MS = 45_000;
 const DEFAULT_READY_POLL_INTERVAL_MS = 1_200;
 const UPLOADED_STATUS = "document.uploaded";
 const ERROR_STATUS = "document.error";
+const DRAFT_STATUS = "document.draft";
 
 export type PandaDocRecipientInput = {
   email?: string;
@@ -58,6 +59,16 @@ export type PandaDocSendOptions = {
 };
 
 export type CreatePandaDocDocumentOptions = {
+  draft: PandaDocDraft;
+  sendDocument: boolean;
+  createSession: boolean;
+  sessionLifetimeSeconds: number;
+  recipientEmail?: string;
+  sendOptions?: PandaDocSendOptions;
+};
+
+export type UpdatePandaDocDocumentOptions = {
+  documentId: string;
   draft: PandaDocDraft;
   sendDocument: boolean;
   createSession: boolean;
@@ -366,7 +377,7 @@ function formatPandaDocError(status: number, payload: unknown, fallback: string)
 async function pandadocRequest<T>(
   path: string,
   init: {
-    method: "GET" | "POST";
+    method: "GET" | "POST" | "PATCH";
     body?: unknown;
     expectedStatus?: number | number[];
   }
@@ -538,6 +549,80 @@ export function buildPandaDocDraft(
   };
 }
 
+async function sendPandaDocDocument(
+  documentId: string,
+  sendOptions: PandaDocSendOptions | undefined
+) {
+  const sendPayload: Record<string, unknown> = {};
+  if (coerceString(sendOptions?.subject)) {
+    sendPayload.subject = coerceString(sendOptions?.subject);
+  }
+  if (coerceString(sendOptions?.message)) {
+    sendPayload.message = coerceString(sendOptions?.message);
+  }
+  sendPayload.silent = toBoolean(sendOptions?.silent, false);
+
+  const sendResponse = await pandadocRequest<PandaDocSendResponse>(
+    `/documents/${documentId}/send`,
+    {
+      method: "POST",
+      expectedStatus: 200,
+      body: sendPayload,
+    }
+  );
+
+  return {
+    status: coerceString(sendResponse.status) || "document.sent",
+  };
+}
+
+async function createPandaDocSession(
+  documentId: string,
+  recipientEmail: string,
+  sessionLifetimeSeconds: number
+) {
+  const sessionResponse = await pandadocRequest<PandaDocSessionResponse>(
+    `/documents/${documentId}/session`,
+    {
+      method: "POST",
+      expectedStatus: 201,
+      body: {
+        recipient: recipientEmail,
+        lifetime: toPositiveInteger(sessionLifetimeSeconds, 900),
+      },
+    }
+  );
+  const sessionId = coerceString(sessionResponse.id);
+  if (!sessionId) return undefined;
+  return {
+    id: sessionId,
+    url: buildSessionUrl(sessionId),
+    expiresAt: coerceString(sessionResponse.expires_at) || undefined,
+  };
+}
+
+async function getPandaDocMatchedRecipient(
+  documentId: string,
+  recipientEmail?: string
+) {
+  const detailsResponse = await pandadocRequest<PandaDocDetailsResponse>(
+    `/documents/${documentId}/details`,
+    {
+      method: "GET",
+      expectedStatus: 200,
+    }
+  );
+
+  return extractRecipientByEmail(detailsResponse.recipients, recipientEmail);
+}
+
+function assertDocumentIsDraft(documentId: string, status: string) {
+  if (status === DRAFT_STATUS) return;
+  throw new Error(
+    `PandaDoc document ${documentId} is not editable. Expected ${DRAFT_STATUS}, received ${status || "unknown"}.`
+  );
+}
+
 export async function createPandaDocDocument(
   options: CreatePandaDocDocumentOptions
 ): Promise<PandaDocCreateResult> {
@@ -572,74 +657,123 @@ export async function createPandaDocDocument(
   }
 
   const statusResponse = await waitForDocumentReady(documentId);
-  const documentStatus = coerceString(statusResponse.status) || UPLOADED_STATUS;
+  const documentStatus = coerceString(statusResponse.status) || DRAFT_STATUS;
 
   let sendResult: PandaDocCreateResult["sendResult"];
   if (sendDocument) {
-    const sendPayload: Record<string, unknown> = {};
-    if (coerceString(sendOptions?.subject)) {
-      sendPayload.subject = coerceString(sendOptions?.subject);
-    }
-    if (coerceString(sendOptions?.message)) {
-      sendPayload.message = coerceString(sendOptions?.message);
-    }
-    sendPayload.silent = toBoolean(sendOptions?.silent, false);
-
-    const sendResponse = await pandadocRequest<PandaDocSendResponse>(
-      `/documents/${documentId}/send`,
-      {
-        method: "POST",
-        expectedStatus: 200,
-        body: sendPayload,
-      }
-    );
-    sendResult = {
-      status: coerceString(sendResponse.status) || "document.sent",
-    };
+    sendResult = await sendPandaDocDocument(documentId, sendOptions);
   }
 
   let sessionResult: PandaDocCreateResult["session"];
   if (createSession && coerceString(recipientEmail)) {
-    const sessionResponse = await pandadocRequest<PandaDocSessionResponse>(
-      `/documents/${documentId}/session`,
-      {
-        method: "POST",
-        expectedStatus: 201,
-        body: {
-          recipient: recipientEmail,
-          lifetime: toPositiveInteger(sessionLifetimeSeconds, 900),
-        },
-      }
+    sessionResult = await createPandaDocSession(
+      documentId,
+      coerceString(recipientEmail),
+      sessionLifetimeSeconds
     );
-    const sessionId = coerceString(sessionResponse.id);
-    if (sessionId) {
-      sessionResult = {
-        id: sessionId,
-        url: buildSessionUrl(sessionId),
-        expiresAt: coerceString(sessionResponse.expires_at) || undefined,
-      };
-    }
   }
 
-  const detailsResponse = await pandadocRequest<PandaDocDetailsResponse>(
-    `/documents/${documentId}/details`,
-    {
-      method: "GET",
-      expectedStatus: 200,
-    }
-  );
-  const matchedRecipient = extractRecipientByEmail(
-    detailsResponse.recipients,
+  const matchedRecipient = await getPandaDocMatchedRecipient(
+    documentId,
     recipientEmail
   );
 
   return {
     document: {
       id: documentId,
-      name: coerceString(createResponse.name) || draft.name,
+      name:
+        coerceString(statusResponse.name) ||
+        coerceString(createResponse.name) ||
+        draft.name,
       status: sendResult?.status || documentStatus,
       appUrl: buildDocumentAppUrl(documentId),
       apiUrl: `${getApiBaseUrl()}/documents/${documentId}`,
+      sharedLink: coerceString(matchedRecipient?.shared_link) || undefined,
+    },
+    recipient:
+      matchedRecipient && coerceString(matchedRecipient.email)
+        ? {
+            email: coerceString(matchedRecipient.email),
+            firstName: coerceString(matchedRecipient.first_name) || undefined,
+            lastName: coerceString(matchedRecipient.last_name) || undefined,
+            role: coerceString(matchedRecipient.role) || undefined,
+          }
+        : undefined,
+    sendResult,
+    session: sessionResult,
+  };
+}
+
+export async function updatePandaDocDocument(
+  options: UpdatePandaDocDocumentOptions
+): Promise<PandaDocCreateResult> {
+  const {
+    documentId,
+    draft,
+    sendDocument,
+    createSession,
+    sessionLifetimeSeconds,
+    recipientEmail,
+    sendOptions,
+  } = options;
+
+  const normalizedDocumentId = coerceString(documentId);
+  if (!normalizedDocumentId) {
+    throw new Error("PandaDoc document id is required to update a document.");
+  }
+
+  const readyStatus = await waitForDocumentReady(normalizedDocumentId);
+  const editableStatus = coerceString(readyStatus.status) || "unknown";
+  assertDocumentIsDraft(normalizedDocumentId, editableStatus);
+
+  const updatePayload: Record<string, unknown> = {
+    name: draft.name,
+    tokens: draft.tokens,
+    fields: draft.fields,
+    metadata: draft.metadata,
+  };
+  if (draft.recipients.length > 0) {
+    updatePayload.recipients = draft.recipients;
+  }
+
+  await pandadocRequest<Record<string, never>>(
+    `/documents/${encodeURIComponent(normalizedDocumentId)}`,
+    {
+      method: "PATCH",
+      expectedStatus: 204,
+      body: updatePayload,
+    }
+  );
+
+  const refreshedStatus = await waitForDocumentReady(normalizedDocumentId);
+  const documentStatus = coerceString(refreshedStatus.status) || DRAFT_STATUS;
+
+  let sendResult: PandaDocCreateResult["sendResult"];
+  if (sendDocument) {
+    sendResult = await sendPandaDocDocument(normalizedDocumentId, sendOptions);
+  }
+
+  let sessionResult: PandaDocCreateResult["session"];
+  if (createSession && coerceString(recipientEmail)) {
+    sessionResult = await createPandaDocSession(
+      normalizedDocumentId,
+      coerceString(recipientEmail),
+      sessionLifetimeSeconds
+    );
+  }
+
+  const matchedRecipient = await getPandaDocMatchedRecipient(
+    normalizedDocumentId,
+    recipientEmail
+  );
+
+  return {
+    document: {
+      id: normalizedDocumentId,
+      name: coerceString(refreshedStatus.name) || draft.name,
+      status: sendResult?.status || documentStatus,
+      appUrl: buildDocumentAppUrl(normalizedDocumentId),
+      apiUrl: `${getApiBaseUrl()}/documents/${normalizedDocumentId}`,
       sharedLink: coerceString(matchedRecipient?.shared_link) || undefined,
     },
     recipient:

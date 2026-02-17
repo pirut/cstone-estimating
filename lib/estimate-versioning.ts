@@ -5,6 +5,16 @@ export type EstimateVersionAction =
   | "generated"
   | "reverted";
 
+export type EstimateVersionPandaDocDocument = {
+  documentId: string;
+  name?: string;
+  status?: string;
+  appUrl?: string;
+  sharedLink?: string;
+  operation?: "created" | "updated";
+  updatedAt?: number;
+};
+
 export type EstimateVersionEntry = {
   id: string;
   version: number;
@@ -17,6 +27,7 @@ export type EstimateVersionEntry = {
   templateUrl?: string;
   createdByUserId?: string | null;
   sourceVersion?: number;
+  pandadoc?: EstimateVersionPandaDocDocument;
 };
 
 const MAX_VERSION_HISTORY = 200;
@@ -44,6 +55,29 @@ function cloneJson<T>(value: T): T {
   } catch {
     return value;
   }
+}
+
+function normalizePandaDocDocument(
+  value: unknown
+): EstimateVersionPandaDocDocument | undefined {
+  if (!isRecord(value)) return undefined;
+  const documentId = String(value.documentId ?? value.id ?? "").trim();
+  if (!documentId) return undefined;
+  const updatedAt = toPositiveInt(value.updatedAt) ?? undefined;
+  const operationRaw = String(value.operation ?? "").trim().toLowerCase();
+  const operation =
+    operationRaw === "updated" || operationRaw === "created"
+      ? (operationRaw as "created" | "updated")
+      : undefined;
+  return {
+    documentId,
+    name: String(value.name ?? "").trim() || undefined,
+    status: String(value.status ?? "").trim() || undefined,
+    appUrl: String(value.appUrl ?? "").trim() || undefined,
+    sharedLink: String(value.sharedLink ?? "").trim() || undefined,
+    operation,
+    updatedAt,
+  };
 }
 
 function createVersionId() {
@@ -97,6 +131,7 @@ export function normalizeEstimateVersionHistory(
           ? rawEntry.createdByUserId
           : null,
       sourceVersion: toPositiveInt(rawEntry.sourceVersion) ?? undefined,
+      pandadoc: normalizePandaDocDocument(rawEntry.pandadoc),
     });
   }
 
@@ -144,6 +179,7 @@ export function appendEstimateVersion(
     templateUrl?: string;
     createdByUserId?: string | null;
     sourceVersion?: number;
+    pandadoc?: EstimateVersionPandaDocDocument;
   }
 ) {
   const history = normalizeEstimateVersionHistory(rawHistory);
@@ -162,6 +198,7 @@ export function appendEstimateVersion(
     templateUrl: input.templateUrl,
     createdByUserId: input.createdByUserId ?? null,
     sourceVersion: toPositiveInt(input.sourceVersion) ?? undefined,
+    pandadoc: normalizePandaDocDocument(input.pandadoc),
   };
 
   const nextHistory = [...history, entry].slice(-MAX_VERSION_HISTORY);

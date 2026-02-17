@@ -5,6 +5,7 @@ import {
   buildPandaDocDraft,
   createPandaDocDocument,
   getPandaDocMissingEnvVars,
+  updatePandaDocDocument,
   type PandaDocRecipientInput,
 } from "@/lib/server/pandadoc";
 import { buildBusinessCentralSyncPreview } from "@/lib/server/business-central-sync";
@@ -19,6 +20,7 @@ const DOWNLOAD_TIMEOUT_MS = 20_000;
 const DEFAULT_SEND_DOCUMENT = true;
 const DEFAULT_CREATE_SESSION = true;
 const DEFAULT_SESSION_LIFETIME_SECONDS = 900;
+const DEFAULT_ALLOW_CREATE_FALLBACK = true;
 
 function toBoolean(value: unknown, fallback: boolean) {
   if (typeof value === "boolean") return value;
@@ -74,6 +76,16 @@ function normalizePandaDocBindings(value: unknown): PandaDocTemplateBinding[] {
   return normalized;
 }
 
+function isRecoverablePandaDocUpdateError(message: string) {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("not editable") ||
+    normalized.includes("expected document.draft") ||
+    normalized.includes("(404)") ||
+    normalized.includes("not found")
+  );
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -103,6 +115,11 @@ export async function POST(request: NextRequest) {
       pandadocConfig?.recipientRole ?? ""
     ).trim();
     const pandadocBindings = normalizePandaDocBindings(pandadocConfig?.bindings);
+    const pandadocDocumentId = String(pandadocConfig?.documentId ?? "").trim();
+    const allowCreateFallback = toBoolean(
+      pandadocConfig?.allowCreateFallback,
+      DEFAULT_ALLOW_CREATE_FALLBACK
+    );
     const pandadocRecipient = normalizePandaDocRecipient(
       pandadocConfig?.recipient
     );
@@ -161,7 +178,8 @@ export async function POST(request: NextRequest) {
     });
 
     const missingConfig = [...getPandaDocMissingEnvVars()];
-    if (!draftPayload.templateUuid) {
+    const templateRequired = !pandadocDocumentId;
+    if (templateRequired && !draftPayload.templateUuid) {
       missingConfig.push("PANDADOC_TEMPLATE_UUID");
     }
     if ((sendDocument || createSession) && !draftPayload.recipients.length) {
@@ -183,18 +201,49 @@ export async function POST(request: NextRequest) {
     }
 
     const recipientEmail = draftPayload.recipients[0]?.email;
-    const generation = await createPandaDocDocument({
+    const sendConfig = {
+      message: sendMessage,
+      subject: sendSubject,
+      silent: sendSilent,
+    };
+    const generationCommon = {
       draft: draftPayload,
       sendDocument,
       createSession: createSession && Boolean(recipientEmail),
       sessionLifetimeSeconds,
       recipientEmail,
-      sendOptions: {
-        message: sendMessage,
-        subject: sendSubject,
-        silent: sendSilent,
-      },
-    });
+      sendOptions: sendConfig,
+    };
+    const canFallbackCreate =
+      allowCreateFallback && Boolean(draftPayload.templateUuid);
+
+    let generation: Awaited<ReturnType<typeof createPandaDocDocument>>;
+    let operation: "created" | "updated" = "created";
+    let revisedDocumentId: string | undefined;
+    let fallbackFromDocumentId: string | undefined;
+
+    if (pandadocDocumentId) {
+      try {
+        generation = await updatePandaDocDocument({
+          ...generationCommon,
+          documentId: pandadocDocumentId,
+        });
+        operation = "updated";
+        revisedDocumentId = pandadocDocumentId;
+      } catch (updateError) {
+        const updateMessage =
+          updateError instanceof Error ? updateError.message : "Unknown error.";
+        if (!canFallbackCreate || !isRecoverablePandaDocUpdateError(updateMessage)) {
+          throw updateError;
+        }
+        generation = await createPandaDocDocument(generationCommon);
+        operation = "created";
+        fallbackFromDocumentId = pandadocDocumentId;
+      }
+    } else {
+      generation = await createPandaDocDocument(generationCommon);
+      operation = "created";
+    }
 
     const businessCentralSync = buildBusinessCentralSyncPreview({
       documentId: generation.document.id,
@@ -204,7 +253,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         provider: "pandadoc",
-        status: "created",
+        status: operation,
+        operation,
+        revisedDocumentId,
+        fallbackFromDocumentId,
         document: generation.document,
         recipient: generation.recipient,
         sendResult: generation.sendResult,
