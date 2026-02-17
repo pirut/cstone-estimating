@@ -186,7 +186,9 @@ export async function POST(request: NextRequest) {
     if (templateRequired && !draftPayload.templateUuid) {
       missingConfig.push("PANDADOC_TEMPLATE_UUID");
     }
-    if ((sendDocument || createSession) && !draftPayload.recipients.length) {
+    const mayNeedCreate =
+      !pandadocDocumentId || (allowCreateFallback && Boolean(draftPayload.templateUuid));
+    if ((sendDocument || createSession || mayNeedCreate) && !draftPayload.recipients.length) {
       missingConfig.push("PANDADOC_RECIPIENT_EMAIL or pandadoc.recipient.email");
     }
 

@@ -11,6 +11,10 @@ export type EstimateVersionPandaDocDocument = {
   status?: string;
   appUrl?: string;
   sharedLink?: string;
+  recipientEmail?: string;
+  recipientFirstName?: string;
+  recipientLastName?: string;
+  recipientRole?: string;
   operation?: "created" | "updated";
   updatedAt?: number;
 };
@@ -75,6 +79,12 @@ function normalizePandaDocDocument(
     status: String(value.status ?? "").trim() || undefined,
     appUrl: String(value.appUrl ?? "").trim() || undefined,
     sharedLink: String(value.sharedLink ?? "").trim() || undefined,
+    recipientEmail: String(value.recipientEmail ?? "").trim() || undefined,
+    recipientFirstName:
+      String(value.recipientFirstName ?? "").trim() || undefined,
+    recipientLastName:
+      String(value.recipientLastName ?? "").trim() || undefined,
+    recipientRole: String(value.recipientRole ?? "").trim() || undefined,
     operation,
     updatedAt,
   };
