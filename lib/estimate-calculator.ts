@@ -299,24 +299,24 @@ function buildProductFeaturesBlock(products: ProductItem[]) {
     PRODUCT_FEATURE_SELECT_FIELDS.forEach((field) => {
       const value = String(product[field.key] ?? "").trim();
       if (!value) return;
-      productLines.push(`${field.label}: ${value}`);
+      productLines.push(`- ${field.label}: ${value}`);
     });
 
     if (product.stainless_operating_hardware) {
-      productLines.push("Stainless operating hardware: Yes");
+      productLines.push("- Stainless operating hardware: Yes");
     }
     if (product.has_screens) {
-      productLines.push("Screens: Yes");
+      productLines.push("- Screens: Yes");
     }
 
-    if (!productLines.length) return;
+    if (!productLines.some((line) => line.startsWith("- "))) return;
     if (lines.length) {
       lines.push("");
     }
     lines.push(...productLines);
   });
 
-  if (!lines.length) return "No product features selected.";
+  if (!lines.length) return "- No product features selected.";
   return lines.join("\n");
 }
 
