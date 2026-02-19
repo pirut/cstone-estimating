@@ -2,8 +2,21 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { InstantAuthSync } from "@/components/instant-auth-sync";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  clerkEnabled,
+  useOptionalAuth,
+  useOptionalUser,
+} from "@/lib/clerk";
+import { getSourceFieldKeys } from "@/lib/field-catalog";
+import { db, instantAppId } from "@/lib/instant";
+import {
+  getOrganizationScopedTeams,
+  pickOrganizationTeam,
+} from "@/lib/org-teams";
+import type { PandaDocTemplateBinding, TemplateConfig } from "@/lib/types";
 import {
   Card,
   CardContent,
@@ -21,8 +34,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-import { getSourceFieldKeys } from "@/lib/field-catalog";
-import type { PandaDocTemplateBinding, TemplateConfig } from "@/lib/types";
 import { Loader2, Plus, RefreshCw, Save, Trash2, WandSparkles } from "lucide-react";
 
 type LibraryItem = {
@@ -48,7 +59,7 @@ type PandaDocTemplateDetails = {
   fields: Array<{ name: string; mergeField?: string; type?: string }>;
 };
 
-const SOURCE_KEYS = getSourceFieldKeys();
+const STATIC_SOURCE_KEYS = getSourceFieldKeys();
 
 function normalizedKey(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -56,7 +67,8 @@ function normalizedKey(value: string) {
 
 function createBinding(
   details: PandaDocTemplateDetails | null,
-  sourceKey = SOURCE_KEYS[0] ?? ""
+  sourceKeys: string[],
+  sourceKey = sourceKeys[0] ?? ""
 ): PandaDocTemplateBinding {
   const firstToken = details?.tokens[0]?.name ?? "";
   return {
@@ -65,6 +77,23 @@ function createBinding(
     targetType: "token",
     targetName: firstToken,
   };
+}
+
+function addFlatKeys(value: unknown, keys: Set<string>) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  Object.keys(value as Record<string, unknown>).forEach((key) => {
+    const normalized = key.trim();
+    if (!normalized) return;
+    keys.add(normalized);
+  });
+}
+
+function collectKeysFromEstimatePayload(value: unknown, keys: Set<string>) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  const payload = value as Record<string, unknown>;
+  addFlatKeys(payload, keys);
+  addFlatKeys(payload.values, keys);
+  addFlatKeys(payload.info, keys);
 }
 
 export default function AdminPage() {
@@ -92,6 +121,67 @@ export default function AdminPage() {
   const [saveLoading, setSaveLoading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [instantSetupError, setInstantSetupError] = useState<string | null>(null);
+
+  const { isLoaded: authLoaded, isSignedIn } = useOptionalAuth();
+  const { user } = useOptionalUser();
+  const {
+    isLoading: instantLoading,
+    user: instantUser,
+    error: instantAuthError,
+  } = db.useAuth();
+
+  const emailAddress = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? "";
+  const emailDomain = emailAddress.split("@")[1] ?? "";
+  const allowedDomain = (
+    process.env.NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN ?? "cornerstonecompaniesfl.com"
+  )
+    .trim()
+    .toLowerCase();
+  const preferredOrgTeamName = (
+    process.env.NEXT_PUBLIC_ORG_TEAM_NAME ?? "CORNERSTONE"
+  ).trim();
+  const normalizedOrgTeamName = preferredOrgTeamName.toLowerCase();
+  const teamDomain = (allowedDomain || emailDomain || "").trim();
+  const teamLookupDomain = teamDomain || "__none__";
+
+  const teamQuery = instantAppId
+    ? {
+        teams: {
+          $: {
+            where: { domain: teamLookupDomain },
+            order: { createdAt: "desc" as const },
+          },
+          memberships: { user: {} },
+          estimates: {},
+        },
+      }
+    : {
+        teams: {
+          $: { where: { domain: "__none__" } },
+          memberships: { user: {} },
+          estimates: {},
+        },
+      };
+
+  const { data: teamData, error: teamQueryError, isLoading: teamLoading } =
+    db.useQuery(teamQuery);
+  const teams = teamData?.teams ?? [];
+  const orgTeam = useMemo(
+    () => pickOrganizationTeam(teams, normalizedOrgTeamName),
+    [teams, normalizedOrgTeamName]
+  );
+  const orgScopedTeams = useMemo(
+    () => getOrganizationScopedTeams(teams, orgTeam?.id),
+    [orgTeam?.id, teams]
+  );
+  const orgMemberTeams = useMemo(() => {
+    if (!instantUser?.id) return [];
+    return orgScopedTeams.filter((team) =>
+      team.memberships?.some((membership) => membership.user?.id === instantUser.id)
+    );
+  }, [instantUser?.id, orgScopedTeams]);
+  const catalogTeam = orgTeam ?? orgMemberTeams[0] ?? null;
 
   const templateNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -112,10 +202,29 @@ export default function AdminPage() {
     () => (templateDetails?.fields ?? []).map((field) => field.name),
     [templateDetails?.fields]
   );
+  const instantSourceKeys = useMemo(() => {
+    const keys = new Set<string>();
+    orgScopedTeams.forEach((team) => {
+      (team.estimates ?? []).forEach((estimate) => {
+        collectKeysFromEstimatePayload(estimate?.payload, keys);
+        if (Array.isArray(estimate?.versionHistory)) {
+          estimate.versionHistory.forEach((entry) => {
+            collectKeysFromEstimatePayload(
+              (entry as { payload?: unknown } | null)?.payload,
+              keys
+            );
+          });
+        }
+      });
+    });
+
+    return Array.from(keys).sort((a, b) => a.localeCompare(b));
+  }, [orgScopedTeams]);
   const sourceKeyOptions = useMemo(() => {
     const seen = new Set<string>();
     const options: string[] = [];
-    SOURCE_KEYS.forEach((key) => {
+    const baseKeys = instantSourceKeys.length ? instantSourceKeys : STATIC_SOURCE_KEYS;
+    baseKeys.forEach((key) => {
       if (seen.has(key)) return;
       seen.add(key);
       options.push(key);
@@ -127,7 +236,36 @@ export default function AdminPage() {
       options.push(key);
     });
     return options;
-  }, [bindings]);
+  }, [bindings, instantSourceKeys]);
+  const catalogStatusMessage = useMemo(() => {
+    if (!instantAppId) return "InstantDB is not configured for this app.";
+    if (clerkEnabled && !authLoaded) return "Loading authentication…";
+    if (clerkEnabled && !isSignedIn) return "Sign in to load org catalog keys.";
+    if (instantLoading || teamLoading) return "Loading source keys from InstantDB…";
+    if (instantAuthError) return `Instant auth error: ${instantAuthError.message}`;
+    if (instantSetupError) return instantSetupError;
+    if (teamQueryError) {
+      return teamQueryError instanceof Error
+        ? teamQueryError.message
+        : "Unable to load organization teams.";
+    }
+    if (!catalogTeam) return "No organization workspace found yet.";
+    if (!instantSourceKeys.length) {
+      return "No source keys found in saved org estimates yet.";
+    }
+    return `Loaded ${instantSourceKeys.length} source key${instantSourceKeys.length === 1 ? "" : "s"} from InstantDB.`;
+  }, [
+    authLoaded,
+    catalogTeam,
+    instantAppId,
+    instantAuthError,
+    instantLoading,
+    instantSetupError,
+    instantSourceKeys.length,
+    isSignedIn,
+    teamLoading,
+    teamQueryError,
+  ]);
   const firstTokenName = targetTokenNames[0] ?? "";
   const firstFieldName = targetFieldNames[0] ?? "";
 
@@ -285,7 +423,7 @@ export default function AdminPage() {
   };
 
   const addBinding = () => {
-    setBindings((prev) => [...prev, createBinding(templateDetails)]);
+    setBindings((prev) => [...prev, createBinding(templateDetails, sourceKeyOptions)]);
   };
 
   const handleAutoMap = () => {
@@ -309,8 +447,9 @@ export default function AdminPage() {
       fieldLookup.set(key, { name: field.name, type: field.type });
     });
 
+    const autoMapSourceKeys = sourceKeyOptions.filter((key) => key.trim().length > 0);
     const nextBindings: PandaDocTemplateBinding[] = [];
-    SOURCE_KEYS.forEach((sourceKey, index) => {
+    autoMapSourceKeys.forEach((sourceKey, index) => {
       const key = normalizedKey(sourceKey);
       if (!key) return;
 
@@ -338,10 +477,24 @@ export default function AdminPage() {
       }
     });
 
+    const autoMappedBindingKeys = new Set(
+      nextBindings.map((binding) =>
+        [binding.sourceKey, binding.targetType, binding.targetName, binding.role ?? ""].join(
+          "|"
+        )
+      )
+    );
     const preservedCustomBindings = bindings.filter((binding) => {
       const sourceKey = String(binding.sourceKey ?? "").trim();
-      if (!sourceKey) return false;
-      return !SOURCE_KEYS.includes(sourceKey);
+      const targetName = String(binding.targetName ?? "").trim();
+      if (!sourceKey || !targetName) return false;
+      const dedupeKey = [
+        sourceKey,
+        binding.targetType,
+        targetName,
+        binding.role ?? "",
+      ].join("|");
+      return !autoMappedBindingKeys.has(dedupeKey);
     });
 
     const dedupe = new Set<string>();
@@ -444,6 +597,10 @@ export default function AdminPage() {
 
   return (
     <main className="min-h-screen bg-background">
+      <InstantAuthSync
+        onAuthError={setInstantSetupError}
+        onDomainError={setInstantSetupError}
+      />
       <div className="container space-y-6 py-10">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="space-y-1">
@@ -646,16 +803,17 @@ export default function AdminPage() {
 
         <Card className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
           <CardHeader>
-            <CardTitle className="text-xl font-serif">Field Catalog Export</CardTitle>
+            <CardTitle className="text-xl font-serif">Field Catalog</CardTitle>
             <CardDescription>
-              Export the full source field list your team should use for PandaDoc
-              variables and bindings.
+              Source keys for bindings are loaded from InstantDB org estimate data.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
-              {SOURCE_KEYS.length} source field keys are available.
+              {sourceKeyOptions.length} selectable source key
+              {sourceKeyOptions.length === 1 ? "" : "s"} available.
             </p>
+            <p className="text-xs text-muted-foreground">{catalogStatusMessage}</p>
             <div className="flex flex-wrap gap-2">
               <Button asChild variant="secondary" size="sm">
                 <a href="/api/field-catalog?format=csv">Download CSV</a>

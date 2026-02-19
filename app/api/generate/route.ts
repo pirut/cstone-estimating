@@ -322,6 +322,11 @@ function buildFieldValuesFromSourceValues(
   values.plan_set_date_line =
     planSetDate && planSetDate !== missingValue ? planSetDate : missingValue;
 
+  for (const [sourceKey, rawValue] of Object.entries(sourceValues)) {
+    if (!sourceKey || sourceKey in values) continue;
+    values[sourceKey] = formatValue(rawValue, "text", preparedByMap, missingValue);
+  }
+
   return values;
 }
 

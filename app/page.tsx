@@ -54,6 +54,10 @@ import {
   type ProductFeatureOption,
 } from "@/lib/product-features";
 import {
+  getOrganizationScopedTeams,
+  pickOrganizationTeam,
+} from "@/lib/org-teams";
+import {
   ArrowDownToLine,
   CheckCircle2,
   Clock3,
@@ -469,7 +473,16 @@ export default function HomePage() {
           productFeatureOptions: {},
         },
       }
-    : { teams: { $: { where: { domain: "__none__" } } } };
+    : {
+        teams: {
+          $: { where: { domain: "__none__" } },
+          memberships: { user: {} },
+          estimates: { owner: {} },
+          vendors: {},
+          unitTypes: {},
+          productFeatureOptions: {},
+        },
+      };
 
   const {
     data: teamData,
@@ -478,32 +491,20 @@ export default function HomePage() {
   } = db.useQuery(teamQuery);
 
   const teams = teamData?.teams ?? [];
-  const orgTeam = useMemo(() => {
-    if (!teams.length) return null;
-    const rootTeams = teams.filter((team) => !team.parentTeamId);
-    const candidates = rootTeams.length ? rootTeams : teams;
-    const namedTeam = normalizedOrgTeamName
-      ? candidates.find(
-          (team) =>
-            team.name?.trim().toLowerCase() === normalizedOrgTeamName
-        )
-      : null;
-    if (namedTeam) return namedTeam;
-    const primary = candidates.find((team) => team.isPrimary);
-    if (primary) return primary;
-    return candidates.reduce((oldest, team) => {
-      if (!oldest) return team;
-      const oldestTime = oldest.createdAt ?? 0;
-      const teamTime = team.createdAt ?? 0;
-      return teamTime < oldestTime ? team : oldest;
-    }, null as (typeof teams)[number] | null);
-  }, [teams]);
+  const orgTeam = useMemo(
+    () => pickOrganizationTeam(teams, normalizedOrgTeamName),
+    [teams, normalizedOrgTeamName]
+  );
+  const orgScopedTeams = useMemo(
+    () => getOrganizationScopedTeams(teams, orgTeam?.id),
+    [orgTeam?.id, teams]
+  );
   const memberTeams = useMemo(() => {
     if (!instantUser?.id) return [];
-    return teams.filter((team) =>
+    return orgScopedTeams.filter((team) =>
       team.memberships?.some((membership) => membership.user?.id === instantUser.id)
     );
-  }, [teams, instantUser?.id]);
+  }, [orgScopedTeams, instantUser?.id]);
   const orgMembership = orgTeam?.memberships?.find(
     (membership) => membership.user?.id === instantUser?.id
   );
@@ -914,7 +915,14 @@ export default function HomePage() {
     autoProvisionRef.current = true;
     setTeamError(null);
 
-    if (!teams.length) {
+    if (!orgTeam) {
+      if (!isPrimaryOwner) {
+        setTeamError(
+          "Organization workspace has not been created yet. Ask the org owner to create it."
+        );
+        autoProvisionRef.current = false;
+        return;
+      }
       void (async () => {
         try {
           const existingTeams = await checkExistingOrgWorkspace();
@@ -953,7 +961,7 @@ export default function HomePage() {
     authLoaded,
     orgMembership,
     orgTeam,
-    teams.length,
+    orgTeam?.id,
     instantAppId,
     instantLoading,
     instantUser,
@@ -1605,8 +1613,17 @@ export default function HomePage() {
             order: { createdAt: "desc" as const },
           },
         },
-      })) as { teams?: Array<{ id: string }> } | undefined;
-      return Array.isArray(snapshot?.teams) ? snapshot.teams : [];
+      })) as
+        | {
+            teams?: Array<{
+              id: string;
+              parentTeamId?: string | null;
+              isPrimary?: boolean | null;
+            }>;
+          }
+        | undefined;
+      const existing = Array.isArray(snapshot?.teams) ? snapshot.teams : [];
+      return existing.filter((team) => !team.parentTeamId || team.isPrimary);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Unable to verify existing workspace.";
@@ -1616,7 +1633,13 @@ export default function HomePage() {
   }, [instantAppId, teamDomain, teamLookupDomain]);
 
   const handleRetryTeamSetup = () => {
-    if (!orgTeam && !teams.length) {
+    if (!orgTeam) {
+      if (!isPrimaryOwner) {
+        setTeamError(
+          "Organization workspace has not been created yet. Ask the org owner to create it."
+        );
+        return;
+      }
       void (async () => {
         const existingTeams = await checkExistingOrgWorkspace();
         if (!existingTeams) return;

@@ -29,6 +29,10 @@ import {
   PRODUCT_FEATURE_CATEGORY_LABELS,
   isProductFeatureCategory,
 } from "@/lib/product-features";
+import {
+  getOrganizationScopedTeams,
+  pickOrganizationTeam,
+} from "@/lib/org-teams";
 import { db, instantAppId } from "@/lib/instant";
 import {
   SignInButton,
@@ -139,31 +143,27 @@ export default function TeamAdminPage() {
           productFeatureOptions: {},
         },
       }
-    : { teams: { $: { where: { domain: "__none__" } } } };
+    : {
+        teams: {
+          $: { where: { domain: "__none__" } },
+          memberships: { user: {} },
+          estimates: { owner: {} },
+          vendors: {},
+          unitTypes: {},
+          productFeatureOptions: {},
+        },
+      };
 
   const { data: teamData } = db.useQuery(teamQuery);
   const teams = teamData?.teams ?? [];
-
-  const orgTeam = useMemo(() => {
-    if (!teams.length) return null;
-    const rootTeams = teams.filter((team) => !team.parentTeamId);
-    const candidates = rootTeams.length ? rootTeams : teams;
-    const namedTeam = normalizedOrgTeamName
-      ? candidates.find(
-          (team) =>
-            team.name?.trim().toLowerCase() === normalizedOrgTeamName
-        )
-      : null;
-    if (namedTeam) return namedTeam;
-    const primary = candidates.find((team) => team.isPrimary);
-    if (primary) return primary;
-    return candidates.reduce((oldest, team) => {
-      if (!oldest) return team;
-      const oldestTime = oldest.createdAt ?? 0;
-      const teamTime = team.createdAt ?? 0;
-      return teamTime < oldestTime ? team : oldest;
-    }, null as (typeof teams)[number] | null);
-  }, [teams]);
+  const orgTeam = useMemo(
+    () => pickOrganizationTeam(teams, normalizedOrgTeamName),
+    [teams, normalizedOrgTeamName]
+  );
+  const orgScopedTeams = useMemo(
+    () => getOrganizationScopedTeams(teams, orgTeam?.id),
+    [orgTeam?.id, teams]
+  );
 
   const orgMembership = orgTeam?.memberships?.find(
     (membership) => membership.user?.id === instantUser?.id
@@ -179,8 +179,8 @@ export default function TeamAdminPage() {
   const hasTeamAdminAccess = Boolean(isOrgOwner || orgRole === "admin");
 
   const selectedTeam = useMemo(
-    () => teams.find((team) => team.id === selectedTeamId) ?? null,
-    [selectedTeamId, teams]
+    () => orgScopedTeams.find((team) => team.id === selectedTeamId) ?? null,
+    [orgScopedTeams, selectedTeamId]
   );
   const catalogTeam = orgTeam ?? selectedTeam;
 
@@ -249,14 +249,17 @@ export default function TeamAdminPage() {
       .join("") || "U";
 
   useEffect(() => {
-    if (!teams.length) {
+    if (!orgScopedTeams.length) {
       setSelectedTeamId(null);
       return;
     }
-    if (!selectedTeamId || !teams.some((team) => team.id === selectedTeamId)) {
-      setSelectedTeamId(orgTeam?.id ?? teams[0]?.id ?? null);
+    if (
+      !selectedTeamId ||
+      !orgScopedTeams.some((team) => team.id === selectedTeamId)
+    ) {
+      setSelectedTeamId(orgTeam?.id ?? orgScopedTeams[0]?.id ?? null);
     }
-  }, [orgTeam?.id, selectedTeamId, teams]);
+  }, [orgScopedTeams, orgTeam?.id, selectedTeamId]);
 
   useEffect(() => {
     setSelectedMemberId(null);
@@ -1376,7 +1379,7 @@ export default function TeamAdminPage() {
                         Members: {orgTeam.memberships?.length ?? 0}
                       </Badge>
                       <Badge variant="outline" className="bg-background/80">
-                        Teams: {teams.length}
+                        Teams: {orgScopedTeams.length}
                       </Badge>
                     </div>
                   </>
@@ -1433,7 +1436,7 @@ export default function TeamAdminPage() {
               <CardContent className="grid gap-6 lg:grid-cols-[0.6fr_0.4fr]">
                 <ScrollArea className="h-72 rounded-lg border border-border/70 bg-background/70">
                   <div className="divide-y divide-border/60">
-                    {teams.map((team) => {
+                    {orgScopedTeams.map((team) => {
                       const isPrimary = team.isPrimary;
                       return (
                         <button
