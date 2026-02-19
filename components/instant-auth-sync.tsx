@@ -12,6 +12,8 @@ const allowedDomain = (
   .trim()
   .toLowerCase();
 const hasAllowedDomain = allowedDomain.length > 0;
+const clerkRetryMessage =
+  "Clerk is temporarily unavailable. Retrying in about 15 seconds.";
 
 type InstantAuthSyncProps = {
   onDomainError?: (message: string) => void;
@@ -100,7 +102,7 @@ export function InstantAuthSync({
         clerkTokenTemplate ? { template: clerkTokenTemplate } : undefined
       );
       if (!idToken) {
-        reportAuthError("Authentication service unavailable. Retrying shortly.");
+        reportAuthError(clerkRetryMessage);
         lastSyncedClerkUserIdRef.current = null;
         nextAllowedAuthSyncAtRef.current = Date.now() + 15000;
         return;
@@ -116,7 +118,7 @@ export function InstantAuthSync({
         reportAuthError(null);
       } catch (err) {
         console.error("InstantDB auth sync failed", err);
-        reportAuthError("Authentication service unavailable. Retrying shortly.");
+        reportAuthError(clerkRetryMessage);
         lastSyncedClerkUserIdRef.current = null;
         nextAllowedAuthSyncAtRef.current = Date.now() + 15000;
       }

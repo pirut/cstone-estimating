@@ -1443,6 +1443,15 @@ export default function TeamAdminPage() {
     return null;
   };
 
+  const isClerkRetrying = Boolean(
+    instantSetupError &&
+      instantSetupError.toLowerCase().includes("clerk is temporarily unavailable")
+  );
+  const instantSetupBanner = isClerkRetrying
+    ? "Clerk is temporarily unavailable. Retrying sign-in in about 15 seconds."
+    : instantSetupError
+      ? `Instant auth issue: ${instantSetupError}`
+      : null;
   const authGate = renderAuthGate();
 
   return (
@@ -1466,9 +1475,9 @@ export default function TeamAdminPage() {
           </div>
         </div>
 
-        {instantSetupError ? (
+        {instantSetupBanner ? (
           <div className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
-            Instant auth issue: {instantSetupError}
+            {instantSetupBanner}
           </div>
         ) : null}
 

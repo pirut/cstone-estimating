@@ -542,6 +542,15 @@ export default function HomePage() {
   );
   const hasTeamAdminAccess = Boolean(isOrgOwner || orgRole === "admin");
   const appLocked = clerkEnabled && (!authLoaded || !isSignedIn);
+  const isClerkRetrying = Boolean(
+    instantSetupError &&
+      instantSetupError.toLowerCase().includes("clerk is temporarily unavailable")
+  );
+  const instantSetupBanner = isClerkRetrying
+    ? "Clerk is temporarily unavailable. Retrying sign-in in about 15 seconds."
+    : instantSetupError
+      ? `Instant auth issue: ${instantSetupError}`
+      : null;
   const autoProvisionRef = useRef(false);
   const orgSetupRef = useRef<string | null>(null);
   const teamEstimates = useMemo(() => {
@@ -1982,9 +1991,9 @@ export default function HomePage() {
             {authError}
           </div>
         ) : null}
-        {instantSetupError ? (
+        {instantSetupBanner ? (
           <div className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
-            Instant auth issue: {instantSetupError}
+            {instantSetupBanner}
           </div>
         ) : null}
         {!instantAppId ? (
@@ -2165,9 +2174,9 @@ export default function HomePage() {
                     {instantAuthError.message}
                   </div>
                 ) : null}
-                {instantSetupError ? (
+                {instantSetupBanner ? (
                   <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
-                    {instantSetupError}
+                    {instantSetupBanner}
                   </div>
                 ) : null}
                 {teamError ? (

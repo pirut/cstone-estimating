@@ -297,6 +297,15 @@ export default function AdminPage() {
     teamLoading,
     teamQueryError,
   ]);
+  const isClerkRetrying = Boolean(
+    instantSetupError &&
+      instantSetupError.toLowerCase().includes("clerk is temporarily unavailable")
+  );
+  const instantSetupBanner = isClerkRetrying
+    ? "Clerk is temporarily unavailable. Retrying sign-in in about 15 seconds."
+    : instantSetupError
+      ? `Instant auth issue: ${instantSetupError}`
+      : null;
   const firstTokenName = targetTokenNames[0] ?? "";
   const firstFieldName = targetFieldNames[0] ?? "";
 
@@ -649,6 +658,11 @@ export default function AdminPage() {
             </Button>
           </div>
         </div>
+        {instantSetupBanner ? (
+          <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
+            {instantSetupBanner}
+          </div>
+        ) : null}
 
         <Card className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
           <CardHeader>
