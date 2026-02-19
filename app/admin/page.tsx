@@ -112,6 +112,8 @@ export default function AdminPage() {
     () => (templateDetails?.fields ?? []).map((field) => field.name),
     [templateDetails?.fields]
   );
+  const firstTokenName = targetTokenNames[0] ?? "";
+  const firstFieldName = targetFieldNames[0] ?? "";
 
   const loadTemplateDetails = useCallback(async (templateId: string) => {
     const normalized = templateId.trim();
@@ -669,6 +671,8 @@ export default function AdminPage() {
                   {bindings.map((binding) => {
                     const targetOptions =
                       binding.targetType === "field" ? targetFieldNames : targetTokenNames;
+                    const sourceHasValue = SOURCE_KEYS.includes(binding.sourceKey);
+                    const targetHasValue = targetOptions.includes(binding.targetName);
                     return (
                       <div
                         key={binding.id}
@@ -678,21 +682,31 @@ export default function AdminPage() {
                           <label className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
                             Source key
                           </label>
-                          <Input
-                            value={binding.sourceKey}
-                            list={`source-keys-${binding.id}`}
-                            onChange={(event) =>
+                          <Select
+                            value={sourceHasValue ? binding.sourceKey : "__none__"}
+                            onValueChange={(value) =>
                               updateBinding(binding.id, {
-                                sourceKey: event.target.value,
+                                sourceKey: value === "__none__" ? "" : value,
                               })
                             }
-                            placeholder="prepared_for"
-                          />
-                          <datalist id={`source-keys-${binding.id}`}>
-                            {SOURCE_KEYS.map((key) => (
-                              <option key={key} value={key} />
-                            ))}
-                          </datalist>
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select source key" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">Select source key</SelectItem>
+                              {!sourceHasValue && binding.sourceKey ? (
+                                <SelectItem value={binding.sourceKey}>
+                                  Unavailable: {binding.sourceKey}
+                                </SelectItem>
+                              ) : null}
+                              {SOURCE_KEYS.map((key) => (
+                                <SelectItem key={key} value={key}>
+                                  {key}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
 
                         <div className="space-y-1">
@@ -704,7 +718,8 @@ export default function AdminPage() {
                             onValueChange={(value) =>
                               updateBinding(binding.id, {
                                 targetType: value === "field" ? "field" : "token",
-                                targetName: "",
+                                targetName:
+                                  value === "field" ? firstFieldName : firstTokenName,
                               })
                             }
                           >
@@ -722,25 +737,42 @@ export default function AdminPage() {
                           <label className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
                             Target name
                           </label>
-                          <Input
-                            value={binding.targetName}
-                            list={`target-names-${binding.id}`}
-                            onChange={(event) =>
+                          <Select
+                            value={targetHasValue ? binding.targetName : "__none__"}
+                            onValueChange={(value) =>
                               updateBinding(binding.id, {
-                                targetName: event.target.value,
+                                targetName: value === "__none__" ? "" : value,
                               })
                             }
-                            placeholder={
-                              binding.targetType === "field"
-                                ? "merge field name"
-                                : "token name"
-                            }
-                          />
-                          <datalist id={`target-names-${binding.id}`}>
-                            {targetOptions.map((option) => (
-                              <option key={option} value={option} />
-                            ))}
-                          </datalist>
+                            disabled={!targetOptions.length}
+                          >
+                            <SelectTrigger>
+                              <SelectValue
+                                placeholder={
+                                  binding.targetType === "field"
+                                    ? "Select field"
+                                    : "Select token"
+                                }
+                              />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">
+                                {binding.targetType === "field"
+                                  ? "Select field"
+                                  : "Select token"}
+                              </SelectItem>
+                              {!targetHasValue && binding.targetName ? (
+                                <SelectItem value={binding.targetName}>
+                                  Unavailable: {binding.targetName}
+                                </SelectItem>
+                              ) : null}
+                              {targetOptions.map((option) => (
+                                <SelectItem key={option} value={option}>
+                                  {option}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
                         </div>
 
                         <div className="space-y-1">
