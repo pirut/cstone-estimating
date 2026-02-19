@@ -453,6 +453,9 @@ export default function HomePage() {
   )
     .trim()
     .toLowerCase();
+  const pandadocSignerRole = (
+    process.env.NEXT_PUBLIC_PANDADOC_SIGNER_ROLE ?? "Cornerstone"
+  ).trim();
   const preferredOrgTeamName = (
     process.env.NEXT_PUBLIC_ORG_TEAM_NAME ?? "CORNERSTONE"
   ).trim();
@@ -1347,6 +1350,23 @@ export default function HomePage() {
     const trackedRecipientRole = String(
       activeTrackedPandaDocDocument?.recipientRole ?? templateRecipientRole
     ).trim();
+    const defaultSignerRole = pandadocSignerRole || trackedRecipientRole || templateRecipientRole;
+    const signerEmail = trackedRecipientEmail || emailAddress;
+    const fallbackNameSegments = preparedByName.split(/\s+/).filter(Boolean);
+    const fallbackFirstName = fallbackNameSegments[0] ?? "";
+    const fallbackLastName = fallbackNameSegments.slice(1).join(" ");
+    const signerFirstName =
+      trackedRecipientFirstName || user?.firstName?.trim() || fallbackFirstName;
+    const signerLastName =
+      trackedRecipientLastName || user?.lastName?.trim() || fallbackLastName;
+    const generationRecipient = signerEmail
+      ? {
+          email: signerEmail,
+          firstName: signerFirstName || undefined,
+          lastName: signerLastName || undefined,
+          role: defaultSignerRole || undefined,
+        }
+      : undefined;
     let generationSucceeded = false;
 
     if (progressResetTimeoutRef.current !== null) {
@@ -1372,15 +1392,9 @@ export default function HomePage() {
           },
           pandadoc: {
             templateUuid: templateUuid || undefined,
-            recipientRole: templateRecipientRole || undefined,
-            recipient: trackedRecipientEmail
-              ? {
-                  email: trackedRecipientEmail,
-                  firstName: trackedRecipientFirstName || undefined,
-                  lastName: trackedRecipientLastName || undefined,
-                  role: trackedRecipientRole || undefined,
-                }
-              : undefined,
+            recipientRole:
+              generationRecipient?.role ? undefined : templateRecipientRole || undefined,
+            recipient: generationRecipient,
             bindings: templateBindings,
             documentId: trackedDocumentId || undefined,
             allowCreateFallback: true,

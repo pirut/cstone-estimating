@@ -237,9 +237,11 @@ function inferDocumentName(fieldValues: Record<string, string>) {
 }
 
 function inferRecipientName(fieldValues: Record<string, string>) {
+  const preparedBy = coerceString(fieldValues.prepared_by);
   const preparedFor = coerceString(fieldValues.prepared_for);
-  if (!preparedFor) return { firstName: "Client", lastName: "" };
-  const segments = preparedFor.split(/\s+/).filter(Boolean);
+  const fallbackName = preparedBy || preparedFor;
+  if (!fallbackName) return { firstName: "Client", lastName: "" };
+  const segments = fallbackName.split(/\s+/).filter(Boolean);
   if (!segments.length) return { firstName: "Client", lastName: "" };
   if (segments.length === 1) return { firstName: segments[0], lastName: "" };
   return {
