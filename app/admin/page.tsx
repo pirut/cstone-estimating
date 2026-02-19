@@ -175,13 +175,19 @@ export default function AdminPage() {
     () => getOrganizationScopedTeams(teams, orgTeam?.id),
     [orgTeam?.id, teams]
   );
+  const allMemberTeams = useMemo(() => {
+    if (!instantUser?.id) return [];
+    return teams.filter((team) =>
+      team.memberships?.some((membership) => membership.user?.id === instantUser.id)
+    );
+  }, [instantUser?.id, teams]);
   const orgMemberTeams = useMemo(() => {
     if (!instantUser?.id) return [];
     return orgScopedTeams.filter((team) =>
       team.memberships?.some((membership) => membership.user?.id === instantUser.id)
     );
   }, [instantUser?.id, orgScopedTeams]);
-  const catalogTeam = orgTeam ?? orgMemberTeams[0] ?? null;
+  const catalogTeam = orgTeam ?? orgMemberTeams[0] ?? allMemberTeams[0] ?? null;
 
   const templateNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -202,7 +208,7 @@ export default function AdminPage() {
     () => (templateDetails?.fields ?? []).map((field) => field.name),
     [templateDetails?.fields]
   );
-  const instantSourceKeys = useMemo(() => {
+  const orgScopedSourceKeys = useMemo(() => {
     const keys = new Set<string>();
     orgScopedTeams.forEach((team) => {
       (team.estimates ?? []).forEach((estimate) => {
@@ -220,6 +226,26 @@ export default function AdminPage() {
 
     return Array.from(keys).sort((a, b) => a.localeCompare(b));
   }, [orgScopedTeams]);
+  const memberSourceKeys = useMemo(() => {
+    const keys = new Set<string>();
+    allMemberTeams.forEach((team) => {
+      (team.estimates ?? []).forEach((estimate) => {
+        collectKeysFromEstimatePayload(estimate?.payload, keys);
+        if (Array.isArray(estimate?.versionHistory)) {
+          estimate.versionHistory.forEach((entry) => {
+            collectKeysFromEstimatePayload(
+              (entry as { payload?: unknown } | null)?.payload,
+              keys
+            );
+          });
+        }
+      });
+    });
+    return Array.from(keys).sort((a, b) => a.localeCompare(b));
+  }, [allMemberTeams]);
+  const instantSourceKeys = orgScopedSourceKeys.length
+    ? orgScopedSourceKeys
+    : memberSourceKeys;
   const sourceKeyOptions = useMemo(() => {
     const seen = new Set<string>();
     const options: string[] = [];
@@ -253,8 +279,13 @@ export default function AdminPage() {
     if (!instantSourceKeys.length) {
       return "No source keys found in saved org estimates yet.";
     }
+    if (!orgScopedSourceKeys.length && memberSourceKeys.length) {
+      return `Loaded ${memberSourceKeys.length} source key${memberSourceKeys.length === 1 ? "" : "s"} from legacy team estimates (outside org tree).`;
+    }
     return `Loaded ${instantSourceKeys.length} source key${instantSourceKeys.length === 1 ? "" : "s"} from InstantDB.`;
   }, [
+    memberSourceKeys.length,
+    orgScopedSourceKeys.length,
     authLoaded,
     catalogTeam,
     instantAppId,

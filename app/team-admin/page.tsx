@@ -30,6 +30,7 @@ import {
   isProductFeatureCategory,
 } from "@/lib/product-features";
 import {
+  hasCatalogData,
   getOrganizationScopedTeams,
   pickOrganizationTeam,
 } from "@/lib/org-teams";
@@ -182,7 +183,19 @@ export default function TeamAdminPage() {
     () => orgScopedTeams.find((team) => team.id === selectedTeamId) ?? null,
     [orgScopedTeams, selectedTeamId]
   );
-  const catalogTeam = orgTeam ?? selectedTeam;
+  const allMemberTeams = useMemo(() => {
+    if (!instantUser?.id) return [];
+    return teams.filter((team) =>
+      team.memberships?.some((membership) => membership.user?.id === instantUser.id)
+    );
+  }, [instantUser?.id, teams]);
+  const catalogTeam = useMemo(() => {
+    if (orgTeam && hasCatalogData(orgTeam)) return orgTeam;
+    if (selectedTeam && hasCatalogData(selectedTeam)) return selectedTeam;
+    const legacyCatalogTeam = allMemberTeams.find((team) => hasCatalogData(team));
+    if (legacyCatalogTeam) return legacyCatalogTeam;
+    return orgTeam ?? selectedTeam;
+  }, [allMemberTeams, orgTeam, selectedTeam]);
 
   const vendorRecords = useMemo(() => {
     const list = (catalogTeam?.vendors ?? []).slice();

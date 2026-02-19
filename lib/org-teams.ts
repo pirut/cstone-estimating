@@ -6,6 +6,12 @@ type TeamLike = {
   createdAt?: number | null;
 };
 
+type CatalogTeamLike = TeamLike & {
+  vendors?: unknown[] | null;
+  unitTypes?: unknown[] | null;
+  productFeatureOptions?: unknown[] | null;
+};
+
 export function pickOrganizationTeam<T extends TeamLike>(
   teams: T[],
   preferredOrgName?: string
@@ -47,4 +53,18 @@ export function getOrganizationScopedTeams<T extends TeamLike>(
   const children = teams.filter((team) => team.parentTeamId === orgTeamId);
   if (!org) return children;
   return [org, ...children];
+}
+
+export function getCatalogItemCount<T extends CatalogTeamLike>(team?: T | null) {
+  if (!team) return 0;
+  const vendors = Array.isArray(team.vendors) ? team.vendors.length : 0;
+  const unitTypes = Array.isArray(team.unitTypes) ? team.unitTypes.length : 0;
+  const options = Array.isArray(team.productFeatureOptions)
+    ? team.productFeatureOptions.length
+    : 0;
+  return vendors + unitTypes + options;
+}
+
+export function hasCatalogData<T extends CatalogTeamLike>(team?: T | null) {
+  return getCatalogItemCount(team) > 0;
 }

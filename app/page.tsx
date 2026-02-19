@@ -55,6 +55,7 @@ import {
 } from "@/lib/product-features";
 import {
   getOrganizationScopedTeams,
+  hasCatalogData,
   pickOrganizationTeam,
 } from "@/lib/org-teams";
 import {
@@ -505,6 +506,12 @@ export default function HomePage() {
       team.memberships?.some((membership) => membership.user?.id === instantUser.id)
     );
   }, [orgScopedTeams, instantUser?.id]);
+  const allMemberTeams = useMemo(() => {
+    if (!instantUser?.id) return [];
+    return teams.filter((team) =>
+      team.memberships?.some((membership) => membership.user?.id === instantUser.id)
+    );
+  }, [instantUser?.id, teams]);
   const orgMembership = orgTeam?.memberships?.find(
     (membership) => membership.user?.id === instantUser?.id
   );
@@ -521,7 +528,12 @@ export default function HomePage() {
   const activeMembership = activeTeam?.memberships?.find(
     (membership) => membership.user?.id === instantUser?.id
   );
-  const catalogTeam = orgTeam ?? activeTeam;
+  const catalogTeam = useMemo(() => {
+    if (orgTeam && hasCatalogData(orgTeam)) return orgTeam;
+    const legacyCatalogTeam = allMemberTeams.find((team) => hasCatalogData(team));
+    if (legacyCatalogTeam) return legacyCatalogTeam;
+    return orgTeam ?? activeTeam;
+  }, [activeTeam, allMemberTeams, orgTeam]);
   const teamReady = Boolean(orgTeam && orgMembership);
   const isOrgOwner = Boolean(
     isPrimaryOwner ||
