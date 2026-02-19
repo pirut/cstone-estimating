@@ -117,6 +117,7 @@ function normalizeLoadedProductFeatures(
   return {
     interior_frame_color: getValue("interior_frame_color"),
     exterior_frame_color: getValue("exterior_frame_color"),
+    glass_type: getValue("glass_type"),
     glass_makeup: getValue("glass_makeup"),
     stainless_operating_hardware:
       source?.stainless_operating_hardware === true,
@@ -1009,6 +1010,7 @@ export function EstimateBuilderCard({
                         }`,
                       ]
                     : []),
+                  `Glass type: ${item.glass_type || "Not selected"}`,
                   `Glass make up: ${item.glass_makeup || "Not selected"}`,
                   `Stainless steel operating hardware: ${
                     item.stainless_operating_hardware ? "Yes" : "No"
