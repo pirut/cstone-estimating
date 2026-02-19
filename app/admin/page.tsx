@@ -112,6 +112,22 @@ export default function AdminPage() {
     () => (templateDetails?.fields ?? []).map((field) => field.name),
     [templateDetails?.fields]
   );
+  const sourceKeyOptions = useMemo(() => {
+    const seen = new Set<string>();
+    const options: string[] = [];
+    SOURCE_KEYS.forEach((key) => {
+      if (seen.has(key)) return;
+      seen.add(key);
+      options.push(key);
+    });
+    bindings.forEach((binding) => {
+      const key = String(binding.sourceKey ?? "").trim();
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      options.push(key);
+    });
+    return options;
+  }, [bindings]);
   const firstTokenName = targetTokenNames[0] ?? "";
   const firstFieldName = targetFieldNames[0] ?? "";
 
@@ -671,8 +687,10 @@ export default function AdminPage() {
                   {bindings.map((binding) => {
                     const targetOptions =
                       binding.targetType === "field" ? targetFieldNames : targetTokenNames;
-                    const sourceHasValue = SOURCE_KEYS.includes(binding.sourceKey);
-                    const targetHasValue = targetOptions.includes(binding.targetName);
+                    const sourceValue = String(binding.sourceKey ?? "").trim();
+                    const sourceHasValue = sourceKeyOptions.includes(sourceValue);
+                    const targetValue = String(binding.targetName ?? "").trim();
+                    const targetHasValue = targetOptions.includes(targetValue);
                     return (
                       <div
                         key={binding.id}
@@ -683,7 +701,7 @@ export default function AdminPage() {
                             Source key
                           </label>
                           <Select
-                            value={sourceHasValue ? binding.sourceKey : "__none__"}
+                            value={sourceHasValue ? sourceValue : "__none__"}
                             onValueChange={(value) =>
                               updateBinding(binding.id, {
                                 sourceKey: value === "__none__" ? "" : value,
@@ -695,12 +713,12 @@ export default function AdminPage() {
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="__none__">Select source key</SelectItem>
-                              {!sourceHasValue && binding.sourceKey ? (
-                                <SelectItem value={binding.sourceKey}>
-                                  Unavailable: {binding.sourceKey}
+                              {!sourceHasValue && sourceValue ? (
+                                <SelectItem value={sourceValue}>
+                                  Unavailable: {sourceValue}
                                 </SelectItem>
                               ) : null}
-                              {SOURCE_KEYS.map((key) => (
+                              {sourceKeyOptions.map((key) => (
                                 <SelectItem key={key} value={key}>
                                   {key}
                                 </SelectItem>
@@ -738,7 +756,7 @@ export default function AdminPage() {
                             Target name
                           </label>
                           <Select
-                            value={targetHasValue ? binding.targetName : "__none__"}
+                            value={targetHasValue ? targetValue : "__none__"}
                             onValueChange={(value) =>
                               updateBinding(binding.id, {
                                 targetName: value === "__none__" ? "" : value,
@@ -761,9 +779,9 @@ export default function AdminPage() {
                                   ? "Select field"
                                   : "Select token"}
                               </SelectItem>
-                              {!targetHasValue && binding.targetName ? (
-                                <SelectItem value={binding.targetName}>
-                                  Unavailable: {binding.targetName}
+                              {!targetHasValue && targetValue ? (
+                                <SelectItem value={targetValue}>
+                                  Unavailable: {targetValue}
                                 </SelectItem>
                               ) : null}
                               {targetOptions.map((option) => (
