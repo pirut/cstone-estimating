@@ -165,6 +165,10 @@ export default function TeamAdminPage() {
     () => getOrganizationScopedTeams(teams, orgTeam?.id),
     [orgTeam?.id, teams]
   );
+  const subTeamCount = useMemo(() => {
+    if (!orgTeam?.id) return orgScopedTeams.length;
+    return orgScopedTeams.filter((team) => team.id !== orgTeam.id).length;
+  }, [orgScopedTeams, orgTeam?.id]);
 
   const orgMembership = orgTeam?.memberships?.find(
     (membership) => membership.user?.id === instantUser?.id
@@ -1392,7 +1396,7 @@ export default function TeamAdminPage() {
                         Members: {orgTeam.memberships?.length ?? 0}
                       </Badge>
                       <Badge variant="outline" className="bg-background/80">
-                        Teams: {orgScopedTeams.length}
+                        Sub teams: {subTeamCount}
                       </Badge>
                     </div>
                   </>
