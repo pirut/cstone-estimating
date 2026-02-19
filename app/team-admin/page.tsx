@@ -30,7 +30,6 @@ import {
   isProductFeatureCategory,
 } from "@/lib/product-features";
 import {
-  hasCatalogData,
   getOrganizationScopedTeams,
   pickOrganizationTeam,
 } from "@/lib/org-teams";
@@ -71,6 +70,7 @@ type ProductFeatureOptionDraft = {
 };
 
 const FEATURE_SCOPE_ALL_PRODUCTS = "__all_products__";
+const CATALOG_SCOPE_ALL_TEAMS = "__all_teams__";
 
 type EstimateAdminDraft = {
   id: string;
@@ -187,42 +187,75 @@ export default function TeamAdminPage() {
     () => orgScopedTeams.find((team) => team.id === selectedTeamId) ?? null,
     [orgScopedTeams, selectedTeamId]
   );
-  const allMemberTeams = useMemo(() => {
-    if (!instantUser?.id) return [];
-    return teams.filter((team) =>
-      team.memberships?.some((membership) => membership.user?.id === instantUser.id)
-    );
-  }, [instantUser?.id, teams]);
-  const catalogTeam = useMemo(() => {
-    if (orgTeam && hasCatalogData(orgTeam)) return orgTeam;
-    if (selectedTeam && hasCatalogData(selectedTeam)) return selectedTeam;
-    const legacyCatalogTeam = allMemberTeams.find((team) => hasCatalogData(team));
-    if (legacyCatalogTeam) return legacyCatalogTeam;
-    return orgTeam ?? selectedTeam;
-  }, [allMemberTeams, orgTeam, selectedTeam]);
-
-  const vendorRecords = useMemo(() => {
-    const list = (catalogTeam?.vendors ?? []).slice();
+  const catalogScopeOptions = useMemo(() => {
+    const list = teams.slice();
     return list.sort((a, b) => {
-      const orderA = typeof a.sortOrder === "number" ? a.sortOrder : 0;
-      const orderB = typeof b.sortOrder === "number" ? b.sortOrder : 0;
-      if (orderA !== orderB) return orderA - orderB;
+      if (orgTeam?.id && a.id === orgTeam.id) return -1;
+      if (orgTeam?.id && b.id === orgTeam.id) return 1;
       return String(a.name ?? "").localeCompare(String(b.name ?? ""));
     });
-  }, [catalogTeam?.vendors]);
+  }, [orgTeam?.id, teams]);
+  const [catalogScopeTeamId, setCatalogScopeTeamId] = useState<string>(
+    CATALOG_SCOPE_ALL_TEAMS
+  );
+  useEffect(() => {
+    if (!catalogScopeOptions.length) {
+      setCatalogScopeTeamId(CATALOG_SCOPE_ALL_TEAMS);
+      return;
+    }
+    if (catalogScopeTeamId === CATALOG_SCOPE_ALL_TEAMS) return;
+    if (catalogScopeOptions.some((team) => team.id === catalogScopeTeamId)) return;
+    setCatalogScopeTeamId(CATALOG_SCOPE_ALL_TEAMS);
+  }, [catalogScopeOptions, catalogScopeTeamId]);
+  const catalogTeam = useMemo(() => {
+    if (catalogScopeTeamId === CATALOG_SCOPE_ALL_TEAMS) return null;
+    return (
+      catalogScopeOptions.find((team) => team.id === catalogScopeTeamId) ?? null
+    );
+  }, [catalogScopeOptions, catalogScopeTeamId]);
+  const catalogDisplayTeams = useMemo(() => {
+    if (!catalogScopeOptions.length) return [];
+    return catalogTeam ? [catalogTeam] : catalogScopeOptions;
+  }, [catalogScopeOptions, catalogTeam]);
+  const catalogScopeLabel = catalogTeam
+    ? `Team: ${catalogTeam.name}`
+    : "All teams (view only)";
 
-  const unitTypeRecords = useMemo(() => {
-    const list = (catalogTeam?.unitTypes ?? []).slice();
+  const vendorRecords = useMemo(() => {
+    const list = catalogDisplayTeams.flatMap((team) =>
+      (team.vendors ?? []).map((vendor) => ({ ...vendor, __teamName: team.name ?? "" }))
+    );
     return list.sort((a, b) => {
       const orderA = typeof a.sortOrder === "number" ? a.sortOrder : 0;
       const orderB = typeof b.sortOrder === "number" ? b.sortOrder : 0;
       if (orderA !== orderB) return orderA - orderB;
-      return String(a.code ?? "").localeCompare(String(b.code ?? ""));
+      const byName = String(a.name ?? "").localeCompare(String(b.name ?? ""));
+      if (byName !== 0) return byName;
+      return String(a.__teamName ?? "").localeCompare(String(b.__teamName ?? ""));
     });
-  }, [catalogTeam?.unitTypes]);
+  }, [catalogDisplayTeams]);
+
+  const unitTypeRecords = useMemo(() => {
+    const list = catalogDisplayTeams.flatMap((team) =>
+      (team.unitTypes ?? []).map((unit) => ({ ...unit, __teamName: team.name ?? "" }))
+    );
+    return list.sort((a, b) => {
+      const orderA = typeof a.sortOrder === "number" ? a.sortOrder : 0;
+      const orderB = typeof b.sortOrder === "number" ? b.sortOrder : 0;
+      if (orderA !== orderB) return orderA - orderB;
+      const byCode = String(a.code ?? "").localeCompare(String(b.code ?? ""));
+      if (byCode !== 0) return byCode;
+      return String(a.__teamName ?? "").localeCompare(String(b.__teamName ?? ""));
+    });
+  }, [catalogDisplayTeams]);
 
   const productFeatureOptionRecords = useMemo(() => {
-    const list = (catalogTeam?.productFeatureOptions ?? []).slice();
+    const list = catalogDisplayTeams.flatMap((team) =>
+      (team.productFeatureOptions ?? []).map((option) => ({
+        ...option,
+        __teamName: team.name ?? "",
+      }))
+    );
     return list.sort((a, b) => {
       const categoryA = String(a.category ?? "");
       const categoryB = String(b.category ?? "");
@@ -230,9 +263,11 @@ export default function TeamAdminPage() {
       const orderA = typeof a.sortOrder === "number" ? a.sortOrder : 0;
       const orderB = typeof b.sortOrder === "number" ? b.sortOrder : 0;
       if (orderA !== orderB) return orderA - orderB;
-      return String(a.label ?? "").localeCompare(String(b.label ?? ""));
+      const byLabel = String(a.label ?? "").localeCompare(String(b.label ?? ""));
+      if (byLabel !== 0) return byLabel;
+      return String(a.__teamName ?? "").localeCompare(String(b.__teamName ?? ""));
     });
-  }, [catalogTeam?.productFeatureOptions]);
+  }, [catalogDisplayTeams]);
 
   const orgMembers = orgTeam?.memberships ?? [];
   const selectedTeamMembers = selectedTeam?.memberships ?? [];
@@ -607,6 +642,7 @@ export default function TeamAdminPage() {
   };
 
   const canEditCatalog = Boolean(hasTeamAdminAccess && catalogTeam);
+  const isAllCatalogScope = catalogTeam === null;
 
   const handleVendorChange = (index: number, patch: Partial<VendorDraft>) => {
     setVendorDrafts((prev) =>
@@ -637,7 +673,7 @@ export default function TeamAdminPage() {
     setVendorError(null);
     setVendorStatus(null);
     if (!catalogTeam) {
-      setVendorError("Select an organization team before editing vendors.");
+      setVendorError("Select a specific team in Catalog scope before editing vendors.");
       return;
     }
     if (!canEditCatalog) {
@@ -724,7 +760,7 @@ export default function TeamAdminPage() {
     setVendorError(null);
     setVendorStatus(null);
     if (!catalogTeam) {
-      setVendorError("Select an organization team before seeding vendors.");
+      setVendorError("Select a specific team in Catalog scope before seeding vendors.");
       return;
     }
     if (!canEditCatalog) {
@@ -789,7 +825,7 @@ export default function TeamAdminPage() {
     setUnitTypeError(null);
     setUnitTypeStatus(null);
     if (!catalogTeam) {
-      setUnitTypeError("Select an organization team before editing unit types.");
+      setUnitTypeError("Select a specific team in Catalog scope before editing unit types.");
       return;
     }
     if (!canEditCatalog) {
@@ -895,7 +931,7 @@ export default function TeamAdminPage() {
     setUnitTypeError(null);
     setUnitTypeStatus(null);
     if (!catalogTeam) {
-      setUnitTypeError("Select an organization team before seeding unit types.");
+      setUnitTypeError("Select a specific team in Catalog scope before seeding unit types.");
       return;
     }
     if (!canEditCatalog) {
@@ -1054,7 +1090,7 @@ export default function TeamAdminPage() {
     setProductFeatureOptionStatus(null);
     if (!catalogTeam) {
       setProductFeatureOptionError(
-        "Select an organization team before editing feature options."
+        "Select a specific team in Catalog scope before editing feature options."
       );
       return;
     }
@@ -1847,12 +1883,34 @@ export default function TeamAdminPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-8">
-                {!catalogTeam ? (
-                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
-                    Select or create the organization workspace to edit catalog
-                    settings.
-                  </div>
-                ) : null}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    Catalog scope
+                  </label>
+                  <Select
+                    value={catalogScopeTeamId}
+                    onValueChange={setCatalogScopeTeamId}
+                  >
+                    <SelectTrigger className="max-w-xl">
+                      <SelectValue placeholder="Select catalog scope" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={CATALOG_SCOPE_ALL_TEAMS}>
+                        All teams (view only)
+                      </SelectItem>
+                      {catalogScopeOptions.map((team) => (
+                        <SelectItem key={team.id} value={team.id}>
+                          {team.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">
+                    {isAllCatalogScope
+                      ? "Showing combined catalog data across all teams. Select a specific team to edit."
+                      : `Editing catalog for ${catalogTeam?.name ?? "selected team"}.`}
+                  </p>
+                </div>
                 {!hasTeamAdminAccess ? (
                   <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
                     Only organization owners and admins can edit catalog settings.
@@ -2170,7 +2228,7 @@ export default function TeamAdminPage() {
                         <Select
                           value={featureEditorVendorId}
                           onValueChange={setFeatureEditorVendorId}
-                          disabled={!canEditCatalog}
+                          disabled={!vendorRecords.length}
                         >
                           <SelectTrigger className="max-w-xl">
                             <SelectValue placeholder="Select product scope" />
@@ -2182,6 +2240,11 @@ export default function TeamAdminPage() {
                             {vendorRecords.map((vendor) => (
                               <SelectItem key={vendor.id} value={vendor.id}>
                                 {vendor.name}
+                                {isAllCatalogScope &&
+                                typeof vendor.__teamName === "string" &&
+                                vendor.__teamName.trim()
+                                  ? ` (${vendor.__teamName})`
+                                  : ""}
                               </SelectItem>
                             ))}
                           </SelectContent>
