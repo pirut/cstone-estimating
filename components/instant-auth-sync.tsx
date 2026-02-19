@@ -32,6 +32,9 @@ export function InstantAuthSync({
   const { user: instantUser } = db.useAuth();
   const lastAuthErrorRef = useRef<string | null>(null);
   const lastProfileSyncRef = useRef<string | null>(null);
+  const authSyncInFlightRef = useRef(false);
+  const lastSyncedClerkUserIdRef = useRef<string | null>(null);
+  const nextAllowedAuthSyncAtRef = useRef(0);
 
   const reportAuthError = useCallback(
     (message: string | null) => {
@@ -51,13 +54,36 @@ export function InstantAuthSync({
     if (!clerkEnabled) return;
     if (!isLoaded) return;
 
-    const sync = async () => {
-      if (!isSignedIn) {
-        await db.auth.signOut();
+    if (!isSignedIn) {
+      lastSyncedClerkUserIdRef.current = null;
+      nextAllowedAuthSyncAtRef.current = 0;
+      if (!instantUser?.id || authSyncInFlightRef.current) {
         reportAuthError(null);
         return;
       }
+      authSyncInFlightRef.current = true;
+      void db.auth.signOut().finally(() => {
+        authSyncInFlightRef.current = false;
+        reportAuthError(null);
+      });
+      return;
+    }
 
+    const clerkUserId = user?.id ?? null;
+    if (!clerkUserId) return;
+
+    if (instantUser?.id && lastSyncedClerkUserIdRef.current === clerkUserId) {
+      reportAuthError(null);
+      return;
+    }
+
+    if (authSyncInFlightRef.current) return;
+    if (Date.now() < nextAllowedAuthSyncAtRef.current) return;
+
+    authSyncInFlightRef.current = true;
+    nextAllowedAuthSyncAtRef.current = Date.now() + 3000;
+
+    void (async () => {
       const email = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? "";
       if (hasAllowedDomain && email && !email.endsWith(`@${allowedDomain}`)) {
         onDomainError?.(
@@ -65,6 +91,8 @@ export function InstantAuthSync({
         );
         await db.auth.signOut();
         await clerkSignOut();
+        lastSyncedClerkUserIdRef.current = null;
+        nextAllowedAuthSyncAtRef.current = Date.now() + 15000;
         return;
       }
 
@@ -72,35 +100,31 @@ export function InstantAuthSync({
         clerkTokenTemplate ? { template: clerkTokenTemplate } : undefined
       );
       if (!idToken) {
-        reportAuthError(
-          "Clerk token missing. Confirm the session token includes email."
-        );
+        reportAuthError("Authentication service unavailable. Retrying shortly.");
+        lastSyncedClerkUserIdRef.current = null;
+        nextAllowedAuthSyncAtRef.current = Date.now() + 15000;
         return;
       }
+
       try {
         await db.auth.signInWithIdToken({
           idToken,
           clientName: clerkClientName,
         });
+        lastSyncedClerkUserIdRef.current = clerkUserId;
+        nextAllowedAuthSyncAtRef.current = 0;
         reportAuthError(null);
       } catch (err) {
         console.error("InstantDB auth sync failed", err);
-        const message =
-          err instanceof Error
-            ? err.message
-            : typeof err === "string"
-              ? err
-              : "InstantDB auth sync failed.";
-        const details =
-          typeof err === "object" && err !== null
-            ? JSON.stringify(err, Object.getOwnPropertyNames(err))
-            : null;
-        reportAuthError(details && details !== "{}" ? details : message);
+        reportAuthError("Authentication service unavailable. Retrying shortly.");
+        lastSyncedClerkUserIdRef.current = null;
+        nextAllowedAuthSyncAtRef.current = Date.now() + 15000;
       }
-    };
-
-    void sync();
+    })().finally(() => {
+      authSyncInFlightRef.current = false;
+    });
   }, [
+    instantUser?.id,
     getToken,
     isLoaded,
     isSignedIn,
