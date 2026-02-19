@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type DragEvent } from "react";
 import Link from "next/link";
 import { InstantAuthSync } from "@/components/instant-auth-sync";
 import { Badge } from "@/components/ui/badge";
@@ -300,24 +300,37 @@ export default function TeamAdminPage() {
       .map((part) => part[0]?.toUpperCase())
       .join("") || "U";
 
-  const reorderDraftList = <T extends { sortOrder: number }>(
+  const reorderDraftListByInsertion = <T extends { sortOrder: number }>(
     list: T[],
     fromIndex: number,
-    toIndex: number
+    insertionIndex: number
   ) => {
     if (
       fromIndex < 0 ||
-      toIndex < 0 ||
       fromIndex >= list.length ||
-      toIndex >= list.length ||
-      fromIndex === toIndex
+      insertionIndex < 0 ||
+      insertionIndex > list.length ||
+      insertionIndex === fromIndex ||
+      insertionIndex === fromIndex + 1
     ) {
       return list;
     }
     const next = list.slice();
     const [moved] = next.splice(fromIndex, 1);
-    next.splice(toIndex, 0, moved);
+    const targetIndex =
+      insertionIndex > fromIndex ? insertionIndex - 1 : insertionIndex;
+    next.splice(targetIndex, 0, moved);
     return next.map((item, index) => ({ ...item, sortOrder: index + 1 }));
+  };
+
+  const getInsertionIndexFromDrag = (
+    event: DragEvent<HTMLElement>,
+    rowIndex: number
+  ) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const offsetY = event.clientY - rect.top;
+    const isAfter = offsetY > rect.height / 2;
+    return isAfter ? rowIndex + 1 : rowIndex;
   };
 
   useEffect(() => {
@@ -369,10 +382,16 @@ export default function TeamAdminPage() {
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const [estimateStatus, setEstimateStatus] = useState<string | null>(null);
   const [dragVendorIndex, setDragVendorIndex] = useState<number | null>(null);
+  const [vendorDropIndex, setVendorDropIndex] = useState<number | null>(null);
   const [dragUnitTypeIndex, setDragUnitTypeIndex] = useState<number | null>(null);
+  const [unitTypeDropIndex, setUnitTypeDropIndex] = useState<number | null>(null);
   const [dragFeatureState, setDragFeatureState] = useState<{
     groupId: string;
     entryIndex: number;
+  } | null>(null);
+  const [featureDropState, setFeatureDropState] = useState<{
+    groupId: string;
+    insertionIndex: number;
   } | null>(null);
 
   useEffect(() => {
@@ -670,39 +689,44 @@ export default function TeamAdminPage() {
   const canEditCatalog = Boolean(hasTeamAdminAccess && catalogTeam);
   const isAllCatalogScope = catalogTeam === null;
 
-  const handleDropVendor = (targetIndex: number) => {
+  const handleDropVendor = (insertionIndex: number) => {
     setVendorDrafts((prev) => {
       if (dragVendorIndex === null) return prev;
-      return reorderDraftList(prev, dragVendorIndex, targetIndex);
+      return reorderDraftListByInsertion(prev, dragVendorIndex, insertionIndex);
     });
     setDragVendorIndex(null);
+    setVendorDropIndex(null);
   };
 
-  const handleDropUnitType = (targetIndex: number) => {
+  const handleDropUnitType = (insertionIndex: number) => {
     setUnitTypeDrafts((prev) => {
       if (dragUnitTypeIndex === null) return prev;
-      return reorderDraftList(prev, dragUnitTypeIndex, targetIndex);
+      return reorderDraftListByInsertion(
+        prev,
+        dragUnitTypeIndex,
+        insertionIndex
+      );
     });
     setDragUnitTypeIndex(null);
+    setUnitTypeDropIndex(null);
   };
 
   const handleDropFeatureOption = (
     groupId: string,
-    targetEntryIndex: number,
+    insertionIndex: number,
     entries: Array<{ option: ProductFeatureOptionDraft; index: number }>
   ) => {
     setProductFeatureOptionDrafts((prev) => {
       if (!dragFeatureState) return prev;
       if (dragFeatureState.groupId !== groupId) return prev;
-      if (dragFeatureState.entryIndex === targetEntryIndex) return prev;
 
-      const reorderedEntryIndices = reorderDraftList(
+      const reorderedEntryIndices = reorderDraftListByInsertion(
         entries.map((entry, idx) => ({
           sortOrder: idx + 1,
           index: entry.index,
         })),
         dragFeatureState.entryIndex,
-        targetEntryIndex
+        insertionIndex
       ).map((entry) => entry.index);
 
       const next = prev.slice();
@@ -714,6 +738,7 @@ export default function TeamAdminPage() {
       return next;
     });
     setDragFeatureState(null);
+    setFeatureDropState(null);
   };
 
   const handleVendorChange = (index: number, patch: Partial<VendorDraft>) => {
@@ -2023,19 +2048,39 @@ export default function TeamAdminPage() {
                         {vendorDrafts.map((vendor, index) => (
                           <div
                             key={vendor.id ?? `vendor-${index}`}
-                            className="grid grid-cols-[auto_2fr_1.1fr_0.8fr_auto] items-center gap-2 px-3 py-2 text-sm"
+                            className="relative grid grid-cols-[auto_2fr_1.1fr_0.8fr_auto] items-center gap-2 px-3 py-2 text-sm"
                             draggable={canEditCatalog}
-                            onDragStart={() => setDragVendorIndex(index)}
+                            onDragStart={() => {
+                              setDragVendorIndex(index);
+                              setVendorDropIndex(index);
+                            }}
                             onDragOver={(event) => {
                               if (dragVendorIndex === null) return;
                               event.preventDefault();
+                              setVendorDropIndex(
+                                getInsertionIndexFromDrag(event, index)
+                              );
                             }}
                             onDrop={(event) => {
                               event.preventDefault();
-                              handleDropVendor(index);
+                              handleDropVendor(
+                                vendorDropIndex ??
+                                  getInsertionIndexFromDrag(event, index)
+                              );
                             }}
-                            onDragEnd={() => setDragVendorIndex(null)}
+                            onDragEnd={() => {
+                              setDragVendorIndex(null);
+                              setVendorDropIndex(null);
+                            }}
                           >
+                            {dragVendorIndex !== null && vendorDropIndex === index ? (
+                              <div className="pointer-events-none absolute left-2 right-2 top-0 h-0.5 rounded-full bg-accent" />
+                            ) : null}
+                            {dragVendorIndex !== null &&
+                            index === vendorDrafts.length - 1 &&
+                            vendorDropIndex === vendorDrafts.length ? (
+                              <div className="pointer-events-none absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-accent" />
+                            ) : null}
                             <Checkbox
                               checked={vendor.isActive}
                               onCheckedChange={(checked) =>
@@ -2161,19 +2206,39 @@ export default function TeamAdminPage() {
                         {unitTypeDrafts.map((unit, index) => (
                           <div
                             key={unit.id ?? `unit-${index}`}
-                            className="grid grid-cols-[auto_1fr_1.6fr_1fr_0.6fr_auto] items-center gap-2 px-3 py-2 text-sm"
+                            className="relative grid grid-cols-[auto_1fr_1.6fr_1fr_0.6fr_auto] items-center gap-2 px-3 py-2 text-sm"
                             draggable={canEditCatalog}
-                            onDragStart={() => setDragUnitTypeIndex(index)}
+                            onDragStart={() => {
+                              setDragUnitTypeIndex(index);
+                              setUnitTypeDropIndex(index);
+                            }}
                             onDragOver={(event) => {
                               if (dragUnitTypeIndex === null) return;
                               event.preventDefault();
+                              setUnitTypeDropIndex(
+                                getInsertionIndexFromDrag(event, index)
+                              );
                             }}
                             onDrop={(event) => {
                               event.preventDefault();
-                              handleDropUnitType(index);
+                              handleDropUnitType(
+                                unitTypeDropIndex ??
+                                  getInsertionIndexFromDrag(event, index)
+                              );
                             }}
-                            onDragEnd={() => setDragUnitTypeIndex(null)}
+                            onDragEnd={() => {
+                              setDragUnitTypeIndex(null);
+                              setUnitTypeDropIndex(null);
+                            }}
                           >
+                            {dragUnitTypeIndex !== null && unitTypeDropIndex === index ? (
+                              <div className="pointer-events-none absolute left-2 right-2 top-0 h-0.5 rounded-full bg-accent" />
+                            ) : null}
+                            {dragUnitTypeIndex !== null &&
+                            index === unitTypeDrafts.length - 1 &&
+                            unitTypeDropIndex === unitTypeDrafts.length ? (
+                              <div className="pointer-events-none absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-accent" />
+                            ) : null}
                             <Checkbox
                               checked={unit.isActive}
                               onCheckedChange={(checked) =>
@@ -2364,25 +2429,59 @@ export default function TeamAdminPage() {
                           </Button>
                         </div>
                         <div className="space-y-2">
-                          {entries.map(({ option, index }) => (
+                          {entries.map(({ option, index }, entryIndex) => (
                             <div
                               key={option.id ?? `feature-option-${group.id}-${index}`}
-                              className="grid grid-cols-[auto_2fr_0.7fr_auto] items-center gap-2 rounded-lg border border-border/60 px-2 py-2 text-sm"
+                              className="relative grid grid-cols-[auto_2fr_0.7fr_auto] items-center gap-2 rounded-lg border border-border/60 px-2 py-2 text-sm"
                               draggable={canEditCatalog}
-                              onDragStart={() =>
-                                setDragFeatureState({ groupId: group.id, entryIndex: index })
-                              }
+                              onDragStart={() => {
+                                setDragFeatureState({
+                                  groupId: group.id,
+                                  entryIndex,
+                                });
+                                setFeatureDropState({
+                                  groupId: group.id,
+                                  insertionIndex: entryIndex,
+                                });
+                              }}
                               onDragOver={(event) => {
                                 if (!dragFeatureState) return;
                                 if (dragFeatureState.groupId !== group.id) return;
                                 event.preventDefault();
+                                setFeatureDropState({
+                                  groupId: group.id,
+                                  insertionIndex: getInsertionIndexFromDrag(
+                                    event,
+                                    entryIndex
+                                  ),
+                                });
                               }}
                               onDrop={(event) => {
                                 event.preventDefault();
-                                handleDropFeatureOption(group.id, index, entries);
+                                handleDropFeatureOption(
+                                  group.id,
+                                  featureDropState?.groupId === group.id
+                                    ? featureDropState.insertionIndex
+                                    : getInsertionIndexFromDrag(event, entryIndex),
+                                  entries
+                                );
                               }}
-                              onDragEnd={() => setDragFeatureState(null)}
+                              onDragEnd={() => {
+                                setDragFeatureState(null);
+                                setFeatureDropState(null);
+                              }}
                             >
+                              {dragFeatureState?.groupId === group.id &&
+                              featureDropState?.groupId === group.id &&
+                              featureDropState.insertionIndex === entryIndex ? (
+                                <div className="pointer-events-none absolute left-2 right-2 top-0 h-0.5 rounded-full bg-accent" />
+                              ) : null}
+                              {dragFeatureState?.groupId === group.id &&
+                              featureDropState?.groupId === group.id &&
+                              entryIndex === entries.length - 1 &&
+                              featureDropState.insertionIndex === entries.length ? (
+                                <div className="pointer-events-none absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-accent" />
+                              ) : null}
                               <Checkbox
                                 checked={option.isActive}
                                 onCheckedChange={(checked) =>
