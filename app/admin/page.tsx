@@ -338,11 +338,32 @@ export default function AdminPage() {
       }
     });
 
-    setBindings(nextBindings);
+    const preservedCustomBindings = bindings.filter((binding) => {
+      const sourceKey = String(binding.sourceKey ?? "").trim();
+      if (!sourceKey) return false;
+      return !SOURCE_KEYS.includes(sourceKey);
+    });
+
+    const dedupe = new Set<string>();
+    const mergedBindings = [...nextBindings, ...preservedCustomBindings].filter(
+      (binding) => {
+        const key = [
+          binding.sourceKey,
+          binding.targetType,
+          binding.targetName,
+          binding.role ?? "",
+        ].join("|");
+        if (dedupe.has(key)) return false;
+        dedupe.add(key);
+        return true;
+      }
+    );
+
+    setBindings(mergedBindings);
     setSaveError(null);
     setSaveStatus(
-      nextBindings.length
-        ? `Auto-mapped ${nextBindings.length} binding${nextBindings.length === 1 ? "" : "s"}.`
+      mergedBindings.length
+        ? `Auto-mapped ${nextBindings.length} binding${nextBindings.length === 1 ? "" : "s"}${preservedCustomBindings.length ? ` and preserved ${preservedCustomBindings.length} custom binding${preservedCustomBindings.length === 1 ? "" : "s"}` : ""}.`
         : "No matching token or field names found for current source keys."
     );
   };
