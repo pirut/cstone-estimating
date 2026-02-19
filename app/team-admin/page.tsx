@@ -41,7 +41,7 @@ import {
   useOptionalUser,
 } from "@/lib/clerk";
 import { id } from "@instantdb/react";
-import { Loader2, Plus, Save, Trash2 } from "lucide-react";
+import { GripVertical, Loader2, Plus, Save, Trash2 } from "lucide-react";
 
 type VendorDraft = {
   id?: string;
@@ -300,6 +300,26 @@ export default function TeamAdminPage() {
       .map((part) => part[0]?.toUpperCase())
       .join("") || "U";
 
+  const reorderDraftList = <T extends { sortOrder: number }>(
+    list: T[],
+    fromIndex: number,
+    toIndex: number
+  ) => {
+    if (
+      fromIndex < 0 ||
+      toIndex < 0 ||
+      fromIndex >= list.length ||
+      toIndex >= list.length ||
+      fromIndex === toIndex
+    ) {
+      return list;
+    }
+    const next = list.slice();
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    return next.map((item, index) => ({ ...item, sortOrder: index + 1 }));
+  };
+
   useEffect(() => {
     if (!orgScopedTeams.length) {
       setSelectedTeamId(null);
@@ -348,6 +368,12 @@ export default function TeamAdminPage() {
   const [estimateSavingId, setEstimateSavingId] = useState<string | null>(null);
   const [estimateError, setEstimateError] = useState<string | null>(null);
   const [estimateStatus, setEstimateStatus] = useState<string | null>(null);
+  const [dragVendorIndex, setDragVendorIndex] = useState<number | null>(null);
+  const [dragUnitTypeIndex, setDragUnitTypeIndex] = useState<number | null>(null);
+  const [dragFeatureState, setDragFeatureState] = useState<{
+    groupId: string;
+    entryIndex: number;
+  } | null>(null);
 
   useEffect(() => {
     setTeamNameDraft(selectedTeam?.name ?? "");
@@ -643,6 +669,52 @@ export default function TeamAdminPage() {
 
   const canEditCatalog = Boolean(hasTeamAdminAccess && catalogTeam);
   const isAllCatalogScope = catalogTeam === null;
+
+  const handleDropVendor = (targetIndex: number) => {
+    setVendorDrafts((prev) => {
+      if (dragVendorIndex === null) return prev;
+      return reorderDraftList(prev, dragVendorIndex, targetIndex);
+    });
+    setDragVendorIndex(null);
+  };
+
+  const handleDropUnitType = (targetIndex: number) => {
+    setUnitTypeDrafts((prev) => {
+      if (dragUnitTypeIndex === null) return prev;
+      return reorderDraftList(prev, dragUnitTypeIndex, targetIndex);
+    });
+    setDragUnitTypeIndex(null);
+  };
+
+  const handleDropFeatureOption = (
+    groupId: string,
+    targetEntryIndex: number,
+    entries: Array<{ option: ProductFeatureOptionDraft; index: number }>
+  ) => {
+    setProductFeatureOptionDrafts((prev) => {
+      if (!dragFeatureState) return prev;
+      if (dragFeatureState.groupId !== groupId) return prev;
+      if (dragFeatureState.entryIndex === targetEntryIndex) return prev;
+
+      const reorderedEntryIndices = reorderDraftList(
+        entries.map((entry, idx) => ({
+          sortOrder: idx + 1,
+          index: entry.index,
+        })),
+        dragFeatureState.entryIndex,
+        targetEntryIndex
+      ).map((entry) => entry.index);
+
+      const next = prev.slice();
+      reorderedEntryIndices.forEach((draftIndex, order) => {
+        const existing = next[draftIndex];
+        if (!existing) return;
+        next[draftIndex] = { ...existing, sortOrder: order + 1 };
+      });
+      return next;
+    });
+    setDragFeatureState(null);
+  };
 
   const handleVendorChange = (index: number, patch: Partial<VendorDraft>) => {
     setVendorDrafts((prev) =>
@@ -1910,6 +1982,9 @@ export default function TeamAdminPage() {
                       ? "Showing combined catalog data across all teams. Select a specific team to edit."
                       : `Editing catalog for ${catalogTeam?.name ?? "selected team"}.`}
                   </p>
+                  <p className="text-xs text-muted-foreground">
+                    Drag rows using the grip icon to reorder sort order.
+                  </p>
                 </div>
                 {!hasTeamAdminAccess ? (
                   <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
@@ -1949,6 +2024,17 @@ export default function TeamAdminPage() {
                           <div
                             key={vendor.id ?? `vendor-${index}`}
                             className="grid grid-cols-[auto_2fr_1.1fr_0.8fr_auto] items-center gap-2 px-3 py-2 text-sm"
+                            draggable={canEditCatalog}
+                            onDragStart={() => setDragVendorIndex(index)}
+                            onDragOver={(event) => {
+                              if (dragVendorIndex === null) return;
+                              event.preventDefault();
+                            }}
+                            onDrop={(event) => {
+                              event.preventDefault();
+                              handleDropVendor(index);
+                            }}
+                            onDragEnd={() => setDragVendorIndex(null)}
                           >
                             <Checkbox
                               checked={vendor.isActive}
@@ -1980,18 +2066,10 @@ export default function TeamAdminPage() {
                               />
                               <span>Allow split finish</span>
                             </label>
-                            <Input
-                              uiSize="xs"
-                              className="w-24"
-                              type="number"
-                              value={vendor.sortOrder}
-                              onChange={(event) =>
-                                handleVendorChange(index, {
-                                  sortOrder: Number(event.target.value || 0),
-                                })
-                              }
-                              disabled={!canEditCatalog}
-                            />
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <GripVertical className="h-4 w-4" />
+                              <span>{index + 1}</span>
+                            </div>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -2084,6 +2162,17 @@ export default function TeamAdminPage() {
                           <div
                             key={unit.id ?? `unit-${index}`}
                             className="grid grid-cols-[auto_1fr_1.6fr_1fr_0.6fr_auto] items-center gap-2 px-3 py-2 text-sm"
+                            draggable={canEditCatalog}
+                            onDragStart={() => setDragUnitTypeIndex(index)}
+                            onDragOver={(event) => {
+                              if (dragUnitTypeIndex === null) return;
+                              event.preventDefault();
+                            }}
+                            onDrop={(event) => {
+                              event.preventDefault();
+                              handleDropUnitType(index);
+                            }}
+                            onDragEnd={() => setDragUnitTypeIndex(null)}
                           >
                             <Checkbox
                               checked={unit.isActive}
@@ -2128,18 +2217,10 @@ export default function TeamAdminPage() {
                               placeholder="0"
                               disabled={!canEditCatalog}
                             />
-                            <Input
-                              uiSize="xs"
-                              className="w-20"
-                              type="number"
-                              value={unit.sortOrder}
-                              onChange={(event) =>
-                                handleUnitTypeChange(index, {
-                                  sortOrder: Number(event.target.value || 0),
-                                })
-                              }
-                              disabled={!canEditCatalog}
-                            />
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <GripVertical className="h-4 w-4" />
+                              <span>{index + 1}</span>
+                            </div>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -2287,6 +2368,20 @@ export default function TeamAdminPage() {
                             <div
                               key={option.id ?? `feature-option-${group.id}-${index}`}
                               className="grid grid-cols-[auto_2fr_0.7fr_auto] items-center gap-2 rounded-lg border border-border/60 px-2 py-2 text-sm"
+                              draggable={canEditCatalog}
+                              onDragStart={() =>
+                                setDragFeatureState({ groupId: group.id, entryIndex: index })
+                              }
+                              onDragOver={(event) => {
+                                if (!dragFeatureState) return;
+                                if (dragFeatureState.groupId !== group.id) return;
+                                event.preventDefault();
+                              }}
+                              onDrop={(event) => {
+                                event.preventDefault();
+                                handleDropFeatureOption(group.id, index, entries);
+                              }}
+                              onDragEnd={() => setDragFeatureState(null)}
                             >
                               <Checkbox
                                 checked={option.isActive}
@@ -2308,18 +2403,10 @@ export default function TeamAdminPage() {
                                 placeholder={`Add ${group.label.toLowerCase()} option`}
                                 disabled={!canEditCatalog}
                               />
-                              <Input
-                                uiSize="xs"
-                                className="w-20"
-                                type="number"
-                                value={option.sortOrder}
-                                onChange={(event) =>
-                                  handleProductFeatureOptionChange(index, {
-                                    sortOrder: Number(event.target.value || 0),
-                                  })
-                                }
-                                disabled={!canEditCatalog}
-                              />
+                              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                <GripVertical className="h-4 w-4" />
+                                <span>{index + 1}</span>
+                              </div>
                               <Button
                                 variant="ghost"
                                 size="icon"
