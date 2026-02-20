@@ -1,6 +1,7 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useQueries } from "convex/react";
+import { useMemo } from "react";
 import { api } from "@/convex/_generated/api";
 import { clerkEnabled, useOptionalAuth, useOptionalUser } from "@/lib/clerk";
 
@@ -157,15 +158,35 @@ export const db = {
   useQuery(queryConfig: unknown): QueryResult<{ teams: Array<any> }> {
     const domain = extractTeamDomainFromQuery(queryConfig).trim().toLowerCase();
     const skip = !convexAppUrl || !domain || domain === "__none__";
-    const result = useQuery(
-      api.app.teamGraphByDomain,
-      skip ? "skip" : { domain }
-    ) as Array<any> | undefined;
+    const queries = useMemo(
+      () =>
+        skip
+          ? {}
+          : {
+              teamGraph: {
+                query: api.app.teamGraphByDomain,
+                args: { domain },
+              },
+            },
+      [domain, skip]
+    ) as Record<string, { query: any; args: Record<string, any> }>;
+    const queryResults = useQueries(
+      queries
+    ) as Record<string, Array<any> | Error | undefined>;
+    const result = queryResults.teamGraph;
 
     if (skip) {
       return {
         data: { teams: [] },
         error: null,
+        isLoading: false,
+      };
+    }
+
+    if (result instanceof Error) {
+      return {
+        data: { teams: [] },
+        error: result,
         isLoading: false,
       };
     }
