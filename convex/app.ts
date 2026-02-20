@@ -33,6 +33,16 @@ type MembershipGraphDoc = {
   user: UserGraphDoc | null;
 };
 
+type ProjectGraphReferenceDoc = {
+  id: string;
+  name: string;
+  description?: string;
+  status?: string;
+  createdAt: number;
+  updatedAt: number;
+  owner: UserGraphDoc | null;
+};
+
 type EstimateGraphDoc = {
   id: string;
   title: string;
@@ -48,7 +58,7 @@ type EstimateGraphDoc = {
   tags?: any;
   versionHistory?: any;
   owner: UserGraphDoc | null;
-  project: ProjectGraphDoc | null;
+  project: ProjectGraphReferenceDoc | null;
 };
 
 type ProjectGraphDoc = {
@@ -440,12 +450,17 @@ export const teamGraphByDomain = query({
       userMap.set(userId, toPublicDoc(user));
     }
 
+    const projectReferenceMap = new Map<string, ProjectGraphReferenceDoc>();
     const projectMap = new Map<string, ProjectGraphDoc>();
     for (const project of projects) {
       const publicProject = toPublicDoc(project);
-      projectMap.set(project.id, {
-        ...(publicProject as Omit<ProjectGraphDoc, "owner" | "estimates">),
+      const projectReference: ProjectGraphReferenceDoc = {
+        ...(publicProject as Omit<ProjectGraphReferenceDoc, "owner">),
         owner: project.ownerId ? (userMap.get(project.ownerId) ?? null) : null,
+      };
+      projectReferenceMap.set(project.id, projectReference);
+      projectMap.set(project.id, {
+        ...projectReference,
         estimates: [],
       });
     }
@@ -456,7 +471,7 @@ export const teamGraphByDomain = query({
       const estimateEntry: EstimateGraphDoc = {
         ...(publicEstimate as Omit<EstimateGraphDoc, "owner" | "project">),
         owner: estimate.ownerId ? (userMap.get(estimate.ownerId) ?? null) : null,
-        project: estimate.projectId ? (projectMap.get(estimate.projectId) ?? null) : null,
+        project: estimate.projectId ? (projectReferenceMap.get(estimate.projectId) ?? null) : null,
       };
       estimateMap.set(estimate.id, estimateEntry);
     }
