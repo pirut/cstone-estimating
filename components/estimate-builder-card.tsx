@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import estimateFields from "@/config/estimate-fields.json";
-import { uploadFiles } from "@/components/uploadthing";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -46,10 +45,8 @@ import { cn } from "@/lib/utils";
 import {
   CheckCircle2,
   CircleDashed,
-  Loader2,
   LockKeyhole,
   Plus,
-  Save,
   Sparkles,
   X,
 } from "lucide-react";
@@ -86,18 +83,6 @@ type EstimateBuilderCardProps = {
   panelTypes?: PanelType[];
   productFeatureOptions?: ProductFeatureOption[];
   projectTypeOptions?: string[];
-};
-
-type EstimateFilePayload = {
-  version: number;
-  name: string;
-  info?: EstimateDraft["info"];
-  products?: ProductItem[];
-  bucking?: BuckingLineItem[];
-  calculator?: EstimateDraft["calculator"];
-  values?: Record<string, string | number>;
-  createdAt: string;
-  updatedAt: string;
 };
 
 type AddressSuggestion = {
@@ -172,9 +157,6 @@ export function EstimateBuilderCard({
   productFeatureOptions,
   projectTypeOptions,
 }: EstimateBuilderCardProps) {
-  const [saveStatus, setSaveStatus] = useState<string | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
   const [draft, setDraft] = useState<EstimateDraft>(DEFAULT_DRAFT);
   const [legacyValues, setLegacyValues] = useState<
     Record<string, string | number> | null
@@ -502,74 +484,6 @@ export function EstimateBuilderCard({
     });
   };
 
-  const deriveEstimateName = () => {
-    const trimmed = name.trim();
-    if (trimmed) return trimmed;
-    const projectName = draft.info.project_name?.trim();
-    if (projectName) return projectName;
-    const preparedFor = draft.info.prepared_for?.trim();
-    if (preparedFor) return preparedFor;
-    return "Estimate";
-  };
-
-  const sanitizeFilename = (input: string) =>
-    input.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 80) || "estimate";
-
-  const handleSave = async () => {
-    setSaveError(null);
-    setSaveStatus(null);
-    setIsSaving(true);
-
-    try {
-      const resolvedName = deriveEstimateName();
-      const now = new Date().toISOString();
-      const payload: EstimateFilePayload = legacyValues
-        ? {
-            version: 1,
-            name: resolvedName,
-            values: legacyValues,
-            createdAt: now,
-            updatedAt: now,
-          }
-        : {
-            version: 2,
-            name: resolvedName,
-            info: draft.info,
-            products: draft.products,
-            bucking: draft.bucking,
-            calculator: draft.calculator,
-            createdAt: now,
-            updatedAt: now,
-          };
-
-      const safeName = sanitizeFilename(resolvedName);
-      const fileName = `${safeName}.json`;
-      const blob = new Blob([JSON.stringify(payload, null, 2)], {
-        type: "application/json",
-      });
-      const file = new File([blob], fileName, {
-        type: "application/json",
-      });
-
-      const uploaded = await uploadFiles("estimate", { files: [file] });
-      const uploadedFile = uploaded?.[0];
-      const url = uploadedFile?.ufsUrl ?? uploadedFile?.url;
-
-      if (!uploadedFile || !url) {
-        throw new Error("Upload completed without a URL.");
-      }
-
-      onNameChange(resolvedName);
-      onSelectEstimate?.({ name: uploadedFile.name, url });
-      setSaveStatus("Estimate saved to the library.");
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error.";
-      setSaveError(message);
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
   const handleClear = () => {
     setDraft(DEFAULT_DRAFT);
     setLegacyValues(null);
@@ -581,8 +495,6 @@ export function EstimateBuilderCard({
     onNameChange("");
     onSelectEstimate?.(null);
     onEstimatePayloadChange?.(null);
-    setSaveStatus(null);
-    setSaveError(null);
   };
 
   const projectStepComplete = REQUIRED_INFO_FIELDS.every((field) =>
@@ -707,35 +619,16 @@ export function EstimateBuilderCard({
           </div>
         ) : null}
 
-        {saveError ? (
-          <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-            {saveError}
-          </div>
-        ) : null}
-        {saveStatus ? (
-          <div className="rounded-xl border border-border/60 bg-muted/40 px-4 py-3 text-sm text-muted-foreground">
-            {saveStatus}
-          </div>
-        ) : null}
-
         <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-foreground">Estimate Session</p>
               <p className="text-xs text-muted-foreground">
-                Name this estimate and save snapshots anytime.
+                Name this estimate and manage save/version actions from the action dock.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="accent" onClick={handleSave} disabled={isSaving}>
-                {isSaving ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="h-4 w-4" />
-                )}
-                {isSaving ? "Saving..." : "Save estimate"}
-              </Button>
-              <Button variant="outline" onClick={handleClear} disabled={isSaving}>
+              <Button variant="outline" onClick={handleClear}>
                 Clear
               </Button>
             </div>

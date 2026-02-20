@@ -61,6 +61,7 @@ import {
 } from "@/lib/org-teams";
 import {
   ArrowDownToLine,
+  ArrowRightLeft,
   CheckCircle2,
   Clock3,
   CircleDashed,
@@ -69,9 +70,14 @@ import {
   History,
   LayoutTemplate,
   Loader2,
+  PencilLine,
   Plus,
+  Rocket,
+  RotateCcw,
   Search,
+  Settings2,
   Tag,
+  Workflow,
   X,
 } from "lucide-react";
 import {
@@ -255,6 +261,7 @@ function formatTemplateDisplayName(name: string, templateVersion?: number) {
 }
 
 const UNASSIGNED_PROJECT_KEY = "__unassigned__";
+const LOCAL_DRAFT_STORAGE_KEY = "cstone:manual-estimate:draft:v1";
 
 function normalizeEstimateTags(source: unknown): string[] {
   if (!Array.isArray(source)) return [];
@@ -431,10 +438,17 @@ export default function HomePage() {
   const [historyEstimateId, setHistoryEstimateId] = useState<string | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyActionId, setHistoryActionId] = useState<string | null>(null);
+  const [movingEstimateId, setMovingEstimateId] = useState<string | null>(null);
+  const [moveTargetByEstimateId, setMoveTargetByEstimateId] = useState<
+    Record<string, string>
+  >({});
   const [teamEstimateQuery, setTeamEstimateQuery] = useState("");
   const [teamEstimateScope, setTeamEstimateScope] = useState<
     "all" | "mine" | "recent"
   >("all");
+  const [projectActionNotice, setProjectActionNotice] = useState<string | null>(null);
+  const [floatingDockOpen, setFloatingDockOpen] = useState(false);
+  const [floatingDockMoveTargetId, setFloatingDockMoveTargetId] = useState("");
   const [loadedEstimatePayload, setLoadedEstimatePayload] = useState<Record<
     string,
     any
@@ -442,6 +456,7 @@ export default function HomePage() {
   const [estimateTags, setEstimateTags] = useState<string[]>([]);
   const [estimateTagInput, setEstimateTagInput] = useState("");
   const progressResetTimeoutRef = useRef<number | null>(null);
+  const draftRestoredRef = useRef(false);
   const [library, setLibrary] = useState<LibraryState>({
     workbook: { items: [], loading: false, error: null },
     template: { items: [], loading: false, error: null },
@@ -721,6 +736,17 @@ export default function HomePage() {
       editingEstimateId ? findTeamEstimateById(editingEstimateId) : null,
     [editingEstimateId, findTeamEstimateById]
   );
+  const hasSelectedProject = Boolean(
+    activeProjectId && activeProjectId !== UNASSIGNED_PROJECT_KEY
+  );
+  const activeEditingEstimateProjectId = String(
+    activeEditingEstimate?.project?.id ?? ""
+  ).trim();
+  const floatingDockMoveOptions = useMemo(
+    () =>
+      teamProjects.filter((project) => project.id !== activeEditingEstimateProjectId),
+    [activeEditingEstimateProjectId, teamProjects]
+  );
   const activeTrackedPandaDocDocument = useMemo(
     () =>
       activeEditingEstimate
@@ -899,6 +925,105 @@ export default function HomePage() {
       setActiveProjectId(nextProjectId);
     }
   }, [activeProjectId, teamProjects, unassignedTeamEstimates.length]);
+
+  useEffect(() => {
+    if (!floatingDockMoveOptions.length) {
+      if (floatingDockMoveTargetId) {
+        setFloatingDockMoveTargetId("");
+      }
+      return;
+    }
+    if (
+      floatingDockMoveTargetId &&
+      floatingDockMoveOptions.some((project) => project.id === floatingDockMoveTargetId)
+    ) {
+      return;
+    }
+    setFloatingDockMoveTargetId(floatingDockMoveOptions[0]?.id ?? "");
+  }, [floatingDockMoveOptions, floatingDockMoveTargetId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const snapshot = {
+      estimateName,
+      estimateValues,
+      estimatePayload,
+      estimateTags,
+      editingEstimateId,
+      activeProjectId,
+      savedAt: Date.now(),
+    };
+    window.localStorage.setItem(LOCAL_DRAFT_STORAGE_KEY, JSON.stringify(snapshot));
+  }, [
+    activeProjectId,
+    editingEstimateId,
+    estimateName,
+    estimatePayload,
+    estimateTags,
+    estimateValues,
+  ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (draftRestoredRef.current) return;
+    draftRestoredRef.current = true;
+
+    const hasLocalWork =
+      Boolean(estimateName.trim()) ||
+      Boolean(estimatePayload) ||
+      Object.keys(estimateValues).length > 0 ||
+      estimateTags.length > 0 ||
+      Boolean(editingEstimateId);
+    if (hasLocalWork) return;
+
+    const raw = window.localStorage.getItem(LOCAL_DRAFT_STORAGE_KEY);
+    if (!raw) return;
+    try {
+      const parsed = JSON.parse(raw) as {
+        estimateName?: string;
+        estimateValues?: Record<string, string | number>;
+        estimatePayload?: Record<string, any> | null;
+        estimateTags?: string[];
+        editingEstimateId?: string | null;
+        activeProjectId?: string | null;
+      };
+      const restoredName = String(parsed?.estimateName ?? "").trim();
+      const restoredValues =
+        parsed?.estimateValues && typeof parsed.estimateValues === "object"
+          ? parsed.estimateValues
+          : {};
+      const restoredPayload =
+        parsed?.estimatePayload && typeof parsed.estimatePayload === "object"
+          ? parsed.estimatePayload
+          : null;
+      const restoredTags = normalizeEstimateTags(parsed?.estimateTags);
+      const restoredEditingEstimateId = String(
+        parsed?.editingEstimateId ?? ""
+      ).trim();
+      const restoredActiveProjectId = String(parsed?.activeProjectId ?? "").trim();
+      const hasRestoredData =
+        Boolean(restoredName) ||
+        Object.keys(restoredValues).length > 0 ||
+        Boolean(restoredPayload) ||
+        restoredTags.length > 0;
+      if (!hasRestoredData) return;
+
+      setEstimateName(restoredName);
+      setEstimateValues(restoredValues);
+      setEstimatePayload(restoredPayload);
+      setLoadedEstimatePayload(restoredPayload);
+      setEstimateTags(restoredTags);
+      if (restoredEditingEstimateId) {
+        setEditingEstimateId(restoredEditingEstimateId);
+      }
+      if (restoredActiveProjectId) {
+        setActiveProjectId(restoredActiveProjectId);
+      }
+      setProjectActionNotice("Restored your last unsaved estimate draft.");
+    } catch {
+      window.localStorage.removeItem(LOCAL_DRAFT_STORAGE_KEY);
+    }
+  }, [editingEstimateId, estimateName, estimatePayload, estimateTags, estimateValues]);
 
   useEffect(() => {
     if (!historyEstimateId) return;
@@ -1233,6 +1358,19 @@ export default function HomePage() {
     estimateValues,
     templateConfig?.name,
   ]);
+  const resetEstimateWorkspace = useCallback(() => {
+    setLoadedEstimatePayload(null);
+    setSelectedEstimate(null);
+    setEditingEstimateId(null);
+    setHistoryEstimateId(null);
+    setHistoryError(null);
+    setEstimateName("");
+    setEstimateValues({});
+    setEstimatePayload(null);
+    setEstimateTags([]);
+    setEstimateTagInput("");
+    setProjectActionNotice("Started a new estimate.");
+  }, []);
 
   const persistGeneratedEstimateVersion = useCallback(
     async (generation?: PandaDocGenerationResponse | null) => {
@@ -1677,6 +1815,7 @@ export default function HomePage() {
             }),
           db.tx.projects[targetProjectId].update({ updatedAt: now }),
         ]);
+        setProjectActionNotice(`Updated "${title}" in the active project.`);
         return;
       }
 
@@ -1719,11 +1858,277 @@ export default function HomePage() {
         db.tx.projects[targetProjectId].update({ updatedAt: now }),
       ]);
       setEditingEstimateId(estimateId);
+      setProjectActionNotice(`Saved "${title}" to the active project.`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setError(message);
     }
   };
+
+  const handleRenameCurrentEstimate = useCallback(() => {
+    const current = estimateName.trim() || "Untitled Estimate";
+    const next = window.prompt("Rename current estimate", current);
+    if (next === null) return;
+    const normalized = next.trim();
+    if (!normalized) return;
+    setEstimateName(normalized);
+    setProjectActionNotice("Estimate name updated.");
+  }, [estimateName]);
+
+  const handleRenameActiveProject = useCallback(async () => {
+    setError(null);
+    if (!convexAppUrl) {
+      setError("Convex is not configured yet.");
+      return;
+    }
+    if (!convexUser) {
+      setError("Sign in to rename projects.");
+      return;
+    }
+    if (!activeTeam || !activeMembership) {
+      setError("Select a team workspace first.");
+      return;
+    }
+    if (!activeProject) {
+      setError("Select a project to rename.");
+      return;
+    }
+
+    const current = String(activeProject.name ?? "").trim() || "Project";
+    const next = window.prompt("Rename active project", current);
+    if (next === null) return;
+    const normalized = next.trim();
+    if (!normalized || normalized === current) return;
+
+    try {
+      const now = Date.now();
+      await db.transact(
+        db.tx.projects[activeProject.id].update({
+          name: normalized,
+          updatedAt: now,
+        })
+      );
+      setProjectActionNotice(`Renamed project to "${normalized}".`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setError(message);
+    }
+  }, [
+    activeMembership,
+    activeProject,
+    activeTeam,
+    convexAppUrl,
+    convexUser,
+  ]);
+
+  const handleMoveEstimateToProject = useCallback(
+    async (estimate: any, targetProjectId: string) => {
+      setError(null);
+      if (!convexAppUrl) {
+        setError("Convex is not configured yet.");
+        return;
+      }
+      if (!convexUser) {
+        setError("Sign in to move estimates.");
+        return;
+      }
+      if (!activeTeam || !activeMembership) {
+        setError("Select a team workspace first.");
+        return;
+      }
+      const estimateId = String(estimate?.id ?? "").trim();
+      if (!estimateId) {
+        setError("Select an estimate to move.");
+        return;
+      }
+      const destinationProject = teamProjects.find(
+        (project) => project.id === targetProjectId
+      );
+      if (!destinationProject) {
+        setError("Choose a valid destination project.");
+        return;
+      }
+      const sourceProjectId = String(estimate?.project?.id ?? "").trim();
+      if (sourceProjectId === targetProjectId) return;
+
+      setMovingEstimateId(estimateId);
+      try {
+        const now = Date.now();
+        const operations = [
+          db.tx.estimates[estimateId]
+            .update({ updatedAt: now })
+            .link({
+              team: activeTeam.id,
+              owner: convexUser.id,
+              project: targetProjectId,
+            }),
+          db.tx.projects[targetProjectId].update({ updatedAt: now }),
+          ...(sourceProjectId && sourceProjectId !== targetProjectId
+            ? [db.tx.projects[sourceProjectId].update({ updatedAt: now })]
+            : []),
+        ];
+        await db.transact(operations);
+
+        setMoveTargetByEstimateId((previous) => {
+          const next = { ...previous };
+          delete next[estimateId];
+          return next;
+        });
+        if (editingEstimateId === estimateId) {
+          setActiveProjectId(targetProjectId);
+        }
+        const estimateTitle = String(estimate?.title ?? "").trim() || "Estimate";
+        setProjectActionNotice(
+          `Moved "${estimateTitle}" to "${destinationProject.name}".`
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error.";
+        setError(message);
+      } finally {
+        setMovingEstimateId(null);
+      }
+    },
+    [
+      activeMembership,
+      activeTeam,
+      convexAppUrl,
+      convexUser,
+      editingEstimateId,
+      teamProjects,
+    ]
+  );
+
+  const handleMoveEditingEstimateToProject = useCallback(async () => {
+    if (!activeEditingEstimate) {
+      setError("Load an estimate before moving it.");
+      return;
+    }
+    if (!floatingDockMoveTargetId) {
+      setError("Choose a destination project in the action dock.");
+      return;
+    }
+    await handleMoveEstimateToProject(activeEditingEstimate, floatingDockMoveTargetId);
+  }, [activeEditingEstimate, floatingDockMoveTargetId, handleMoveEstimateToProject]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      const withModifier = event.metaKey || event.ctrlKey;
+      if (!withModifier) return;
+
+      if (key === "s") {
+        event.preventDefault();
+        if (!hasSelectedProject) {
+          setError("Select or create a project before saving estimates.");
+          return;
+        }
+        void handleSaveEstimateToDb();
+        return;
+      }
+
+      if (key === "enter") {
+        event.preventDefault();
+        void handleGenerate();
+        return;
+      }
+
+      if (event.shiftKey && key === "n") {
+        event.preventDefault();
+        resetEstimateWorkspace();
+        return;
+      }
+
+      if (key === ".") {
+        event.preventDefault();
+        setFloatingDockOpen((open) => !open);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    handleGenerate,
+    hasSelectedProject,
+    handleSaveEstimateToDb,
+    resetEstimateWorkspace,
+  ]);
+
+  useEffect(() => {
+    if (!floatingDockOpen) return;
+    const onEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setFloatingDockOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onEscape);
+    return () => window.removeEventListener("keydown", onEscape);
+  }, [floatingDockOpen]);
+
+  const handleOpenActiveEstimateHistory = useCallback(() => {
+    if (!activeEditingEstimate) {
+      setError("Load an estimate to inspect version history.");
+      return;
+    }
+    setHistoryEstimateId(activeEditingEstimate.id);
+    setProjectActionNotice("Version history opened.");
+  }, [activeEditingEstimate]);
+
+  const handleCreateProjectFromDock = useCallback(async () => {
+    setError(null);
+    if (!convexAppUrl) {
+      setError("Convex is not configured yet.");
+      return;
+    }
+    if (!convexUser) {
+      setError("Sign in to create projects.");
+      return;
+    }
+    if (!activeTeam || !activeMembership) {
+      setError("Select a team workspace first.");
+      return;
+    }
+
+    const suggestedName =
+      estimateName.trim() ||
+      activeEditingEstimate?.title ||
+      activeProject?.name ||
+      "New Project";
+    const entered = window.prompt("Create project", suggestedName);
+    if (entered === null) return;
+    const normalized = entered.trim();
+    if (!normalized) {
+      setError("Enter a project name.");
+      return;
+    }
+
+    try {
+      const now = Date.now();
+      const projectId = id();
+      await db.transact(
+        db.tx.projects[projectId]
+          .create({
+            name: normalized,
+            status: "active",
+            createdAt: now,
+            updatedAt: now,
+          })
+          .link({ team: activeTeam.id, owner: convexUser.id })
+      );
+      setActiveProjectId(projectId);
+      setProjectActionNotice(`Created project "${normalized}".`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setError(message);
+    }
+  }, [
+    activeEditingEstimate?.title,
+    activeMembership,
+    activeProject?.name,
+    activeTeam,
+    convexAppUrl,
+    convexUser,
+    estimateName,
+  ]);
 
   const handleCreateProject = async () => {
     setError(null);
@@ -1761,6 +2166,7 @@ export default function HomePage() {
       );
       setActiveProjectId(projectId);
       setNewProjectName("");
+      setProjectActionNotice(`Created project "${name}".`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setError(message);
@@ -2459,6 +2865,25 @@ export default function HomePage() {
                     </Badge>
                   </div>
                 </div>
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-background/70 px-3 py-2">
+                  <p className="text-xs text-muted-foreground">
+                    Power workflow: use shortcuts for speed while estimating.
+                  </p>
+                  <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                    <Badge variant="outline" className="bg-background/80">
+                      Ctrl/Cmd+S save
+                    </Badge>
+                    <Badge variant="outline" className="bg-background/80">
+                      Ctrl/Cmd+Enter generate
+                    </Badge>
+                    <Badge variant="outline" className="bg-background/80">
+                      Ctrl/Cmd+Shift+N new
+                    </Badge>
+                    <Badge variant="outline" className="bg-background/80">
+                      Ctrl/Cmd+. dock
+                    </Badge>
+                  </div>
+                </div>
                 <div className="grid gap-3 lg:grid-cols-[0.8fr_0.2fr]">
                   <div className="relative">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -2586,6 +3011,11 @@ export default function HomePage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
+                {projectActionNotice ? (
+                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-800">
+                    {projectActionNotice}
+                  </div>
+                ) : null}
                 {!teamReady ? (
                   <div className="text-sm text-muted-foreground">
                     Preparing your team workspace...
@@ -2602,6 +3032,17 @@ export default function HomePage() {
                         const historyOpen = historyEstimateId === estimate.id;
                         const editingCurrent = editingEstimateId === estimate.id;
                         const tags = normalizeEstimateTags(estimate?.tags);
+                        const estimateProjectId = String(
+                          estimate?.project?.id ?? ""
+                        ).trim();
+                        const destinationProjects = teamProjects.filter(
+                          (project) => project.id !== estimateProjectId
+                        );
+                        const selectedMoveTarget =
+                          moveTargetByEstimateId[estimate.id] ??
+                          destinationProjects[0]?.id ??
+                          "";
+                        const isMovingEstimate = movingEstimateId === estimate.id;
                         return (
                           <div
                             key={estimate.id}
@@ -2649,7 +3090,59 @@ export default function HomePage() {
                                   </div>
                                 ) : null}
                               </div>
-                              <div className="flex items-center gap-2">
+                              <div className="flex flex-wrap items-center justify-end gap-2">
+                                {destinationProjects.length ? (
+                                  <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-background/80 p-1">
+                                    <Select
+                                      value={selectedMoveTarget || undefined}
+                                      onValueChange={(value) =>
+                                        setMoveTargetByEstimateId((previous) => ({
+                                          ...previous,
+                                          [estimate.id]: value,
+                                        }))
+                                      }
+                                    >
+                                      <SelectTrigger className="h-8 min-w-[170px] border-0 bg-transparent px-2 text-xs">
+                                        <SelectValue placeholder="Move to..." />
+                                      </SelectTrigger>
+                                      <SelectContent>
+                                        {destinationProjects.map((project) => (
+                                          <SelectItem
+                                            key={`${estimate.id}-${project.id}`}
+                                            value={project.id}
+                                          >
+                                            {project.name}
+                                          </SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="h-8"
+                                      disabled={
+                                        isMovingEstimate || !selectedMoveTarget
+                                      }
+                                      onClick={() =>
+                                        void handleMoveEstimateToProject(
+                                          estimate,
+                                          selectedMoveTarget
+                                        )
+                                      }
+                                    >
+                                      {isMovingEstimate ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        <ArrowRightLeft className="h-3.5 w-3.5" />
+                                      )}
+                                      Move
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <span className="text-[11px] text-muted-foreground">
+                                    Only project
+                                  </span>
+                                )}
                                 <Button
                                   variant="secondary"
                                   size="sm"
@@ -2871,11 +3364,7 @@ export default function HomePage() {
               <Button
                 variant="secondary"
                 onClick={() => void handleSaveEstimateToDb()}
-                disabled={
-                  !isSignedIn ||
-                  !teamReady ||
-                  !(activeProjectId && activeProjectId !== UNASSIGNED_PROJECT_KEY)
-                }
+                disabled={!isSignedIn || !teamReady || !hasSelectedProject}
               >
                 {editingEstimateId ? "Update project estimate" : "Save to project"}
               </Button>
@@ -2883,17 +3372,7 @@ export default function HomePage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => {
-                    setLoadedEstimatePayload(null);
-                    setEditingEstimateId(null);
-                    setHistoryEstimateId(null);
-                    setHistoryError(null);
-                    setEstimateName("");
-                    setEstimateValues({});
-                    setEstimatePayload(null);
-                    setEstimateTags([]);
-                    setEstimateTagInput("");
-                  }}
+                  onClick={resetEstimateWorkspace}
                 >
                   New estimate
                 </Button>
@@ -2906,7 +3385,7 @@ export default function HomePage() {
                 <span className="text-xs text-muted-foreground">
                   Select a team to save estimates.
                 </span>
-              ) : !(activeProjectId && activeProjectId !== UNASSIGNED_PROJECT_KEY) ? (
+              ) : !hasSelectedProject ? (
                 <span className="text-xs text-muted-foreground">
                   Select or create a project before saving estimates.
                 </span>
@@ -3158,6 +3637,164 @@ export default function HomePage() {
 
           </>
         )}
+
+        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
+          {floatingDockOpen ? (
+            <div className="w-[320px] space-y-2 rounded-2xl border border-border/70 bg-card/95 p-3 shadow-elevated backdrop-blur">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-foreground">Project Action Dock</p>
+                <Badge variant="outline" className="bg-background/80 text-[10px]">
+                  Power Mode
+                </Badge>
+              </div>
+              {activeEditingEstimate && floatingDockMoveOptions.length ? (
+                <div className="space-y-1">
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                    Move Loaded Estimate
+                  </p>
+                  <Select
+                    value={floatingDockMoveTargetId || undefined}
+                    onValueChange={setFloatingDockMoveTargetId}
+                  >
+                    <SelectTrigger className="h-9 bg-background/80">
+                      <SelectValue placeholder="Choose destination project" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {floatingDockMoveOptions.map((project) => (
+                        <SelectItem key={`dock-move-${project.id}`} value={project.id}>
+                          {project.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  Load an estimate to enable move and version-control actions.
+                </p>
+              )}
+            </div>
+          ) : null}
+          <div className="relative h-56 w-56">
+            <div
+              className={cn(
+                "absolute inset-0 transition-all duration-300",
+                floatingDockOpen
+                  ? "scale-100 opacity-100"
+                  : "pointer-events-none scale-75 opacity-0"
+              )}
+            >
+              <Button
+                variant="secondary"
+                size="icon"
+                className="absolute bottom-0 right-0 h-11 w-11 rounded-full border border-border/60 shadow-lg"
+                style={{ transform: "translate(-88px, -32px)" }}
+                onClick={() => void handleSaveEstimateToDb()}
+                disabled={!isSignedIn || !teamReady || !hasSelectedProject}
+                title="Save estimate to active project"
+              >
+                <Workflow className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="secondary"
+                size="icon"
+                className="absolute bottom-0 right-0 h-11 w-11 rounded-full border border-border/60 shadow-lg"
+                style={{ transform: "translate(-128px, -84px)" }}
+                onClick={handleGenerate}
+                disabled={!canGenerate || isGenerating}
+                title="Generate PandaDoc"
+              >
+                <Rocket className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="secondary"
+                size="icon"
+                className="absolute bottom-0 right-0 h-11 w-11 rounded-full border border-border/60 shadow-lg"
+                style={{ transform: "translate(-150px, -146px)" }}
+                onClick={() => void handleMoveEditingEstimateToProject()}
+                disabled={
+                  !activeEditingEstimate ||
+                  !floatingDockMoveTargetId ||
+                  !floatingDockMoveOptions.length ||
+                  movingEstimateId === activeEditingEstimate.id
+                }
+                title="Move loaded estimate to selected project"
+              >
+                {movingEstimateId === activeEditingEstimate?.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <ArrowRightLeft className="h-4 w-4" />
+                )}
+              </Button>
+              <Button
+                variant="secondary"
+                size="icon"
+                className="absolute bottom-0 right-0 h-11 w-11 rounded-full border border-border/60 shadow-lg"
+                style={{ transform: "translate(-108px, -196px)" }}
+                onClick={handleRenameCurrentEstimate}
+                title="Rename current estimate"
+              >
+                <PencilLine className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="secondary"
+                size="icon"
+                className="absolute bottom-0 right-0 h-11 w-11 rounded-full border border-border/60 shadow-lg"
+                style={{ transform: "translate(-46px, -214px)" }}
+                onClick={() => void handleRenameActiveProject()}
+                disabled={!activeProject}
+                title="Rename active project"
+              >
+                <Settings2 className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="secondary"
+                size="icon"
+                className="absolute bottom-0 right-0 h-11 w-11 rounded-full border border-border/60 shadow-lg"
+                style={{ transform: "translate(16px, -206px)" }}
+                onClick={handleOpenActiveEstimateHistory}
+                disabled={!activeEditingEstimate}
+                title="Open version history for loaded estimate"
+              >
+                <History className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="secondary"
+                size="icon"
+                className="absolute bottom-0 right-0 h-11 w-11 rounded-full border border-border/60 shadow-lg"
+                style={{ transform: "translate(64px, -160px)" }}
+                onClick={resetEstimateWorkspace}
+                title="Start a new estimate"
+              >
+                <RotateCcw className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="secondary"
+                size="icon"
+                className="absolute bottom-0 right-0 h-11 w-11 rounded-full border border-border/60 shadow-lg"
+                style={{ transform: "translate(86px, -102px)" }}
+                onClick={() => void handleCreateProjectFromDock()}
+                disabled={!isSignedIn || !teamReady}
+                title="Create a project quickly"
+              >
+                <Plus className="h-4 w-4" />
+              </Button>
+            </div>
+            <Button
+              variant="accent"
+              size="icon"
+              className="absolute bottom-0 right-0 h-14 w-14 rounded-full border border-accent/40 shadow-xl"
+              onClick={() => setFloatingDockOpen((open) => !open)}
+              title={floatingDockOpen ? "Close action dock" : "Open action dock"}
+            >
+              {floatingDockOpen ? (
+                <X className="h-5 w-5" />
+              ) : (
+                <Workflow className="h-5 w-5" />
+              )}
+            </Button>
+          </div>
+        </div>
 
         <Separator className="my-12" />
 
