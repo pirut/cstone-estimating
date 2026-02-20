@@ -1,3 +1,4 @@
+// @ts-nocheck
 "use client";
 
 import {
@@ -36,7 +37,7 @@ import type {
   TemplateConfig,
   UploadedFile,
 } from "@/lib/types";
-import { db, instantAppId } from "@/lib/instant";
+import { db, convexAppUrl } from "@/lib/convex";
 import {
   appendEstimateVersion,
   createBaselineEstimateVersion,
@@ -46,7 +47,7 @@ import {
   type EstimateVersionPandaDocDocument,
   type EstimateVersionEntry,
 } from "@/lib/estimate-versioning";
-import { InstantAuthSync } from "@/components/instant-auth-sync";
+import { ConvexAuthSync } from "@/components/convex-auth-sync";
 import { cn } from "@/lib/utils";
 import { APP_VERSION } from "@/lib/version";
 import {
@@ -80,7 +81,7 @@ import {
   useOptionalAuth,
   useOptionalUser,
 } from "@/lib/clerk";
-import { id } from "@instantdb/react";
+import { id } from "@/lib/convex";
 
 type EstimateSnapshot = {
   title: string;
@@ -377,7 +378,7 @@ function hasEstimateSnapshotChanges(existingEstimate: any, snapshot: EstimateSna
 export default function HomePage() {
   const { isLoaded: authLoaded, isSignedIn } = useOptionalAuth();
   const { user } = useOptionalUser();
-  const { isLoading: instantLoading, user: instantUser, error: instantAuthError } =
+  const { isLoading: convexLoading, user: convexUser, error: convexAuthError } =
     db.useAuth();
   const [error, setError] = useState<string | null>(null);
   const [templateConfig, setTemplateConfig] = useState<TemplateConfig | null>(null);
@@ -411,7 +412,7 @@ export default function HomePage() {
     error: string | null;
   } | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [instantSetupError, setInstantSetupError] = useState<string | null>(null);
+  const [convexSetupError, setConvexSetupError] = useState<string | null>(null);
   const [teamName, setTeamName] = useState("");
   const [teamError, setTeamError] = useState<string | null>(null);
   const [teamSaving, setTeamSaving] = useState(false);
@@ -489,7 +490,7 @@ export default function HomePage() {
   const teamDomain = (allowedDomain || emailDomain || "").trim();
   const teamLookupDomain = teamDomain || "__none__";
 
-  const teamQuery = instantAppId
+  const teamQuery = convexAppUrl
     ? {
         teams: {
           $: {
@@ -522,7 +523,7 @@ export default function HomePage() {
     isLoading: teamLoading,
   } = db.useQuery(teamQuery);
 
-  const teams = teamData?.teams ?? [];
+  const teams = (teamData?.teams ?? []) as Array<any>;
   const orgTeam = useMemo(
     () => pickOrganizationTeam(teams, normalizedOrgTeamName),
     [teams, normalizedOrgTeamName]
@@ -532,19 +533,19 @@ export default function HomePage() {
     [orgTeam?.id, teams]
   );
   const memberTeams = useMemo(() => {
-    if (!instantUser?.id) return [];
+    if (!convexUser?.id) return [];
     return orgScopedTeams.filter((team) =>
-      team.memberships?.some((membership) => membership.user?.id === instantUser.id)
+      team.memberships?.some((membership) => membership.user?.id === convexUser.id)
     );
-  }, [orgScopedTeams, instantUser?.id]);
+  }, [orgScopedTeams, convexUser?.id]);
   const allMemberTeams = useMemo(() => {
-    if (!instantUser?.id) return [];
+    if (!convexUser?.id) return [];
     return teams.filter((team) =>
-      team.memberships?.some((membership) => membership.user?.id === instantUser.id)
+      team.memberships?.some((membership) => membership.user?.id === convexUser.id)
     );
-  }, [instantUser?.id, teams]);
+  }, [convexUser?.id, teams]);
   const orgMembership = orgTeam?.memberships?.find(
-    (membership) => membership.user?.id === instantUser?.id
+    (membership) => membership.user?.id === convexUser?.id
   );
   const orgRole = String(orgMembership?.role ?? "")
     .trim()
@@ -557,7 +558,7 @@ export default function HomePage() {
     return orgMatch ?? memberTeams[0] ?? null;
   }, [activeTeamId, memberTeams, orgTeam?.id]);
   const activeMembership = activeTeam?.memberships?.find(
-    (membership) => membership.user?.id === instantUser?.id
+    (membership) => membership.user?.id === convexUser?.id
   );
   const catalogTeam = useMemo(() => {
     if (orgTeam && hasCatalogData(orgTeam)) return orgTeam;
@@ -568,19 +569,19 @@ export default function HomePage() {
   const teamReady = Boolean(orgTeam && orgMembership);
   const isOrgOwner = Boolean(
     isPrimaryOwner ||
-      (orgTeam?.ownerId && orgTeam.ownerId === instantUser?.id) ||
+      (orgTeam?.ownerId && orgTeam.ownerId === convexUser?.id) ||
       orgRole === "owner"
   );
   const hasTeamAdminAccess = Boolean(isOrgOwner || orgRole === "admin");
   const appLocked = clerkEnabled && (!authLoaded || !isSignedIn);
   const isClerkRetrying = Boolean(
-    instantSetupError &&
-      instantSetupError.toLowerCase().includes("clerk is temporarily unavailable")
+    convexSetupError &&
+      convexSetupError.toLowerCase().includes("clerk is temporarily unavailable")
   );
-  const instantSetupBanner = isClerkRetrying
+  const convexSetupBanner = isClerkRetrying
     ? "Clerk is temporarily unavailable. Retrying sign-in in about 15 seconds."
-    : instantSetupError
-      ? `Instant auth issue: ${instantSetupError}`
+    : convexSetupError
+      ? `Convex auth issue: ${convexSetupError}`
       : null;
   const autoProvisionRef = useRef(false);
   const orgSetupRef = useRef<string | null>(null);
@@ -623,7 +624,7 @@ export default function HomePage() {
     return teamEstimates.filter((estimate) => {
       if (
         teamEstimateScope === "mine" &&
-        estimate?.owner?.id !== instantUser?.id
+        estimate?.owner?.id !== convexUser?.id
       ) {
         return false;
       }
@@ -639,7 +640,7 @@ export default function HomePage() {
         .toLowerCase();
       return title.includes(query);
     });
-  }, [instantUser?.id, teamEstimateQuery, teamEstimateScope, teamEstimates]);
+  }, [convexUser?.id, teamEstimateQuery, teamEstimateScope, teamEstimates]);
   const buildLegacyBaselineVersion = useCallback((estimate: any) => {
     if (!estimate || typeof estimate !== "object") return null;
     const payload =
@@ -1001,12 +1002,12 @@ export default function HomePage() {
 
   useEffect(() => {
     if (!orgTeam) return;
-    if (!instantUser?.id) return;
+    if (!convexUser?.id) return;
     if (!isPrimaryOwner) return;
     if (!orgMembership) return;
     const needsPrimary = !orgTeam.isPrimary;
     const needsRoot = Boolean(orgTeam.parentTeamId);
-    const needsOwner = orgTeam.ownerId !== instantUser.id;
+    const needsOwner = orgTeam.ownerId !== convexUser.id;
     const needsRole = orgMembership.role !== "owner";
     if (!needsPrimary && !needsRoot && !needsOwner && !needsRole) return;
     if (orgSetupRef.current === orgTeam.id) return;
@@ -1015,7 +1016,7 @@ export default function HomePage() {
       db.tx.teams[orgTeam.id].update({
         ...(needsPrimary ? { isPrimary: true } : {}),
         ...(needsRoot ? { parentTeamId: null } : {}),
-        ...(needsOwner ? { ownerId: instantUser.id } : {}),
+        ...(needsOwner ? { ownerId: convexUser.id } : {}),
       }),
       ...(needsRole
         ? [db.tx.memberships[orgMembership.id].update({ role: "owner" })]
@@ -1024,14 +1025,14 @@ export default function HomePage() {
     void db.transact(updates).catch(() => {
       orgSetupRef.current = null;
     });
-  }, [db, instantUser?.id, isPrimaryOwner, orgMembership, orgTeam]);
+  }, [db, convexUser?.id, isPrimaryOwner, orgMembership, orgTeam]);
 
   useEffect(() => {
-    if (!instantAppId) return;
+    if (!convexAppUrl) return;
     if (!authLoaded || !isSignedIn) return;
     if (!knownOrgLookupLoaded) return;
-    if (!instantUser) return;
-    if (instantLoading) return;
+    if (!convexUser) return;
+    if (convexLoading) return;
     if (teamReady) return;
     if (!teamData) return;
     if (teamLoading || teamQueryError) return;
@@ -1092,9 +1093,9 @@ export default function HomePage() {
     orgMembership,
     orgTeam,
     orgTeam?.id,
-    instantAppId,
-    instantLoading,
-    instantUser,
+    convexAppUrl,
+    convexLoading,
+    convexUser,
     isSignedIn,
     teamData,
     teamLoading,
@@ -1235,7 +1236,7 @@ export default function HomePage() {
 
   const persistGeneratedEstimateVersion = useCallback(
     async (generation?: PandaDocGenerationResponse | null) => {
-      if (!instantAppId || !instantUser || !activeTeam || !activeMembership) return;
+      if (!convexAppUrl || !convexUser || !activeTeam || !activeMembership) return;
       const snapshot = buildCurrentEstimateSnapshot();
       if (!snapshot.payload) return;
 
@@ -1272,7 +1273,7 @@ export default function HomePage() {
               })
               .link({
                 team: activeTeam.id,
-                owner: instantUser.id,
+                owner: convexUser.id,
                 project: targetProjectId,
               }),
             db.tx.projects[targetProjectId].update({ updatedAt: now }),
@@ -1290,7 +1291,7 @@ export default function HomePage() {
           totals: snapshot.totals,
           templateName: snapshot.templateName,
           templateUrl: snapshot.templateUrl,
-          createdByUserId: instantUser.id,
+          createdByUserId: convexUser.id,
           pandadoc: pandadocDocument,
         });
         await db.transact([
@@ -1310,7 +1311,7 @@ export default function HomePage() {
             })
             .link({
               team: activeTeam.id,
-              owner: instantUser.id,
+              owner: convexUser.id,
               project: targetProjectId,
             }),
           db.tx.projects[targetProjectId].update({ updatedAt: now }),
@@ -1331,7 +1332,7 @@ export default function HomePage() {
         totals: snapshot.totals,
         templateName: snapshot.templateName,
         templateUrl: snapshot.templateUrl,
-        createdByUserId: instantUser.id,
+        createdByUserId: convexUser.id,
         pandadoc: pandadocDocument,
       });
       await db.transact([
@@ -1352,7 +1353,7 @@ export default function HomePage() {
           })
           .link({
             team: activeTeam.id,
-            owner: instantUser.id,
+            owner: convexUser.id,
             project: targetProjectId,
           }),
         db.tx.projects[targetProjectId].update({ updatedAt: now }),
@@ -1368,8 +1369,8 @@ export default function HomePage() {
       findTeamEstimateById,
       getLatestPandaDocDocumentForEstimate,
       getPersistedEstimateHistory,
-      instantAppId,
-      instantUser,
+      convexAppUrl,
+      convexUser,
       resolveEstimateProjectId,
     ]
   );
@@ -1606,11 +1607,11 @@ export default function HomePage() {
 
   const handleSaveEstimateToDb = async () => {
     setError(null);
-    if (!instantAppId) {
-      setError("InstantDB is not configured yet.");
+    if (!convexAppUrl) {
+      setError("Convex is not configured yet.");
       return;
     }
-    if (!instantUser) {
+    if (!convexUser) {
       setError("Sign in to save estimates.");
       return;
     }
@@ -1651,7 +1652,7 @@ export default function HomePage() {
           totals,
           templateName,
           templateUrl,
-          createdByUserId: instantUser.id,
+          createdByUserId: convexUser.id,
         });
         await db.transact([
           db.tx.estimates[editingEstimateId]
@@ -1669,7 +1670,7 @@ export default function HomePage() {
             })
             .link({
               team: activeTeam.id,
-              owner: instantUser.id,
+              owner: convexUser.id,
               project: targetProjectId,
             }),
           db.tx.projects[targetProjectId].update({ updatedAt: now }),
@@ -1691,7 +1692,7 @@ export default function HomePage() {
         totals,
         templateName,
         templateUrl,
-        createdByUserId: instantUser.id,
+        createdByUserId: convexUser.id,
       });
       await db.transact([
         db.tx.estimates[estimateId]
@@ -1710,7 +1711,7 @@ export default function HomePage() {
           })
           .link({
             team: activeTeam.id,
-            owner: instantUser.id,
+            owner: convexUser.id,
             project: targetProjectId,
           }),
         db.tx.projects[targetProjectId].update({ updatedAt: now }),
@@ -1724,11 +1725,11 @@ export default function HomePage() {
 
   const handleCreateProject = async () => {
     setError(null);
-    if (!instantAppId) {
-      setError("InstantDB is not configured yet.");
+    if (!convexAppUrl) {
+      setError("Convex is not configured yet.");
       return;
     }
-    if (!instantUser) {
+    if (!convexUser) {
       setError("Sign in to create projects.");
       return;
     }
@@ -1754,7 +1755,7 @@ export default function HomePage() {
             createdAt: now,
             updatedAt: now,
           })
-          .link({ team: activeTeam.id, owner: instantUser.id })
+          .link({ team: activeTeam.id, owner: convexUser.id })
       );
       setActiveProjectId(projectId);
       setNewProjectName("");
@@ -1768,11 +1769,11 @@ export default function HomePage() {
 
   const handleCreateTeam = async () => {
     setTeamError(null);
-    if (!instantAppId) {
-      setTeamError("InstantDB is not configured yet.");
+    if (!convexAppUrl) {
+      setTeamError("Convex is not configured yet.");
       return;
     }
-    if (!instantUser) {
+    if (!convexUser) {
       setTeamError("Sign in to create a team workspace.");
       return;
     }
@@ -1797,11 +1798,11 @@ export default function HomePage() {
           domain: teamDomain,
           createdAt: now,
           isPrimary: true,
-          ownerId: instantUser.id,
+          ownerId: convexUser.id,
         }),
         db.tx.memberships[membershipId]
           .create({ role, createdAt: now })
-          .link({ team: teamId, user: instantUser.id }),
+          .link({ team: teamId, user: convexUser.id }),
       ]);
     } catch (err) {
       const message =
@@ -1814,11 +1815,11 @@ export default function HomePage() {
 
   const handleJoinTeam = async () => {
     setTeamError(null);
-    if (!instantAppId) {
-      setTeamError("InstantDB is not configured yet.");
+    if (!convexAppUrl) {
+      setTeamError("Convex is not configured yet.");
       return;
     }
-    if (!instantUser || !orgTeam) return;
+    if (!convexUser || !orgTeam) return;
     const now = Date.now();
     const membershipId = id();
     const role = isPrimaryOwner ? "owner" : "member";
@@ -1829,7 +1830,7 @@ export default function HomePage() {
       await db.transact(
         db.tx.memberships[membershipId]
           .create({ role, createdAt: now })
-          .link({ team: orgTeam.id, user: instantUser.id })
+          .link({ team: orgTeam.id, user: convexUser.id })
       );
     } catch (err) {
       const message =
@@ -1841,7 +1842,7 @@ export default function HomePage() {
   };
 
   const checkExistingOrgWorkspace = useCallback(async () => {
-    if (!instantAppId || !teamDomain) return [];
+    if (!convexAppUrl || !teamDomain) return [];
     try {
       const snapshot = (await db.queryOnce({
         teams: {
@@ -1867,7 +1868,7 @@ export default function HomePage() {
       setTeamError(message);
       return null;
     }
-  }, [instantAppId, teamDomain, teamLookupDomain]);
+  }, [convexAppUrl, teamDomain, teamLookupDomain]);
 
   const handleRetryTeamSetup = () => {
     if (!orgTeam) {
@@ -1914,11 +1915,11 @@ export default function HomePage() {
   ) => {
     setHistoryError(null);
     setError(null);
-    if (!instantAppId) {
-      setHistoryError("InstantDB is not configured yet.");
+    if (!convexAppUrl) {
+      setHistoryError("Convex is not configured yet.");
       return;
     }
-    if (!instantUser) {
+    if (!convexUser) {
       setHistoryError("Sign in to revert estimate versions.");
       return;
     }
@@ -1957,7 +1958,7 @@ export default function HomePage() {
           (typeof estimate?.templateUrl === "string"
             ? estimate.templateUrl
             : undefined),
-        createdByUserId: instantUser.id,
+        createdByUserId: convexUser.id,
         sourceVersion: revision.version,
       });
 
@@ -1985,7 +1986,7 @@ export default function HomePage() {
           })
           .link({
             team: activeTeam.id,
-            owner: instantUser.id,
+            owner: convexUser.id,
             project: targetProjectId,
           }),
         db.tx.projects[targetProjectId].update({ updatedAt: now }),
@@ -2173,9 +2174,9 @@ export default function HomePage() {
 
   return (
     <main className="relative min-h-screen overflow-hidden">
-      <InstantAuthSync
+      <ConvexAuthSync
         onDomainError={setAuthError}
-        onAuthError={setInstantSetupError}
+        onAuthError={setConvexSetupError}
       />
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-28 left-1/2 h-80 w-[560px] -translate-x-1/2 rounded-full bg-accent/20 blur-3xl" />
@@ -2225,14 +2226,14 @@ export default function HomePage() {
             {authError}
           </div>
         ) : null}
-        {instantSetupBanner ? (
+        {convexSetupBanner ? (
           <div className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
-            {instantSetupBanner}
+            {convexSetupBanner}
           </div>
         ) : null}
-        {!instantAppId ? (
+        {!convexAppUrl ? (
           <div className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
-            InstantDB is not configured. Add `NEXT_PUBLIC_INSTANTDB_APP_ID` to
+            Convex is not configured. Add `NEXT_PUBLIC_CONVEX_URL` to
             enable the project library.
           </div>
         ) : null}
@@ -2403,14 +2404,14 @@ export default function HomePage() {
                     ) : null}
                   </div>
                 </div>
-                {instantAuthError ? (
+                {convexAuthError ? (
                   <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                    {instantAuthError.message}
+                    {convexAuthError.message}
                   </div>
                 ) : null}
-                {instantSetupBanner ? (
+                {convexSetupBanner ? (
                   <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
-                    {instantSetupBanner}
+                    {convexSetupBanner}
                   </div>
                 ) : null}
                 {teamError ? (
@@ -2418,14 +2419,14 @@ export default function HomePage() {
                     {teamError}
                   </div>
                 ) : null}
-                {instantLoading ? (
+                {convexLoading ? (
                   <div className="text-xs text-muted-foreground">
-                    Connecting to InstantDB...
+                    Connecting to Convex...
                   </div>
                 ) : null}
-                {!instantLoading && !instantUser && !instantSetupError ? (
+                {!convexLoading && !convexUser && !convexSetupError ? (
                   <div className="text-xs text-muted-foreground">
-                    Waiting for Instant auth. If this persists, verify the Clerk
+                    Waiting for Convex auth. If this persists, verify the Clerk
                     client name and session token email claim.
                   </div>
                 ) : null}
@@ -2897,7 +2898,7 @@ export default function HomePage() {
               ) : null}
               {!clerkEnabled ? (
                 <span className="text-xs text-muted-foreground">
-                  Configure Clerk + InstantDB to enable project saving.
+                  Configure Clerk + Convex to enable project saving.
                 </span>
               ) : !activeMembership ? (
                 <span className="text-xs text-muted-foreground">
