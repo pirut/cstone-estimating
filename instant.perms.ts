@@ -74,6 +74,20 @@ const perms = {
       delete: "isTeamMember || isWorkspaceAdmin || isTeamOwner || isPrimaryOwner",
     },
   },
+  projects: {
+    bind: {
+      isTeamMember,
+      isTeamOwner,
+      isPrimaryOwner,
+      isWorkspaceAdmin,
+    },
+    allow: {
+      view: "isTeamMember || isWorkspaceAdmin || isTeamOwner || isPrimaryOwner",
+      create: "isTeamMember",
+      update: "isTeamMember || isWorkspaceAdmin || isTeamOwner || isPrimaryOwner",
+      delete: "isTeamMember || isWorkspaceAdmin || isTeamOwner || isPrimaryOwner",
+    },
+  },
   vendors: {
     bind: {
       isTeamMember,

@@ -30,7 +30,15 @@ const _schema = i.schema({
       templateUrl: i.string().optional(),
       payload: i.json(),
       totals: i.json().optional(),
+      tags: i.json().optional(),
       versionHistory: i.json().optional(),
+    }),
+    projects: i.entity({
+      name: i.string().indexed(),
+      description: i.string().optional(),
+      status: i.string().indexed().optional(),
+      createdAt: i.number().indexed(),
+      updatedAt: i.number().indexed(),
     }),
     vendors: i.entity({
       name: i.string(),
@@ -108,6 +116,44 @@ const _schema = i.schema({
       },
       reverse: {
         on: "$users",
+        has: "many",
+        label: "estimates",
+      },
+    },
+    projectTeam: {
+      forward: {
+        on: "projects",
+        has: "one",
+        label: "team",
+        onDelete: "cascade",
+      },
+      reverse: {
+        on: "teams",
+        has: "many",
+        label: "projects",
+      },
+    },
+    projectOwner: {
+      forward: {
+        on: "projects",
+        has: "one",
+        label: "owner",
+        onDelete: "cascade",
+      },
+      reverse: {
+        on: "$users",
+        has: "many",
+        label: "projects",
+      },
+    },
+    estimateProject: {
+      forward: {
+        on: "estimates",
+        has: "one",
+        label: "project",
+      },
+      reverse: {
+        on: "projects",
         has: "many",
         label: "estimates",
       },

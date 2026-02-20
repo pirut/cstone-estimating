@@ -64,10 +64,14 @@ import {
   Clock3,
   CircleDashed,
   FileText,
+  FolderKanban,
   History,
   LayoutTemplate,
   Loader2,
+  Plus,
   Search,
+  Tag,
+  X,
 } from "lucide-react";
 import {
   SignInButton,
@@ -249,6 +253,23 @@ function formatTemplateDisplayName(name: string, templateVersion?: number) {
   return baseName;
 }
 
+const UNASSIGNED_PROJECT_KEY = "__unassigned__";
+
+function normalizeEstimateTags(source: unknown): string[] {
+  if (!Array.isArray(source)) return [];
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  source.forEach((entry) => {
+    const tag = String(entry ?? "").trim().replace(/\s+/g, " ");
+    if (!tag) return;
+    const normalized = tag.toLowerCase();
+    if (seen.has(normalized)) return;
+    seen.add(normalized);
+    tags.push(tag);
+  });
+  return tags;
+}
+
 function getMostRecentLibraryItem(items: LibraryItem[]) {
   return items
     .slice()
@@ -396,6 +417,9 @@ export default function HomePage() {
   const [teamSaving, setTeamSaving] = useState(false);
   const [teamSetupPending, setTeamSetupPending] = useState(false);
   const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [teamSetupAction, setTeamSetupAction] = useState<
     "idle" | "creating" | "joining"
   >("idle");
@@ -414,6 +438,8 @@ export default function HomePage() {
     string,
     any
   > | null>(null);
+  const [estimateTags, setEstimateTags] = useState<string[]>([]);
+  const [estimateTagInput, setEstimateTagInput] = useState("");
   const progressResetTimeoutRef = useRef<number | null>(null);
   const [library, setLibrary] = useState<LibraryState>({
     workbook: { items: [], loading: false, error: null },
@@ -471,7 +497,8 @@ export default function HomePage() {
             order: { createdAt: "desc" as const },
           },
           memberships: { user: {} },
-          estimates: { owner: {} },
+          estimates: { owner: {}, project: {} },
+          projects: { owner: {}, estimates: { owner: {}, project: {} } },
           vendors: {},
           unitTypes: {},
           productFeatureOptions: {},
@@ -481,7 +508,8 @@ export default function HomePage() {
         teams: {
           $: { where: { domain: "__none__" } },
           memberships: { user: {} },
-          estimates: { owner: {} },
+          estimates: { owner: {}, project: {} },
+          projects: { owner: {}, estimates: { owner: {}, project: {} } },
           vendors: {},
           unitTypes: {},
           productFeatureOptions: {},
@@ -556,12 +584,39 @@ export default function HomePage() {
       : null;
   const autoProvisionRef = useRef(false);
   const orgSetupRef = useRef<string | null>(null);
-  const teamEstimates = useMemo(() => {
+  const allTeamEstimates = useMemo(() => {
     const list = activeTeam?.estimates ?? [];
     return [...list].sort(
       (a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0)
     );
   }, [activeTeam?.estimates]);
+  const teamProjects = useMemo(() => {
+    const list = activeTeam?.projects ?? [];
+    return [...list].sort((a, b) => {
+      const left = b.updatedAt ?? b.createdAt ?? 0;
+      const right = a.updatedAt ?? a.createdAt ?? 0;
+      return left - right;
+    });
+  }, [activeTeam?.projects]);
+  const unassignedTeamEstimates = useMemo(
+    () =>
+      allTeamEstimates.filter(
+        (estimate) => !String(estimate?.project?.id ?? "").trim()
+      ),
+    [allTeamEstimates]
+  );
+  const activeProject = useMemo(() => {
+    if (!activeProjectId || activeProjectId === UNASSIGNED_PROJECT_KEY) return null;
+    return teamProjects.find((project) => project.id === activeProjectId) ?? null;
+  }, [activeProjectId, teamProjects]);
+  const teamEstimates = useMemo(() => {
+    if (activeProjectId === UNASSIGNED_PROJECT_KEY) {
+      return unassignedTeamEstimates;
+    }
+    if (!activeProject) return [];
+    const list = activeProject?.estimates ?? [];
+    return [...list].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
+  }, [activeProject, activeProjectId, unassignedTeamEstimates]);
   const filteredTeamEstimates = useMemo(() => {
     const query = teamEstimateQuery.trim().toLowerCase();
     const recentCutoff = Date.now() - 1000 * 60 * 60 * 24 * 14;
@@ -657,8 +712,8 @@ export default function HomePage() {
   );
   const findTeamEstimateById = useCallback(
     (estimateId: string) =>
-      teamEstimates.find((estimate) => estimate.id === estimateId) ?? null,
-    [teamEstimates]
+      allTeamEstimates.find((estimate) => estimate.id === estimateId) ?? null,
+    [allTeamEstimates]
   );
   const activeEditingEstimate = useMemo(
     () =>
@@ -767,6 +822,35 @@ export default function HomePage() {
     ],
     []
   );
+  const resolveEstimateProjectId = useCallback(
+    (estimate: any) => {
+      if (activeProjectId && activeProjectId !== UNASSIGNED_PROJECT_KEY) {
+        return activeProjectId;
+      }
+      const existingProjectId = String(estimate?.project?.id ?? "").trim();
+      return existingProjectId || null;
+    },
+    [activeProjectId]
+  );
+  const addEstimateTag = useCallback(
+    (rawTag: string) => {
+      const tag = rawTag.trim().replace(/\s+/g, " ");
+      if (!tag) return false;
+      const exists = estimateTags.some(
+        (entry) => entry.toLowerCase() === tag.toLowerCase()
+      );
+      if (exists) return false;
+      setEstimateTags((previous) => [...previous, tag]);
+      return true;
+    },
+    [estimateTags]
+  );
+  const removeEstimateTag = useCallback((tag: string) => {
+    const normalized = tag.toLowerCase();
+    setEstimateTags((previous) =>
+      previous.filter((entry) => entry.toLowerCase() !== normalized)
+    );
+  }, []);
 
   useEffect(() => {
     if (!teamName && teamDomain) {
@@ -794,13 +878,35 @@ export default function HomePage() {
   }, [activeTeamId, memberTeams, orgTeam?.id]);
 
   useEffect(() => {
+    const hasUnassigned = unassignedTeamEstimates.length > 0;
+    if (!teamProjects.length && !hasUnassigned) {
+      if (activeProjectId) {
+        setActiveProjectId(null);
+      }
+      return;
+    }
+    if (
+      activeProjectId &&
+      (activeProjectId === UNASSIGNED_PROJECT_KEY ||
+        teamProjects.some((project) => project.id === activeProjectId))
+    ) {
+      return;
+    }
+    const nextProjectId =
+      teamProjects[0]?.id ?? (hasUnassigned ? UNASSIGNED_PROJECT_KEY : null);
+    if (nextProjectId) {
+      setActiveProjectId(nextProjectId);
+    }
+  }, [activeProjectId, teamProjects, unassignedTeamEstimates.length]);
+
+  useEffect(() => {
     if (!historyEstimateId) return;
-    if (teamEstimates.some((estimate) => estimate.id === historyEstimateId)) {
+    if (allTeamEstimates.some((estimate) => estimate.id === historyEstimateId)) {
       return;
     }
     setHistoryEstimateId(null);
     setHistoryError(null);
-  }, [historyEstimateId, teamEstimates]);
+  }, [allTeamEstimates, historyEstimateId]);
 
   useEffect(() => {
     if (!estimatePayload) {
@@ -1134,9 +1240,14 @@ export default function HomePage() {
       if (!snapshot.payload) return;
 
       const now = Date.now();
+      const tags = normalizeEstimateTags(estimateTags);
       const pandadocDocument = toPandaDocVersionDocument(generation, now);
       if (editingEstimateId) {
         const existingEstimate = findTeamEstimateById(editingEstimateId);
+        const targetProjectId = resolveEstimateProjectId(existingEstimate);
+        if (!targetProjectId) {
+          throw new Error("Create or select a project before saving estimates.");
+        }
         const previousPandaDoc =
           existingEstimate &&
           getLatestPandaDocDocumentForEstimate(existingEstimate);
@@ -1149,7 +1260,7 @@ export default function HomePage() {
           hasEstimateSnapshotChanges(existingEstimate, snapshot) ||
           hasTrackedDocumentChanged;
         if (!shouldCreateNewVersion) {
-          await db.transact(
+          await db.transact([
             db.tx.estimates[editingEstimateId]
               .update({
                 status: "generated",
@@ -1157,9 +1268,15 @@ export default function HomePage() {
                 lastGeneratedAt: now,
                 templateName: snapshot.templateName,
                 templateUrl: snapshot.templateUrl,
+                tags,
               })
-              .link({ team: activeTeam.id, owner: instantUser.id })
-          );
+              .link({
+                team: activeTeam.id,
+                owner: instantUser.id,
+                project: targetProjectId,
+              }),
+            db.tx.projects[targetProjectId].update({ updatedAt: now }),
+          ]);
           return;
         }
         const history = existingEstimate
@@ -1176,7 +1293,7 @@ export default function HomePage() {
           createdByUserId: instantUser.id,
           pandadoc: pandadocDocument,
         });
-        await db.transact(
+        await db.transact([
           db.tx.estimates[editingEstimateId]
             .update({
               title: snapshot.title,
@@ -1189,12 +1306,22 @@ export default function HomePage() {
               totals: snapshot.totals,
               version: versioned.currentVersion,
               versionHistory: versioned.history,
+              tags,
             })
-            .link({ team: activeTeam.id, owner: instantUser.id })
-        );
+            .link({
+              team: activeTeam.id,
+              owner: instantUser.id,
+              project: targetProjectId,
+            }),
+          db.tx.projects[targetProjectId].update({ updatedAt: now }),
+        ]);
         return;
       }
 
+      const targetProjectId = resolveEstimateProjectId(null);
+      if (!targetProjectId) {
+        throw new Error("Create or select a project before saving estimates.");
+      }
       const estimateId = id();
       const versioned = appendEstimateVersion([], {
         action: "generated",
@@ -1207,7 +1334,7 @@ export default function HomePage() {
         createdByUserId: instantUser.id,
         pandadoc: pandadocDocument,
       });
-      await db.transact(
+      await db.transact([
         db.tx.estimates[estimateId]
           .create({
             title: snapshot.title,
@@ -1221,21 +1348,29 @@ export default function HomePage() {
             totals: snapshot.totals,
             version: versioned.currentVersion,
             versionHistory: versioned.history,
+            tags,
           })
-          .link({ team: activeTeam.id, owner: instantUser.id })
-      );
+          .link({
+            team: activeTeam.id,
+            owner: instantUser.id,
+            project: targetProjectId,
+          }),
+        db.tx.projects[targetProjectId].update({ updatedAt: now }),
+      ]);
       setEditingEstimateId(estimateId);
     },
     [
       activeMembership,
       activeTeam,
       buildCurrentEstimateSnapshot,
+      estimateTags,
       editingEstimateId,
       findTeamEstimateById,
       getLatestPandaDocDocumentForEstimate,
       getPersistedEstimateHistory,
       instantAppId,
       instantUser,
+      resolveEstimateProjectId,
     ]
   );
 
@@ -1493,12 +1628,18 @@ export default function HomePage() {
     const title = estimateName.trim() || "Untitled Estimate";
     const totals =
       payload.totals && typeof payload.totals === "object" ? payload.totals : null;
+    const tags = normalizeEstimateTags(estimateTags);
     const templateName = templateConfig?.name;
     const templateUrl = undefined;
 
     try {
       if (editingEstimateId) {
         const existingEstimate = findTeamEstimateById(editingEstimateId);
+        const targetProjectId = resolveEstimateProjectId(existingEstimate);
+        if (!targetProjectId) {
+          setError("Create or select a project before saving estimates.");
+          return;
+        }
         const history = existingEstimate
           ? getPersistedEstimateHistory(existingEstimate)
           : [];
@@ -1512,7 +1653,7 @@ export default function HomePage() {
           templateUrl,
           createdByUserId: instantUser.id,
         });
-        await db.transact(
+        await db.transact([
           db.tx.estimates[editingEstimateId]
             .update({
               title,
@@ -1524,12 +1665,23 @@ export default function HomePage() {
               totals,
               version: versioned.currentVersion,
               versionHistory: versioned.history,
+              tags,
             })
-            .link({ team: activeTeam.id, owner: instantUser.id })
-        );
+            .link({
+              team: activeTeam.id,
+              owner: instantUser.id,
+              project: targetProjectId,
+            }),
+          db.tx.projects[targetProjectId].update({ updatedAt: now }),
+        ]);
         return;
       }
 
+      const targetProjectId = resolveEstimateProjectId(null);
+      if (!targetProjectId) {
+        setError("Create or select a project before saving estimates.");
+        return;
+      }
       const estimateId = id();
       const versioned = appendEstimateVersion([], {
         action: "created",
@@ -1541,7 +1693,7 @@ export default function HomePage() {
         templateUrl,
         createdByUserId: instantUser.id,
       });
-      await db.transact(
+      await db.transact([
         db.tx.estimates[estimateId]
           .create({
             title,
@@ -1554,13 +1706,63 @@ export default function HomePage() {
             totals,
             version: versioned.currentVersion,
             versionHistory: versioned.history,
+            tags,
           })
-          .link({ team: activeTeam.id, owner: instantUser.id })
-      );
+          .link({
+            team: activeTeam.id,
+            owner: instantUser.id,
+            project: targetProjectId,
+          }),
+        db.tx.projects[targetProjectId].update({ updatedAt: now }),
+      ]);
       setEditingEstimateId(estimateId);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setError(message);
+    }
+  };
+
+  const handleCreateProject = async () => {
+    setError(null);
+    if (!instantAppId) {
+      setError("InstantDB is not configured yet.");
+      return;
+    }
+    if (!instantUser) {
+      setError("Sign in to create projects.");
+      return;
+    }
+    if (!activeTeam || !activeMembership) {
+      setError("Select a team workspace first.");
+      return;
+    }
+    const name = newProjectName.trim();
+    if (!name) {
+      setError("Enter a project name.");
+      return;
+    }
+
+    setIsCreatingProject(true);
+    try {
+      const now = Date.now();
+      const projectId = id();
+      await db.transact(
+        db.tx.projects[projectId]
+          .create({
+            name,
+            status: "active",
+            createdAt: now,
+            updatedAt: now,
+          })
+          .link({ team: activeTeam.id, owner: instantUser.id })
+      );
+      setActiveProjectId(projectId);
+      setNewProjectName("");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setError(message);
+    } finally {
+      setIsCreatingProject(false);
     }
   };
 
@@ -1698,6 +1900,10 @@ export default function HomePage() {
     setHistoryError(null);
     setEstimateName(estimate?.title ?? "");
     setLoadedEstimatePayload(estimate?.payload ?? null);
+    setEstimateTags(normalizeEstimateTags(estimate?.tags));
+    setEstimateTagInput("");
+    const linkedProjectId = String(estimate?.project?.id ?? "").trim();
+    setActiveProjectId(linkedProjectId || UNASSIGNED_PROJECT_KEY);
     setEditingEstimateId(estimate?.id ?? null);
     setHistoryEstimateId(estimate?.id ?? null);
   };
@@ -1730,6 +1936,11 @@ export default function HomePage() {
     try {
       const now = Date.now();
       const history = getPersistedEstimateHistory(estimate);
+      const targetProjectId = resolveEstimateProjectId(estimate);
+      if (!targetProjectId) {
+        setHistoryError("Create or select a project before reverting versions.");
+        return;
+      }
       const versioned = appendEstimateVersion(history, {
         action: "reverted",
         createdAt: now,
@@ -1750,7 +1961,7 @@ export default function HomePage() {
         sourceVersion: revision.version,
       });
 
-      await db.transact(
+      await db.transact([
         db.tx.estimates[estimate.id]
           .update({
             title: revision.title,
@@ -1770,12 +1981,21 @@ export default function HomePage() {
             totals: revision.totals ?? null,
             version: versioned.currentVersion,
             versionHistory: versioned.history,
+            tags: normalizeEstimateTags(estimate?.tags),
           })
-          .link({ team: activeTeam.id, owner: instantUser.id })
-      );
+          .link({
+            team: activeTeam.id,
+            owner: instantUser.id,
+            project: targetProjectId,
+          }),
+        db.tx.projects[targetProjectId].update({ updatedAt: now }),
+      ]);
 
       setEstimateName(revision.title);
       setLoadedEstimatePayload(revision.payload);
+      setEstimateTags(normalizeEstimateTags(estimate?.tags));
+      setEstimateTagInput("");
+      setActiveProjectId(targetProjectId);
       setEditingEstimateId(estimate.id);
       setHistoryEstimateId(estimate.id);
     } catch (err) {
@@ -2013,7 +2233,7 @@ export default function HomePage() {
         {!instantAppId ? (
           <div className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
             InstantDB is not configured. Add `NEXT_PUBLIC_INSTANTDB_APP_ID` to
-            enable team estimates.
+            enable the project library.
           </div>
         ) : null}
         <section className="relative overflow-hidden rounded-[32px] border border-border/60 bg-foreground text-white shadow-elevated">
@@ -2089,7 +2309,7 @@ export default function HomePage() {
                   Sign in required
                 </CardTitle>
                 <CardDescription>
-                  Access to proposals and team estimates is restricted to your
+                  Access to proposals and project estimates is restricted to your
                   organization.
                 </CardDescription>
               </CardHeader>
@@ -2220,11 +2440,11 @@ export default function HomePage() {
                       Shared
                     </Badge>
                     <CardTitle className="text-2xl font-serif">
-                      Team Estimates
+                      Project Library
                     </CardTitle>
                     <CardDescription>
-                      Search, filter, and load shared estimates for{" "}
-                      {activeTeam?.name ?? "your team"}.
+                      Manage projects, compare estimate options, and keep versions
+                      grouped by project.
                     </CardDescription>
                   </div>
                   <div className="flex items-center gap-2">
@@ -2232,7 +2452,7 @@ export default function HomePage() {
                       {filteredTeamEstimates.length} shown
                     </Badge>
                     <Badge variant="outline" className="bg-background/80">
-                      {teamEstimates.length} total
+                      {teamEstimates.length} in project
                     </Badge>
                   </div>
                 </div>
@@ -2270,7 +2490,66 @@ export default function HomePage() {
                     </div>
                   )}
                 </div>
+                <div className="grid gap-3 lg:grid-cols-[0.65fr_0.35fr]">
+                  <Select
+                    value={activeProjectId ?? undefined}
+                    onValueChange={(value) => setActiveProjectId(value)}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="Select project" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {teamProjects.map((project) => (
+                        <SelectItem key={project.id} value={project.id}>
+                          {project.name}
+                        </SelectItem>
+                      ))}
+                      {unassignedTeamEstimates.length ? (
+                        <SelectItem value={UNASSIGNED_PROJECT_KEY}>
+                          Unassigned estimates
+                        </SelectItem>
+                      ) : null}
+                    </SelectContent>
+                  </Select>
+                  <div className="flex gap-2">
+                    <Input
+                      value={newProjectName}
+                      onChange={(event) => setNewProjectName(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter") return;
+                        event.preventDefault();
+                        void handleCreateProject();
+                      }}
+                      placeholder="New project name..."
+                    />
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => void handleCreateProject()}
+                      disabled={
+                        !teamReady ||
+                        !isSignedIn ||
+                        isCreatingProject ||
+                        !newProjectName.trim()
+                      }
+                    >
+                      {isCreatingProject ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Plus className="h-3.5 w-3.5" />
+                      )}
+                      Create
+                    </Button>
+                  </div>
+                </div>
                 <div className="flex flex-wrap items-center gap-2">
+                  <Badge variant="outline" className="bg-background/80">
+                    <FolderKanban className="mr-1 h-3.5 w-3.5" />
+                    {activeProject?.name ??
+                      (activeProjectId === UNASSIGNED_PROJECT_KEY
+                        ? "Unassigned estimates"
+                        : "No project selected")}
+                  </Badge>
                   <Button
                     variant={teamEstimateScope === "all" ? "secondary" : "outline"}
                     size="sm"
@@ -2308,6 +2587,10 @@ export default function HomePage() {
                   <div className="text-sm text-muted-foreground">
                     Preparing your team workspace...
                   </div>
+                ) : !activeProjectId ? (
+                  <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-4 text-sm text-muted-foreground">
+                    Create your first project to start organizing estimates.
+                  </div>
                 ) : filteredTeamEstimates.length ? (
                   <ScrollArea className="h-72 rounded-xl border border-border/70 bg-background/70">
                     <div className="space-y-2 p-2">
@@ -2315,6 +2598,7 @@ export default function HomePage() {
                         const currentVersion = getCurrentVersionForEstimate(estimate);
                         const historyOpen = historyEstimateId === estimate.id;
                         const editingCurrent = editingEstimateId === estimate.id;
+                        const tags = normalizeEstimateTags(estimate?.tags);
                         return (
                           <div
                             key={estimate.id}
@@ -2348,6 +2632,19 @@ export default function HomePage() {
                                     <span>{new Date(estimate.updatedAt).toLocaleString()}</span>
                                   ) : null}
                                 </div>
+                                {tags.length ? (
+                                  <div className="mt-1 flex flex-wrap gap-1">
+                                    {tags.map((tag) => (
+                                      <Badge
+                                        key={`${estimate.id}-${tag}`}
+                                        variant="muted"
+                                        className="text-[10px]"
+                                      >
+                                        {tag}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                ) : null}
                               </div>
                               <div className="flex items-center gap-2">
                                 <Button
@@ -2381,7 +2678,9 @@ export default function HomePage() {
                   <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-4 text-sm text-muted-foreground">
                     {teamEstimates.length
                       ? "No estimates match your current filters."
-                      : "No shared estimates yet."}
+                      : activeProjectId === UNASSIGNED_PROJECT_KEY
+                        ? "No unassigned estimates."
+                        : "No estimates in this project yet."}
                   </div>
                 )}
                 {historyError ? (
@@ -2468,7 +2767,7 @@ export default function HomePage() {
                 ) : null}
                 {editingEstimateId ? (
                   <div className="text-xs text-muted-foreground">
-                    Editing a shared estimate. Use “Save to team” to update it.
+                    Editing a project estimate. Use “Save to project” to update it.
                   </div>
                 ) : null}
               </CardContent>
@@ -2501,13 +2800,81 @@ export default function HomePage() {
                 setError(null);
               }}
             />
+            <Card className="rounded-2xl border-border/60 bg-card/70">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">Estimate Tags</CardTitle>
+                <CardDescription>
+                  Add custom tags like option names, alternates, or change-order
+                  candidates.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className="flex flex-wrap gap-2">
+                  <Input
+                    value={estimateTagInput}
+                    onChange={(event) => setEstimateTagInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== ",") return;
+                      event.preventDefault();
+                      if (addEstimateTag(estimateTagInput)) {
+                        setEstimateTagInput("");
+                      }
+                    }}
+                    placeholder="Add a tag and press Enter..."
+                    className="min-w-[220px] flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      if (addEstimateTag(estimateTagInput)) {
+                        setEstimateTagInput("");
+                      }
+                    }}
+                    disabled={!estimateTagInput.trim()}
+                  >
+                    <Tag className="h-4 w-4" />
+                    Add tag
+                  </Button>
+                </div>
+                {estimateTags.length ? (
+                  <div className="flex flex-wrap gap-2">
+                    {estimateTags.map((tag) => (
+                      <Badge
+                        key={tag}
+                        variant="muted"
+                        className="inline-flex items-center gap-1"
+                      >
+                        {tag}
+                        <button
+                          type="button"
+                          className="rounded-full p-0.5 hover:bg-black/10"
+                          onClick={() => removeEstimateTag(tag)}
+                          aria-label={`Remove ${tag}`}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    No tags yet. Tags are stored with this estimate inside its project.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
             <div className="mt-4 flex flex-wrap gap-3">
               <Button
                 variant="secondary"
                 onClick={() => void handleSaveEstimateToDb()}
-                disabled={!isSignedIn || !teamReady}
+                disabled={
+                  !isSignedIn ||
+                  !teamReady ||
+                  !(activeProjectId && activeProjectId !== UNASSIGNED_PROJECT_KEY)
+                }
               >
-                {editingEstimateId ? "Update team estimate" : "Save to team"}
+                {editingEstimateId ? "Update project estimate" : "Save to project"}
               </Button>
               {editingEstimateId ? (
                 <Button
@@ -2521,6 +2888,8 @@ export default function HomePage() {
                     setEstimateName("");
                     setEstimateValues({});
                     setEstimatePayload(null);
+                    setEstimateTags([]);
+                    setEstimateTagInput("");
                   }}
                 >
                   New estimate
@@ -2528,11 +2897,15 @@ export default function HomePage() {
               ) : null}
               {!clerkEnabled ? (
                 <span className="text-xs text-muted-foreground">
-                  Configure Clerk + InstantDB to enable team saving.
+                  Configure Clerk + InstantDB to enable project saving.
                 </span>
               ) : !activeMembership ? (
                 <span className="text-xs text-muted-foreground">
                   Select a team to save estimates.
+                </span>
+              ) : !(activeProjectId && activeProjectId !== UNASSIGNED_PROJECT_KEY) ? (
+                <span className="text-xs text-muted-foreground">
+                  Select or create a project before saving estimates.
                 </span>
               ) : null}
             </div>
@@ -2612,6 +2985,21 @@ export default function HomePage() {
                     {estimateName.trim() ||
                       selectedEstimate?.name ||
                       (hasEstimateInput ? "Manual entry" : "Not started")}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">Project</span>
+                  <span className="text-right font-medium text-foreground">
+                    {activeProject?.name ??
+                      (activeProjectId === UNASSIGNED_PROJECT_KEY
+                        ? "Unassigned estimates"
+                        : "Not selected")}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-muted-foreground">Tags</span>
+                  <span className="text-right font-medium text-foreground">
+                    {estimateTags.length ? estimateTags.join(", ") : "None"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between gap-4">
