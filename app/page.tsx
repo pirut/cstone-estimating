@@ -1246,9 +1246,11 @@ export default function HomePage() {
       if (editingEstimateId) {
         const existingEstimate = findTeamEstimateById(editingEstimateId);
         const targetProjectId = resolveEstimateProjectId(existingEstimate);
-        if (!targetProjectId) {
-          throw new Error("Create or select a project before saving estimates.");
-        }
+        const estimateLinks = {
+          team: activeTeam.id,
+          owner: convexUser.id,
+          ...(targetProjectId ? { project: targetProjectId } : {}),
+        };
         const previousPandaDoc =
           existingEstimate &&
           getLatestPandaDocDocumentForEstimate(existingEstimate);
@@ -1261,7 +1263,7 @@ export default function HomePage() {
           hasEstimateSnapshotChanges(existingEstimate, snapshot) ||
           hasTrackedDocumentChanged;
         if (!shouldCreateNewVersion) {
-          await db.transact([
+          const operations = [
             db.tx.estimates[editingEstimateId]
               .update({
                 status: "generated",
@@ -1271,13 +1273,12 @@ export default function HomePage() {
                 templateUrl: snapshot.templateUrl,
                 tags,
               })
-              .link({
-                team: activeTeam.id,
-                owner: convexUser.id,
-                project: targetProjectId,
-              }),
-            db.tx.projects[targetProjectId].update({ updatedAt: now }),
-          ]);
+              .link(estimateLinks),
+            ...(targetProjectId
+              ? [db.tx.projects[targetProjectId].update({ updatedAt: now })]
+              : []),
+          ];
+          await db.transact(operations);
           return;
         }
         const history = existingEstimate
@@ -1294,7 +1295,7 @@ export default function HomePage() {
           createdByUserId: convexUser.id,
           pandadoc: pandadocDocument,
         });
-        await db.transact([
+        const operations = [
           db.tx.estimates[editingEstimateId]
             .update({
               title: snapshot.title,
@@ -1309,20 +1310,21 @@ export default function HomePage() {
               versionHistory: versioned.history,
               tags,
             })
-            .link({
-              team: activeTeam.id,
-              owner: convexUser.id,
-              project: targetProjectId,
-            }),
-          db.tx.projects[targetProjectId].update({ updatedAt: now }),
-        ]);
+            .link(estimateLinks),
+          ...(targetProjectId
+            ? [db.tx.projects[targetProjectId].update({ updatedAt: now })]
+            : []),
+        ];
+        await db.transact(operations);
         return;
       }
 
       const targetProjectId = resolveEstimateProjectId(null);
-      if (!targetProjectId) {
-        throw new Error("Create or select a project before saving estimates.");
-      }
+      const estimateLinks = {
+        team: activeTeam.id,
+        owner: convexUser.id,
+        ...(targetProjectId ? { project: targetProjectId } : {}),
+      };
       const estimateId = id();
       const versioned = appendEstimateVersion([], {
         action: "generated",
@@ -1335,7 +1337,7 @@ export default function HomePage() {
         createdByUserId: convexUser.id,
         pandadoc: pandadocDocument,
       });
-      await db.transact([
+      const operations = [
         db.tx.estimates[estimateId]
           .create({
             title: snapshot.title,
@@ -1351,13 +1353,13 @@ export default function HomePage() {
             versionHistory: versioned.history,
             tags,
           })
-          .link({
-            team: activeTeam.id,
-            owner: convexUser.id,
-            project: targetProjectId,
-          }),
-        db.tx.projects[targetProjectId].update({ updatedAt: now }),
-      ]);
+          .link(estimateLinks),
+        ...(targetProjectId
+          ? [db.tx.projects[targetProjectId].update({ updatedAt: now })]
+          : []),
+      ];
+      await db.transact(operations);
+      setActiveProjectId(targetProjectId ?? UNASSIGNED_PROJECT_KEY);
       setEditingEstimateId(estimateId);
     },
     [
@@ -1938,10 +1940,11 @@ export default function HomePage() {
       const now = Date.now();
       const history = getPersistedEstimateHistory(estimate);
       const targetProjectId = resolveEstimateProjectId(estimate);
-      if (!targetProjectId) {
-        setHistoryError("Create or select a project before reverting versions.");
-        return;
-      }
+      const estimateLinks = {
+        team: activeTeam.id,
+        owner: convexUser.id,
+        ...(targetProjectId ? { project: targetProjectId } : {}),
+      };
       const versioned = appendEstimateVersion(history, {
         action: "reverted",
         createdAt: now,
@@ -1962,7 +1965,7 @@ export default function HomePage() {
         sourceVersion: revision.version,
       });
 
-      await db.transact([
+      const operations = [
         db.tx.estimates[estimate.id]
           .update({
             title: revision.title,
@@ -1984,19 +1987,18 @@ export default function HomePage() {
             versionHistory: versioned.history,
             tags: normalizeEstimateTags(estimate?.tags),
           })
-          .link({
-            team: activeTeam.id,
-            owner: convexUser.id,
-            project: targetProjectId,
-          }),
-        db.tx.projects[targetProjectId].update({ updatedAt: now }),
-      ]);
+          .link(estimateLinks),
+        ...(targetProjectId
+          ? [db.tx.projects[targetProjectId].update({ updatedAt: now })]
+          : []),
+      ];
+      await db.transact(operations);
 
       setEstimateName(revision.title);
       setLoadedEstimatePayload(revision.payload);
       setEstimateTags(normalizeEstimateTags(estimate?.tags));
       setEstimateTagInput("");
-      setActiveProjectId(targetProjectId);
+      setActiveProjectId(targetProjectId ?? UNASSIGNED_PROJECT_KEY);
       setEditingEstimateId(estimate.id);
       setHistoryEstimateId(estimate.id);
     } catch (err) {
