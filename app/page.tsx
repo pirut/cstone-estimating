@@ -2080,6 +2080,13 @@ export default function HomePage() {
     return () => window.removeEventListener("keydown", onEscape);
   }, [floatingDockOpen]);
 
+  useEffect(() => {
+    if (floatingDockOpen) return;
+    setDockRenameEstimateOpen(false);
+    setDockRenameProjectOpen(false);
+    setDockCreateProjectOpen(false);
+  }, [floatingDockOpen]);
+
   const handleOpenActiveEstimateHistory = useCallback(() => {
     if (!activeEditingEstimate) {
       setError("Load an estimate to inspect version history.");
@@ -3706,19 +3713,19 @@ export default function HomePage() {
               </p>
             </div>
           ) : null}
-          <div className="relative h-[19rem] w-[19rem]">
+          <div className="relative flex flex-col items-end gap-2">
             <div
               className={cn(
-                "absolute inset-0 transition-all duration-300",
+                "flex flex-col items-end gap-2 transition-all duration-250",
                 floatingDockOpen
-                  ? "scale-100 opacity-100"
-                  : "pointer-events-none scale-90 opacity-0"
+                  ? "translate-y-0 opacity-100"
+                  : "pointer-events-none translate-y-3 opacity-0"
               )}
             >
-              <div
-                className="group absolute bottom-0 right-0"
-                style={{ transform: "translate(-78px, -24px)" }}
-              >
+              <div className="group flex items-center gap-2">
+                <span className="pointer-events-none rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                  Save To Project
+                </span>
                 <Button
                   variant="secondary"
                   size="icon"
@@ -3728,15 +3735,12 @@ export default function HomePage() {
                 >
                   <Workflow className="h-4 w-4" />
                 </Button>
-                <span className="pointer-events-none absolute right-[calc(100%+0.55rem)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
-                  Save To Project
-                </span>
               </div>
 
-              <div
-                className="group absolute bottom-0 right-0"
-                style={{ transform: "translate(-122px, -62px)" }}
-              >
+              <div className="group flex items-center gap-2">
+                <span className="pointer-events-none rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                  Generate PandaDoc
+                </span>
                 <Button
                   variant="secondary"
                   size="icon"
@@ -3746,15 +3750,12 @@ export default function HomePage() {
                 >
                   <Rocket className="h-4 w-4" />
                 </Button>
-                <span className="pointer-events-none absolute right-[calc(100%+0.55rem)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
-                  Generate PandaDoc
-                </span>
               </div>
 
-              <div
-                className="group absolute bottom-0 right-0"
-                style={{ transform: "translate(-158px, -112px)" }}
-              >
+              <div className="group flex items-center gap-2">
+                <span className="pointer-events-none rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                  Move Loaded Estimate
+                </span>
                 <Button
                   variant="secondary"
                   size="icon"
@@ -3773,9 +3774,6 @@ export default function HomePage() {
                     <ArrowRightLeft className="h-4 w-4" />
                   )}
                 </Button>
-                <span className="pointer-events-none absolute right-[calc(100%+0.55rem)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
-                  Move Loaded Estimate
-                </span>
               </div>
 
               <Popover
@@ -3785,10 +3783,10 @@ export default function HomePage() {
                   if (open) openDockRenameEstimate();
                 }}
               >
-                <div
-                  className="group absolute bottom-0 right-0"
-                  style={{ transform: "translate(-176px, -174px)" }}
-                >
+                <div className="group flex items-center gap-2">
+                  <span className="pointer-events-none rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                    Rename Estimate
+                  </span>
                   <PopoverTrigger asChild>
                     <Button
                       variant="secondary"
@@ -3798,9 +3796,6 @@ export default function HomePage() {
                       <PencilLine className="h-4 w-4" />
                     </Button>
                   </PopoverTrigger>
-                  <span className="pointer-events-none absolute right-[calc(100%+0.55rem)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
-                    Rename Estimate
-                  </span>
                 </div>
                 <PopoverContent align="end" className="w-80 space-y-3">
                   <div className="space-y-1">
@@ -3841,10 +3836,10 @@ export default function HomePage() {
                   if (open) openDockRenameProject();
                 }}
               >
-                <div
-                  className="group absolute bottom-0 right-0"
-                  style={{ transform: "translate(-154px, -236px)" }}
-                >
+                <div className="group flex items-center gap-2">
+                  <span className="pointer-events-none rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                    Rename Project
+                  </span>
                   <PopoverTrigger asChild>
                     <Button
                       variant="secondary"
@@ -3855,9 +3850,6 @@ export default function HomePage() {
                       <Settings2 className="h-4 w-4" />
                     </Button>
                   </PopoverTrigger>
-                  <span className="pointer-events-none absolute right-[calc(100%+0.55rem)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
-                    Rename Project
-                  </span>
                 </div>
                 <PopoverContent align="end" className="w-80 space-y-3">
                   <div className="space-y-1">
@@ -3886,10 +3878,10 @@ export default function HomePage() {
                 </PopoverContent>
               </Popover>
 
-              <div
-                className="group absolute bottom-0 right-0"
-                style={{ transform: "translate(-102px, -262px)" }}
-              >
+              <div className="group flex items-center gap-2">
+                <span className="pointer-events-none rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                  Open Version History
+                </span>
                 <Button
                   variant="secondary"
                   size="icon"
@@ -3899,15 +3891,12 @@ export default function HomePage() {
                 >
                   <History className="h-4 w-4" />
                 </Button>
-                <span className="pointer-events-none absolute right-[calc(100%+0.55rem)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
-                  Open Version History
-                </span>
               </div>
 
-              <div
-                className="group absolute bottom-0 right-0"
-                style={{ transform: "translate(-44px, -252px)" }}
-              >
+              <div className="group flex items-center gap-2">
+                <span className="pointer-events-none rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                  New Estimate
+                </span>
                 <Button
                   variant="secondary"
                   size="icon"
@@ -3916,9 +3905,6 @@ export default function HomePage() {
                 >
                   <RotateCcw className="h-4 w-4" />
                 </Button>
-                <span className="pointer-events-none absolute right-[calc(100%+0.55rem)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
-                  New Estimate
-                </span>
               </div>
 
               <Popover
@@ -3928,10 +3914,10 @@ export default function HomePage() {
                   if (open) openDockCreateProject();
                 }}
               >
-                <div
-                  className="group absolute bottom-0 right-0"
-                  style={{ transform: "translate(-10px, -198px)" }}
-                >
+                <div className="group flex items-center gap-2">
+                  <span className="pointer-events-none rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                    Create Project
+                  </span>
                   <PopoverTrigger asChild>
                     <Button
                       variant="secondary"
@@ -3942,9 +3928,6 @@ export default function HomePage() {
                       <Plus className="h-4 w-4" />
                     </Button>
                   </PopoverTrigger>
-                  <span className="pointer-events-none absolute right-[calc(100%+0.55rem)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
-                    Create Project
-                  </span>
                 </div>
                 <PopoverContent align="end" className="w-80 space-y-3">
                   <div className="space-y-1">
@@ -3976,7 +3959,7 @@ export default function HomePage() {
             <Button
               variant="accent"
               size="icon"
-              className="absolute bottom-0 right-0 h-14 w-14 rounded-full border border-accent/40 shadow-xl"
+              className="h-14 w-14 rounded-full border border-accent/40 shadow-xl"
               onClick={() => setFloatingDockOpen((open) => !open)}
             >
               {floatingDockOpen ? (
