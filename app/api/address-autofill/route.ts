@@ -34,37 +34,21 @@ type AddressSuggestion = {
 };
 
 const MAX_SUGGESTIONS = 6;
+const MIN_QUERY_LENGTH = 3;
+const MAX_QUERY_VARIANTS = 5;
 
 export async function GET(request: NextRequest) {
   const query = (request.nextUrl.searchParams.get("q") ?? "").trim();
-  if (query.length < 4) {
+  if (query.length < MIN_QUERY_LENGTH) {
     return NextResponse.json({ suggestions: [] as AddressSuggestion[] });
   }
 
   try {
-    const endpoint = new URL(
-      "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress"
+    const lookupQueries = buildLookupQueries(query);
+    const matchGroups = await Promise.all(
+      lookupQueries.map((lookupQuery) => fetchAddressMatches(lookupQuery))
     );
-    endpoint.searchParams.set("address", query);
-    endpoint.searchParams.set("benchmark", "Public_AR_Current");
-    endpoint.searchParams.set("format", "json");
-
-    const response = await fetch(endpoint.toString(), {
-      cache: "no-store",
-      headers: { Accept: "application/json" },
-    });
-
-    if (!response.ok) {
-      return NextResponse.json(
-        { error: "Address lookup service is unavailable." },
-        { status: 502 }
-      );
-    }
-
-    const data = (await response.json()) as CensusResponse;
-    const matches = Array.isArray(data?.result?.addressMatches)
-      ? data.result.addressMatches
-      : [];
+    const matches = matchGroups.flat();
 
     const seen = new Set<string>();
     const suggestions: AddressSuggestion[] = [];
@@ -78,12 +62,125 @@ export async function GET(request: NextRequest) {
       if (suggestions.length >= MAX_SUGGESTIONS) break;
     }
 
-    return NextResponse.json({ suggestions });
+    const rankedSuggestions = suggestions
+      .slice()
+      .sort(
+        (left, right) =>
+          scoreSuggestion(right, query) - scoreSuggestion(left, query)
+      )
+      .slice(0, MAX_SUGGESTIONS);
+
+    return NextResponse.json({ suggestions: rankedSuggestions });
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Address lookup failed.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
+}
+
+async function fetchAddressMatches(query: string) {
+  const endpoint = new URL(
+    "https://geocoding.geo.census.gov/geocoder/locations/onelineaddress"
+  );
+  endpoint.searchParams.set("address", query);
+  endpoint.searchParams.set("benchmark", "Public_AR_Current");
+  endpoint.searchParams.set("format", "json");
+
+  const response = await fetch(endpoint.toString(), {
+    cache: "no-store",
+    headers: { Accept: "application/json" },
+  });
+
+  if (!response.ok) {
+    throw new Error("Address lookup service is unavailable.");
+  }
+
+  const data = (await response.json()) as CensusResponse;
+  return Array.isArray(data?.result?.addressMatches)
+    ? data.result.addressMatches
+    : [];
+}
+
+function buildLookupQueries(query: string) {
+  const normalized = query.replace(/\s+/g, " ").trim();
+  const candidates = new Set<string>();
+  const addCandidate = (value: string) => {
+    const next = value.replace(/\s+/g, " ").trim();
+    if (next.length >= MIN_QUERY_LENGTH) {
+      candidates.add(next);
+    }
+  };
+
+  addCandidate(normalized);
+
+  const beforeComma = normalized.split(",")[0]?.trim() ?? "";
+  addCandidate(beforeComma);
+
+  const withoutUnit = beforeComma
+    .replace(/\b(?:apt|apartment|unit|suite|ste|#)\s*[a-z0-9-]+\b/gi, "")
+    .trim();
+  addCandidate(withoutUnit);
+
+  const alphaNumeric = normalized
+    .replace(/[^a-z0-9\s#/-]/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  addCandidate(alphaNumeric);
+
+  const streetTokens = beforeComma.split(/\s+/).filter(Boolean);
+  for (
+    let tokenCount = Math.min(streetTokens.length, 4);
+    tokenCount >= 2;
+    tokenCount -= 1
+  ) {
+    addCandidate(streetTokens.slice(0, tokenCount).join(" "));
+  }
+
+  return Array.from(candidates).slice(0, MAX_QUERY_VARIANTS);
+}
+
+function scoreSuggestion(suggestion: AddressSuggestion, query: string) {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) return 0;
+
+  const candidate = normalizeSearchText(
+    [suggestion.projectName, suggestion.cityStateZip, suggestion.fullAddress]
+      .filter(Boolean)
+      .join(" ")
+  );
+  if (!candidate) return 0;
+
+  let score = 0;
+  if (candidate === normalizedQuery) score += 150;
+  if (candidate.startsWith(normalizedQuery)) score += 95;
+  if (candidate.includes(normalizedQuery)) score += 55;
+
+  const candidateTokens = candidate.split(" ").filter(Boolean);
+  const candidateTokenSet = new Set(candidateTokens);
+  for (const token of normalizedQuery.split(" ")) {
+    if (!token) continue;
+    if (candidateTokenSet.has(token)) {
+      score += 18;
+      continue;
+    }
+    const partialMatch = candidateTokens.some(
+      (candidateToken) =>
+        candidateToken.startsWith(token) || token.startsWith(candidateToken)
+    );
+    if (partialMatch) score += 10;
+    if (/\d/.test(token) && candidate.includes(token)) score += 8;
+  }
+
+  score -= Math.max(0, candidate.length - normalizedQuery.length) * 0.02;
+  return score;
+}
+
+function normalizeSearchText(value: string) {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function mapMatchToSuggestion(

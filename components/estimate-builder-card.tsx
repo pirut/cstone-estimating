@@ -67,6 +67,7 @@ import {
 const EMPTY_VALUES: Record<string, string | number> = {};
 const inputClassName = inputVariants({ uiSize: "default" });
 const inputSmClassName = inputVariants({ uiSize: "sm" });
+const MIN_ADDRESS_LOOKUP_CHARS = 3;
 
 const REQUIRED_INFO_FIELDS: Array<keyof EstimateDraft["info"]> = [
   "prepared_for",
@@ -546,7 +547,7 @@ export function EstimateBuilderCard({
       return;
     }
 
-    if (projectNameValue.length < 4) {
+    if (projectNameValue.length < MIN_ADDRESS_LOOKUP_CHARS) {
       setAddressSuggestions([]);
       setIsAddressLookupLoading(false);
       setAddressLookupError(null);
@@ -1251,7 +1252,7 @@ export function EstimateBuilderCard({
                             {addressLookupOpen &&
                             !isAddressLookupLoading &&
                             !addressLookupError &&
-                            projectNameValue.length >= 4 &&
+                            projectNameValue.length >= MIN_ADDRESS_LOOKUP_CHARS &&
                             !addressSuggestions.length ? (
                               <p className="text-xs text-muted-foreground">
                                 No address matches found.
