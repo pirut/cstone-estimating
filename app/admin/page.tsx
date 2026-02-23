@@ -1,19 +1,9 @@
-import Link from "next/link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import AdminMappingDashboard from "@/components/admin-mapping-dashboard";
 import TeamAdminDashboard from "@/components/team-admin-dashboard";
 
-type AdminPageProps = {
-  searchParams?: {
-    section?: string;
-  };
-};
-
-export default function UnifiedAdminPage({ searchParams }: AdminPageProps) {
-  const section = searchParams?.section === "mapping" ? "mapping" : "team";
-
+export default function UnifiedAdminPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur">
@@ -24,32 +14,23 @@ export default function UnifiedAdminPage({ searchParams }: AdminPageProps) {
                 Unified Admin
               </Badge>
               <span className="text-sm text-muted-foreground">
-                Team operations and PandaDoc mapping in one place
+                Team operations and PandaDoc mapping in one dashboard
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                asChild
-                size="sm"
-                variant={section === "team" ? "secondary" : "outline"}
-                className={cn(section === "team" && "shadow-sm")}
-              >
-                <Link href="/admin?section=team">Team Operations</Link>
+              <Button asChild size="sm" variant="secondary">
+                <a href="#team-operations">Team Operations</a>
               </Button>
-              <Button
-                asChild
-                size="sm"
-                variant={section === "mapping" ? "secondary" : "outline"}
-                className={cn(section === "mapping" && "shadow-sm")}
-              >
-                <Link href="/admin?section=mapping">PandaDoc Mapping</Link>
+              <Button asChild size="sm" variant="outline">
+                <a href="#pandadoc-mapping">PandaDoc Mapping</a>
               </Button>
             </div>
           </div>
         </div>
       </div>
 
-      {section === "mapping" ? <AdminMappingDashboard /> : <TeamAdminDashboard />}
+      <TeamAdminDashboard embedded />
+      <AdminMappingDashboard embedded />
     </div>
   );
 }

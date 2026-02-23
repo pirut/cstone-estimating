@@ -132,7 +132,11 @@ function formatRelativeTime(timestamp: number | null | undefined) {
   return new Date(timestamp).toLocaleDateString();
 }
 
-export default function AdminPage() {
+type AdminMappingDashboardProps = {
+  embedded?: boolean;
+};
+
+export default function AdminPage({ embedded = false }: AdminMappingDashboardProps) {
   const [configName, setConfigName] = useState("Team PandaDoc Mapping");
   const [templateVersion, setTemplateVersion] = useState(1);
   const [recipientRole, setRecipientRole] = useState("Client");
@@ -1193,7 +1197,10 @@ export default function AdminPage() {
   };
 
   return (
-    <main className="relative min-h-screen overflow-x-hidden">
+    <section
+      id={embedded ? "pandadoc-mapping" : undefined}
+      className={embedded ? "relative w-full overflow-x-hidden" : "relative min-h-screen overflow-x-hidden"}
+    >
       <ConvexAuthSync
         onAuthError={setConvexSetupError}
         onDomainError={setConvexSetupError}
@@ -1223,7 +1230,11 @@ export default function AdminPage() {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button asChild variant="secondary" size="sm">
-                  <Link href="/admin?section=team">Team Admin</Link>
+                  {embedded ? (
+                    <a href="#team-operations">Team Admin</a>
+                  ) : (
+                    <Link href="/admin#team-operations">Team Admin</Link>
+                  )}
                 </Button>
                 <Button asChild variant="accent" size="sm">
                   <Link href="/">Proposal Workspace</Link>
@@ -2268,6 +2279,6 @@ export default function AdminPage() {
           </CardContent>
         </Card>
       </div>
-    </main>
+    </section>
   );
 }

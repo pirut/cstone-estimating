@@ -124,7 +124,11 @@ type EstimateAdminDraft = {
   ownerLabel: string;
 };
 
-export default function TeamAdminPage() {
+type TeamAdminDashboardProps = {
+  embedded?: boolean;
+};
+
+export default function TeamAdminPage({ embedded = false }: TeamAdminDashboardProps) {
   const { isLoaded: authLoaded, isSignedIn } = useOptionalAuth();
   const { user } = useOptionalUser();
   const { isLoading: convexLoading, user: convexUser, error: convexAuthError } =
@@ -1783,9 +1787,18 @@ export default function TeamAdminPage() {
   const authGate = renderAuthGate();
 
   return (
-    <main className="min-h-screen bg-background">
+    <section
+      id={embedded ? "team-operations" : undefined}
+      className={embedded ? "w-full bg-background" : "min-h-screen bg-background"}
+    >
       <ConvexAuthSync onAuthError={setConvexSetupError} />
-      <div className="container py-10">
+      <div
+        className={
+          embedded
+            ? "w-full px-4 py-8 sm:px-6 lg:px-8 xl:px-10 2xl:px-12"
+            : "container py-10"
+        }
+      >
         <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
           <div>
             <h1 className="text-3xl font-serif">Team Admin</h1>
@@ -1795,7 +1808,11 @@ export default function TeamAdminPage() {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <Button asChild variant="accent" size="sm">
-              <Link href="/admin?section=mapping">Open PandaDoc mapping</Link>
+              {embedded ? (
+                <a href="#pandadoc-mapping">Open PandaDoc mapping</a>
+              ) : (
+                <Link href="/admin#pandadoc-mapping">Open PandaDoc mapping</Link>
+              )}
             </Button>
             <Button asChild variant="outline" size="sm">
               <Link href="/">Back to workspace</Link>
@@ -3136,6 +3153,6 @@ export default function TeamAdminPage() {
           organization.
         </footer>
       </div>
-    </main>
+    </section>
   );
 }
