@@ -44,10 +44,12 @@ import {
 import {
   EMPTY_PRODUCT_FEATURE_SELECTION,
   PRODUCT_FEATURE_SELECT_FIELDS,
+  type ProductFeatureCategory,
   type ProductFeatureOption,
   type ProductFeatureSelection,
 } from "@/lib/product-features";
 import { cn } from "@/lib/utils";
+import { db, id } from "@/lib/convex";
 import {
   CheckCircle2,
   CircleDashed,
@@ -91,6 +93,7 @@ type EstimateBuilderCardProps = {
   }>;
   panelTypes?: PanelType[];
   productFeatureOptions?: ProductFeatureOption[];
+  catalogTeamId?: string | null;
   projectTypeOptions?: string[];
 };
 
@@ -274,6 +277,7 @@ export function EstimateBuilderCard({
   vendors,
   panelTypes,
   productFeatureOptions,
+  catalogTeamId,
   projectTypeOptions,
 }: EstimateBuilderCardProps) {
   const [draft, setDraft] = useState<EstimateDraft>(DEFAULT_DRAFT);
@@ -288,6 +292,9 @@ export function EstimateBuilderCard({
   const [addressLookupOpen, setAddressLookupOpen] = useState(false);
   const [exchangeRateStatusByProduct, setExchangeRateStatusByProduct] =
     useState<ExchangeRateStatusByProduct>({});
+  const [sessionFeatureOptions, setSessionFeatureOptions] = useState<
+    ProductFeatureOption[]
+  >([]);
   const addressLookupRequestRef = useRef(0);
   const normalizedPreparedByName = preparedByName?.trim() ?? "";
 
@@ -313,20 +320,26 @@ export function EstimateBuilderCard({
   }, [vendors]);
 
   const normalizedProductFeatureOptions = useMemo(() => {
-    return (productFeatureOptions ?? [])
+    const combined = [...(productFeatureOptions ?? []), ...sessionFeatureOptions];
+    const seen = new Set<string>();
+    return combined
       .map((option, index) => {
         const category = option.category;
         if (!category) return null;
         const label = String(option.label ?? "").trim();
         if (!label) return null;
+        const vendorKey =
+          typeof option.vendorId === "string" && option.vendorId.trim()
+            ? option.vendorId.trim()
+            : "";
+        const dedupeKey = `${category}::${vendorKey}::${label.toLowerCase()}`;
+        if (seen.has(dedupeKey)) return null;
+        seen.add(dedupeKey);
         return {
           id: option.id ?? `${category}-${index}`,
           category,
           label,
-          vendorId:
-            typeof option.vendorId === "string" && option.vendorId.trim()
-              ? option.vendorId
-              : "",
+          vendorId: vendorKey,
           sortOrder:
             typeof option.sortOrder === "number" && Number.isFinite(option.sortOrder)
               ? option.sortOrder
@@ -345,7 +358,7 @@ export function EstimateBuilderCard({
         }
         return a.label.localeCompare(b.label);
       });
-  }, [productFeatureOptions]);
+  }, [productFeatureOptions, sessionFeatureOptions]);
 
   const panelTypeOptions = useMemo(() => {
     return panelTypes ?? [];
@@ -444,6 +457,10 @@ export function EstimateBuilderCard({
       };
     });
   }, [legacyValues, normalizedPreparedByName]);
+
+  useEffect(() => {
+    setSessionFeatureOptions([]);
+  }, [catalogTeamId]);
 
   useEffect(() => {
     if (legacyValues || !addressLookupOpen) {
@@ -665,6 +682,87 @@ export function EstimateBuilderCard({
       return true;
     });
   };
+
+  const createProductFeatureOption = useCallback(
+    async (
+      item: ProductItem,
+      category: ProductFeatureCategory,
+      rawLabel: string
+    ): Promise<{ ok: boolean; value?: string; error?: string }> => {
+      const label = rawLabel.trim().replace(/\s+/g, " ");
+      if (!label) {
+        return { ok: false, error: "Enter a value before adding." };
+      }
+      if (!catalogTeamId) {
+        return {
+          ok: false,
+          error: "Pick a valid team before adding feature options.",
+        };
+      }
+
+      const vendorId = resolveVendorForProduct(item)?.id ?? "";
+      const sameScope = normalizedProductFeatureOptions.filter(
+        (option) =>
+          option.category === category && (option.vendorId ?? "") === vendorId
+      );
+      const existing = sameScope.find(
+        (option) => option.label.toLowerCase() === label.toLowerCase()
+      );
+      if (existing) {
+        return { ok: true, value: existing.label };
+      }
+
+      const nextSortOrder =
+        sameScope.reduce(
+          (max, option) =>
+            Math.max(
+              max,
+              typeof option.sortOrder === "number" ? option.sortOrder : 0
+            ),
+          0
+        ) + 1;
+      const optionId = id();
+      const now = Date.now();
+      const tx = db.tx as any;
+
+      try {
+        await db.transact(
+          tx.productFeatureOptions[optionId]
+            .create({
+              category,
+              label,
+              vendorId: vendorId || undefined,
+              sortOrder: nextSortOrder,
+              isActive: true,
+              createdAt: now,
+              updatedAt: now,
+            })
+            .link({ team: catalogTeamId })
+        );
+        setSessionFeatureOptions((prev) => [
+          ...prev,
+          {
+            id: optionId,
+            category,
+            label,
+            vendorId: vendorId || undefined,
+            sortOrder: nextSortOrder,
+            isActive: true,
+          },
+        ]);
+        return { ok: true, value: label };
+      } catch (error) {
+        return {
+          ok: false,
+          error:
+            error instanceof Error
+              ? error.message
+              : "Unable to add feature option.",
+        };
+      }
+    },
+    [catalogTeamId, normalizedProductFeatureOptions, resolveVendorForProduct]
+  );
 
   const handleBuckingChange = (index: number, patch: Partial<BuckingLineItem>) => {
     const next = draft.bucking.map((item, idx) =>
@@ -1457,21 +1555,27 @@ export function EstimateBuilderCard({
                               : getFeatureOptionsForProduct(item, field.category);
                           const value = item[field.key];
                           const isDisabled = Boolean(legacyValues);
-                          const datalistId = `feature-${item.id}-${field.key}`;
                           return (
                             <div key={`${item.id}-${field.key}`} className="space-y-1">
                               <label className="text-xs text-muted-foreground">
                                 {field.label}
                               </label>
-                              <Input
+                              <FeatureOptionCombobox
                                 className={inputSmClassName}
-                                list={datalistId}
                                 value={value}
-                                onChange={(event) =>
+                                options={options.map((option) => option.label)}
+                                onSelect={(nextValue) =>
                                   handleProductChange(index, {
-                                    [field.key]: event.target.value,
+                                    [field.key]: nextValue,
                                   } as Partial<ProductItem>)
                                 }
+                                onCreate={async (nextLabel) => {
+                                  return await createProductFeatureOption(
+                                    item,
+                                    field.category,
+                                    nextLabel
+                                  );
+                                }}
                                 placeholder={
                                   options.length
                                     ? `Select or type ${field.label.toLowerCase()}`
@@ -1479,11 +1583,6 @@ export function EstimateBuilderCard({
                                 }
                                 disabled={isDisabled}
                               />
-                              <datalist id={datalistId}>
-                                {options.map((option) => (
-                                  <option key={option.id} value={option.label} />
-                                ))}
-                              </datalist>
                             </div>
                           );
                         })}
@@ -2005,6 +2104,196 @@ function RateField({
           disabled={disabled}
         />
       )}
+    </div>
+  );
+}
+
+function FeatureOptionCombobox({
+  className,
+  value,
+  options,
+  onSelect,
+  onCreate,
+  placeholder,
+  disabled,
+}: {
+  className?: string;
+  value: string;
+  options: string[];
+  onSelect: (value: string) => void;
+  onCreate?: (
+    label: string
+  ) => Promise<{ ok: boolean; value?: string; error?: string }>;
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(value);
+  const [hasTyped, setHasTyped] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const normalizedOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return options
+      .map((entry) => entry.trim())
+      .filter(Boolean)
+      .filter((entry) => {
+        const key = entry.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+  }, [options]);
+
+  const trimmedQuery = query.trim();
+  const filteredOptions = useMemo(() => {
+    if (!hasTyped || !trimmedQuery) return normalizedOptions;
+    const needle = trimmedQuery.toLowerCase();
+    return normalizedOptions.filter((entry) =>
+      entry.toLowerCase().includes(needle)
+    );
+  }, [hasTyped, normalizedOptions, trimmedQuery]);
+
+  const hasExactMatch = normalizedOptions.some(
+    (entry) => entry.toLowerCase() === trimmedQuery.toLowerCase()
+  );
+  const canCreate = Boolean(
+    onCreate &&
+      hasTyped &&
+      trimmedQuery &&
+      !hasExactMatch &&
+      filteredOptions.length === 0
+  );
+
+  useEffect(() => {
+    if (open) return;
+    setQuery(value);
+    setHasTyped(false);
+    setError(null);
+  }, [open, value]);
+
+  const commitValue = (nextValue: string) => {
+    onSelect(nextValue);
+    setQuery(nextValue);
+    setOpen(false);
+    setError(null);
+  };
+
+  const handleCreate = async () => {
+    if (!onCreate || !trimmedQuery || isCreating) return;
+    setIsCreating(true);
+    setError(null);
+    const result = await onCreate(trimmedQuery);
+    setIsCreating(false);
+    if (!result.ok) {
+      setError(result.error ?? "Unable to add option.");
+      return;
+    }
+    commitValue(result.value ?? trimmedQuery);
+  };
+
+  return (
+    <div
+      className="relative"
+      onBlur={(event) => {
+        const nextTarget = event.relatedTarget as Node | null;
+        if (nextTarget && event.currentTarget.contains(nextTarget)) return;
+        if (hasTyped) {
+          const exact = normalizedOptions.find(
+            (entry) => entry.toLowerCase() === trimmedQuery.toLowerCase()
+          );
+          if (exact) {
+            onSelect(exact);
+            setQuery(exact);
+          } else {
+            setQuery(value);
+          }
+        } else {
+          setQuery(value);
+        }
+        setOpen(false);
+        setHasTyped(false);
+        setError(null);
+      }}
+    >
+      <Input
+        className={className}
+        value={query}
+        onFocus={() => {
+          setOpen(true);
+          setHasTyped(false);
+        }}
+        onChange={(event) => {
+          setQuery(event.target.value);
+          setHasTyped(true);
+          setOpen(true);
+          setError(null);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") {
+            event.preventDefault();
+            setOpen(false);
+            setQuery(value);
+            setHasTyped(false);
+            setError(null);
+            return;
+          }
+          if (event.key !== "Enter") return;
+          event.preventDefault();
+          if (filteredOptions.length) {
+            commitValue(filteredOptions[0]);
+            return;
+          }
+          if (canCreate) {
+            void handleCreate();
+          }
+        }}
+        placeholder={placeholder}
+        disabled={disabled || isCreating}
+      />
+      {open ? (
+        <div className="absolute z-30 mt-1 max-h-56 w-full overflow-auto rounded-lg border border-border/70 bg-popover shadow-lg">
+          {value ? (
+            <button
+              type="button"
+              className="block w-full border-b border-border/60 px-3 py-2 text-left text-xs text-muted-foreground hover:bg-muted/30"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => commitValue("")}
+            >
+              Clear selection
+            </button>
+          ) : null}
+          {filteredOptions.map((option) => (
+            <button
+              key={option}
+              type="button"
+              className="block w-full px-3 py-2 text-left text-sm text-foreground hover:bg-muted/30"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => commitValue(option)}
+            >
+              {option}
+            </button>
+          ))}
+          {!filteredOptions.length ? (
+            <div className="px-3 py-2 text-xs text-muted-foreground">
+              No matching options.
+            </div>
+          ) : null}
+          {canCreate ? (
+            <button
+              type="button"
+              className="block w-full border-t border-border/60 px-3 py-2 text-left text-sm font-medium text-accent hover:bg-accent/10"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => void handleCreate()}
+              disabled={isCreating}
+            >
+              {isCreating ? "Adding..." : `Add "${trimmedQuery}" as new option`}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {error ? <p className="mt-1 text-xs text-destructive">{error}</p> : null}
     </div>
   );
 }

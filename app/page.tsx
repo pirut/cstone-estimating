@@ -3324,6 +3324,7 @@ export default function HomePage() {
               vendors={vendorOptions}
               panelTypes={panelTypeOptions}
               productFeatureOptions={productFeatureOptions}
+              catalogTeamId={catalogTeam?.id ?? null}
               projectTypeOptions={
                 templateConfig?.masterTemplate?.selection?.projectTypes
               }
