@@ -25,6 +25,7 @@ import { Separator } from "@/components/ui/separator";
 import type { UploadedFile } from "@/lib/types";
 import {
   computeEuroPricingTotals,
+  isChangeOrderProjectType,
   createDefaultProductItem,
   createDefaultEuroPricing,
   computeEstimate,
@@ -35,6 +36,7 @@ import {
   resolveProductBasePrice,
   toNumber,
   type BuckingLineItem,
+  type ChangeOrderDraft,
   type EuroPricing,
   type EuroPricingSectionLine,
   type EstimateDraft,
@@ -265,6 +267,40 @@ function normalizeLoadedProduct(
   });
 }
 
+function normalizeLoadedChangeOrder(
+  source: unknown,
+  fallback: ChangeOrderDraft,
+  products: ProductItem[],
+  totals: Record<string, unknown> | null
+): ChangeOrderDraft {
+  const input =
+    source && typeof source === "object" && !Array.isArray(source)
+      ? (source as Partial<ChangeOrderDraft>)
+      : null;
+  const firstProduct = products[0];
+  const rawLaborTotal = totals?.installation_price;
+  const inferredLaborTotal =
+    typeof rawLaborTotal === "string" || typeof rawLaborTotal === "number"
+      ? toNumber(rawLaborTotal)
+      : 0;
+
+  return {
+    vendorId: String(input?.vendorId ?? firstProduct?.vendorId ?? fallback.vendorId),
+    vendorName: String(input?.vendorName ?? firstProduct?.name ?? fallback.vendorName),
+    vendorCost: String(input?.vendorCost ?? firstProduct?.price ?? fallback.vendorCost),
+    vendorMarkup: String(
+      input?.vendorMarkup ??
+        firstProduct?.markup ??
+        fallback.vendorMarkup
+    ),
+    laborCost: String(
+      input?.laborCost ??
+        (inferredLaborTotal > 0 ? inferredLaborTotal.toFixed(2) : fallback.laborCost)
+    ),
+    laborMarkup: String(input?.laborMarkup ?? fallback.laborMarkup),
+  };
+}
+
 export function EstimateBuilderCard({
   values: _values,
   onValuesChange,
@@ -376,6 +412,9 @@ export function EstimateBuilderCard({
       seen.add(option);
       normalized.push(option);
     });
+    if (!normalized.some((option) => option.toLowerCase() === "change order")) {
+      normalized.push("Change Order");
+    }
     return normalized;
   }, [projectTypeOptions]);
 
@@ -383,7 +422,16 @@ export function EstimateBuilderCard({
     () => computeEstimate(draft, panelTypeOptions, marginThresholds ?? null),
     [draft, marginThresholds, panelTypeOptions]
   );
+  const isChangeOrderMode = isChangeOrderProjectType(draft.info.project_type);
   const projectNameValue = String(draft.info.project_name ?? "").trim();
+  const changeOrderVendorTotal = roundUp(
+    toNumber(draft.changeOrder.vendorCost) *
+      (1 + toNumber(draft.changeOrder.vendorMarkup))
+  );
+  const changeOrderLaborTotal = roundUp(
+    toNumber(draft.changeOrder.laborCost) *
+      (1 + toNumber(draft.changeOrder.laborMarkup))
+  );
 
   useEffect(() => {
     if (legacyValues) {
@@ -395,12 +443,14 @@ export function EstimateBuilderCard({
     onValuesChange(computed.pdfValues);
     onEstimatePayloadChange?.({
       version: 2,
+      mode: isChangeOrderMode ? "change_order" : "standard",
       name: name.trim(),
       values: computed.pdfValues,
       info: draft.info,
       products: draft.products,
       bucking: draft.bucking,
       calculator: draft.calculator,
+      changeOrder: draft.changeOrder,
       totals: computed.totals,
       schedule: computed.schedule,
       breakdown: computed.breakdown,
@@ -408,7 +458,15 @@ export function EstimateBuilderCard({
       margins: computed.margins,
       marginChecks: computed.marginChecks,
     });
-  }, [computed, draft, legacyValues, name, onEstimatePayloadChange, onValuesChange]);
+  }, [
+    computed,
+    draft,
+    isChangeOrderMode,
+    legacyValues,
+    name,
+    onEstimatePayloadChange,
+    onValuesChange,
+  ]);
 
   useEffect(() => {
     if (!loadPayload) return;
@@ -420,17 +478,23 @@ export function EstimateBuilderCard({
       return;
     }
 
+    const loadedProducts =
+      Array.isArray(loadPayload.products) && loadPayload.products.length
+        ? loadPayload.products.map((item, index) =>
+            normalizeLoadedProduct(
+              item as Partial<ProductItem>,
+              createId(`product-${index + 1}`)
+            )
+          )
+        : DEFAULT_DRAFT.products;
+    const loadedTotals =
+      loadPayload.totals && typeof loadPayload.totals === "object"
+        ? (loadPayload.totals as Record<string, unknown>)
+        : null;
+
     const nextDraft: EstimateDraft = {
       info: loadPayload.info ?? DEFAULT_DRAFT.info,
-      products:
-        Array.isArray(loadPayload.products) && loadPayload.products.length
-          ? loadPayload.products.map((item, index) =>
-              normalizeLoadedProduct(
-                item as Partial<ProductItem>,
-                createId(`product-${index + 1}`)
-              )
-            )
-          : DEFAULT_DRAFT.products,
+      products: loadedProducts,
       bucking:
         Array.isArray(loadPayload.bucking) && loadPayload.bucking.length
           ? loadPayload.bucking
@@ -439,6 +503,12 @@ export function EstimateBuilderCard({
         ...DEFAULT_DRAFT.calculator,
         ...(loadPayload.calculator ?? {}),
       },
+      changeOrder: normalizeLoadedChangeOrder(
+        loadPayload.changeOrder,
+        DEFAULT_DRAFT.changeOrder,
+        loadedProducts,
+        loadedTotals
+      ),
     };
 
     setLegacyValues(null);
@@ -793,6 +863,19 @@ export function EstimateBuilderCard({
     });
   };
 
+  const handleChangeOrderChange = (
+    field: keyof EstimateDraft["changeOrder"],
+    value: string
+  ) => {
+    handleDraftChange({
+      ...draft,
+      changeOrder: {
+        ...draft.changeOrder,
+        [field]: value,
+      },
+    });
+  };
+
   const handleClear = () => {
     setDraft(DEFAULT_DRAFT);
     setLegacyValues(null);
@@ -813,6 +896,10 @@ export function EstimateBuilderCard({
   const productStepComplete = draft.products.some(
     (item) => item.name.trim() && resolveProductBasePrice(item) > 0
   );
+  const changeOrderStepComplete =
+    Boolean(draft.changeOrder.vendorName.trim()) &&
+    toNumber(draft.changeOrder.vendorCost) > 0 &&
+    toNumber(draft.changeOrder.laborCost) > 0;
   const buckingStepComplete = draft.bucking.some(
     (item) => toNumber(item.qty) > 0 && toNumber(item.sqft) > 0
   );
@@ -822,45 +909,70 @@ export function EstimateBuilderCard({
     !computed.marginChecks.install_margin_ok ||
     !computed.marginChecks.project_margin_ok;
 
-  const stepProgress = [
-    {
-      id: "project",
-      label: "Project Details",
-      done: projectStepComplete,
-      locked: false,
-    },
-    {
-      id: "products",
-      label: "Product Pricing",
-      done: productStepComplete,
-      locked: !projectStepComplete,
-    },
-    {
-      id: "bucking",
-      label: "Bucking & Waterproof",
-      done: buckingStepComplete,
-      locked: !projectStepComplete || !productStepComplete,
-    },
-    {
-      id: "install",
-      label: "Install Calculator",
-      done: installStepComplete,
-      locked: !projectStepComplete || !productStepComplete || !buckingStepComplete,
-    },
-    {
-      id: "review",
-      label: "Review Totals",
-      done: installStepComplete,
-      locked: !projectStepComplete || !productStepComplete || !buckingStepComplete,
-    },
-  ] as const;
+  const stepProgress = isChangeOrderMode
+    ? ([
+        {
+          id: "project",
+          label: "Project Details",
+          done: projectStepComplete,
+          locked: false,
+        },
+        {
+          id: "change-order",
+          label: "Change Order Pricing",
+          done: changeOrderStepComplete,
+          locked: !projectStepComplete,
+        },
+        {
+          id: "review",
+          label: "Review Totals",
+          done: installStepComplete,
+          locked: !projectStepComplete || !changeOrderStepComplete,
+        },
+      ] as const)
+    : ([
+        {
+          id: "project",
+          label: "Project Details",
+          done: projectStepComplete,
+          locked: false,
+        },
+        {
+          id: "products",
+          label: "Product Pricing",
+          done: productStepComplete,
+          locked: !projectStepComplete,
+        },
+        {
+          id: "bucking",
+          label: "Bucking & Waterproof",
+          done: buckingStepComplete,
+          locked: !projectStepComplete || !productStepComplete,
+        },
+        {
+          id: "install",
+          label: "Install Calculator",
+          done: installStepComplete,
+          locked: !projectStepComplete || !productStepComplete || !buckingStepComplete,
+        },
+        {
+          id: "review",
+          label: "Review Totals",
+          done: installStepComplete,
+          locked: !projectStepComplete || !productStepComplete || !buckingStepComplete,
+        },
+      ] as const);
 
   const completedCount = stepProgress.filter((step) => step.done).length;
   const completionPercent = Math.round((completedCount / stepProgress.length) * 100);
 
-  const showProducts = projectStepComplete;
+  const showProducts = projectStepComplete && !isChangeOrderMode;
+  const showChangeOrder = projectStepComplete && isChangeOrderMode;
   const showBucking = showProducts && productStepComplete;
   const showInstall = showBucking && buckingStepComplete;
+  const showReview =
+    (isChangeOrderMode && showChangeOrder && changeOrderStepComplete) ||
+    (!isChangeOrderMode && showInstall);
 
   return (
     <Card className="relative overflow-hidden rounded-3xl border-border/60 bg-card/80 shadow-elevated">
@@ -892,7 +1004,12 @@ export function EstimateBuilderCard({
               style={{ width: `${completionPercent}%` }}
             />
           </div>
-          <div className="grid gap-2 md:grid-cols-5">
+          <div
+            className={cn(
+              "grid gap-2",
+              isChangeOrderMode ? "md:grid-cols-3" : "md:grid-cols-5"
+            )}
+          >
             {stepProgress.map((step) => (
               <div
                 key={step.id}
@@ -1150,9 +1267,124 @@ export function EstimateBuilderCard({
             )}
           </div>
           {!projectStepComplete ? (
-            <UnlockNotice message="Complete Prepared For, Project Name, Project Type, and Proposal Date to unlock Product Pricing." />
+            <UnlockNotice
+              message={`Complete Prepared For, Project Name, Project Type, and Proposal Date to unlock ${
+                isChangeOrderMode ? "Change Order Pricing" : "Product Pricing"
+              }.`}
+            />
           ) : null}
         </section>
+
+        {showChangeOrder ? (
+          <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
+            <SectionHeader
+              title="Change Order Pricing"
+              description="Keep this simple: vendor cost + markup, labor cost + markup."
+              done={changeOrderStepComplete}
+            />
+
+            {!vendorOptions.length ? (
+              <UnlockNotice message="No active vendors are configured for this team. Add vendors in Team Admin to use change-order vendor selection." />
+            ) : null}
+
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+              <div className="space-y-1">
+                <label className="text-xs text-muted-foreground">Vendor</label>
+                <Select
+                  value={draft.changeOrder.vendorId || "__none__"}
+                  onValueChange={(value) => {
+                    const vendor =
+                      value === "__none__"
+                        ? null
+                        : vendorOptions.find((entry) => entry.id === value) ?? null;
+                    handleDraftChange({
+                      ...draft,
+                      changeOrder: {
+                        ...draft.changeOrder,
+                        vendorId: vendor?.id ?? "",
+                        vendorName: vendor?.name ?? "",
+                      },
+                    });
+                  }}
+                  disabled={Boolean(legacyValues) || !vendorOptions.length}
+                >
+                  <SelectTrigger className={inputClassName}>
+                    <SelectValue placeholder="Select vendor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Select vendor</SelectItem>
+                    {vendorOptions.map((vendor) => (
+                      <SelectItem key={vendor.id} value={vendor.id}>
+                        {vendor.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <RateField
+                label="Vendor cost"
+                value={draft.changeOrder.vendorCost}
+                onChange={(value) => handleChangeOrderChange("vendorCost", value)}
+                disabled={Boolean(legacyValues)}
+                moneyCurrency="USD"
+                placeholder="0"
+              />
+              <RateField
+                label="Vendor markup"
+                value={draft.changeOrder.vendorMarkup}
+                onChange={(value) => handleChangeOrderChange("vendorMarkup", value)}
+                disabled={Boolean(legacyValues)}
+                percent
+              />
+              <RateField
+                label="Labor cost"
+                value={draft.changeOrder.laborCost}
+                onChange={(value) => handleChangeOrderChange("laborCost", value)}
+                disabled={Boolean(legacyValues)}
+                moneyCurrency="USD"
+                placeholder="0"
+              />
+              <RateField
+                label="Labor markup"
+                value={draft.changeOrder.laborMarkup}
+                onChange={(value) => handleChangeOrderChange("laborMarkup", value)}
+                disabled={Boolean(legacyValues)}
+                percent
+              />
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-lg border border-border/60 bg-card/70 px-3 py-2">
+                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                  Vendor Total
+                </p>
+                <p className="text-base font-semibold text-foreground">
+                  {formatCurrency(changeOrderVendorTotal)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border/60 bg-card/70 px-3 py-2">
+                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                  Labor Total
+                </p>
+                <p className="text-base font-semibold text-foreground">
+                  {formatCurrency(changeOrderLaborTotal)}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border/60 bg-card/70 px-3 py-2">
+                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                  Change Order Total
+                </p>
+                <p className="text-base font-semibold text-foreground">
+                  {formatCurrency(computed.totals.total_contract_price)}
+                </p>
+              </div>
+            </div>
+
+            {!changeOrderStepComplete ? (
+              <UnlockNotice message="Select a vendor and enter vendor + labor costs to unlock review totals." />
+            ) : null}
+          </section>
+        ) : null}
 
         {showProducts ? (
           <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
@@ -1973,7 +2205,7 @@ export function EstimateBuilderCard({
           </section>
         ) : null}
 
-        {showInstall ? (
+        {showReview ? (
           <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
             <SectionHeader
               title="Calculated Totals"
@@ -2054,34 +2286,38 @@ export function EstimateBuilderCard({
               </div>
             </div>
 
-            <Separator />
+            {!isChangeOrderMode ? (
+              <>
+                <Separator />
 
-            <div>
-              <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                Payment schedule
-              </p>
-              <div className="grid gap-2 md:grid-cols-2">
-                {[
-                  ["Material draw 1", computed.schedule.material_draw_1],
-                  ["Material draw 2", computed.schedule.material_draw_2],
-                  ["Material draw 3", computed.schedule.material_draw_3],
-                  ["Mobilization deposit", computed.schedule.mobilization_deposit],
-                  ["Install draw 1", computed.schedule.installation_draw_1],
-                  ["Install draw 2", computed.schedule.installation_draw_2],
-                  ["Final payment", computed.schedule.final_payment],
-                ].map(([label, value]) => (
-                  <div
-                    key={label}
-                    className="flex items-center justify-between rounded-lg border border-border/60 bg-card/70 px-3 py-2"
-                  >
-                    <span className="text-sm text-muted-foreground">{label}</span>
-                    <span className="text-sm font-semibold text-foreground">
-                      {formatCurrency(value as number)}
-                    </span>
+                <div>
+                  <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                    Payment schedule
+                  </p>
+                  <div className="grid gap-2 md:grid-cols-2">
+                    {[
+                      ["Material draw 1", computed.schedule.material_draw_1],
+                      ["Material draw 2", computed.schedule.material_draw_2],
+                      ["Material draw 3", computed.schedule.material_draw_3],
+                      ["Mobilization deposit", computed.schedule.mobilization_deposit],
+                      ["Install draw 1", computed.schedule.installation_draw_1],
+                      ["Install draw 2", computed.schedule.installation_draw_2],
+                      ["Final payment", computed.schedule.final_payment],
+                    ].map(([label, value]) => (
+                      <div
+                        key={label}
+                        className="flex items-center justify-between rounded-lg border border-border/60 bg-card/70 px-3 py-2"
+                      >
+                        <span className="text-sm text-muted-foreground">{label}</span>
+                        <span className="text-sm font-semibold text-foreground">
+                          {formatCurrency(value as number)}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
+                </div>
+              </>
+            ) : null}
 
             {hasMarginRisk ? (
               <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-3 text-sm text-foreground">

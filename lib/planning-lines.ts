@@ -63,6 +63,7 @@ type EstimateModel = {
   calculator: Record<string, unknown>;
   totals: Record<string, unknown>;
   breakdown: Record<string, unknown>;
+  changeOrder: Record<string, unknown>;
 };
 
 const GL_ACCOUNT_NO = "42000";
@@ -516,6 +517,17 @@ function readAmountsByProductFromEstimate(
     setAmounts(amountsByProduct, code, cost, price, "merge");
   }
 
+  if (!model.products.length) {
+    const vendorName = asTrimmedString(model.changeOrder.vendorName);
+    const code = resolveProductCode(vendorName, mappingEntries);
+    if (code) {
+      const cost = toNumber(asNumberish(model.changeOrder.vendorCost));
+      const markup = toNumber(asNumberish(model.changeOrder.vendorMarkup));
+      const price = roundUp(cost * (1 + markup));
+      setAmounts(amountsByProduct, code, cost, price, "merge");
+    }
+  }
+
   const installMarkup = toNumber(asNumberish(model.calculator.install_markup));
   const rentals = toNumber(asNumberish(model.calculator.rentals));
   const breakdown = model.breakdown;
@@ -567,11 +579,14 @@ function resolveEstimateModel(estimateData: unknown): EstimateModel | null {
   const buckingRaw = Array.isArray(raw.bucking) ? raw.bucking : [];
   const calculatorRaw =
     raw.calculator && typeof raw.calculator === "object" ? raw.calculator : {};
+  const changeOrderRaw =
+    raw.changeOrder && typeof raw.changeOrder === "object" ? raw.changeOrder : {};
 
   const hasStructured =
     Array.isArray(raw.products) ||
     Array.isArray(raw.bucking) ||
-    (raw.calculator && typeof raw.calculator === "object");
+    (raw.calculator && typeof raw.calculator === "object") ||
+    (raw.changeOrder && typeof raw.changeOrder === "object");
 
   if (hasStructured) {
     const computed =
@@ -588,6 +603,10 @@ function resolveEstimateModel(estimateData: unknown): EstimateModel | null {
               ...DEFAULT_DRAFT.calculator,
               ...(calculatorRaw as Record<string, unknown>),
             } as any,
+            changeOrder: {
+              ...DEFAULT_DRAFT.changeOrder,
+              ...(changeOrderRaw as Record<string, unknown>),
+            } as any,
           });
 
     return {
@@ -596,6 +615,10 @@ function resolveEstimateModel(estimateData: unknown): EstimateModel | null {
       calculator: {
         ...DEFAULT_DRAFT.calculator,
         ...(calculatorRaw as Record<string, unknown>),
+      },
+      changeOrder: {
+        ...DEFAULT_DRAFT.changeOrder,
+        ...(changeOrderRaw as Record<string, unknown>),
       },
       totals: computed.totals as Record<string, unknown>,
       breakdown: computed.breakdown as Record<string, unknown>,

@@ -225,6 +225,24 @@ function hasAnyManualInput(values: Record<string, unknown>) {
   });
 }
 
+function isChangeOrderProjectType(value: unknown) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized) return false;
+  return (
+    normalized === "change order" ||
+    normalized === "change-order" ||
+    normalized.includes("change order")
+  );
+}
+
+function getEstimateProjectType(estimate: any) {
+  const infoProjectType = String(estimate?.payload?.info?.project_type ?? "").trim();
+  if (infoProjectType) return infoProjectType;
+  const valuesProjectType = String(estimate?.payload?.values?.project_type ?? "").trim();
+  if (valuesProjectType) return valuesProjectType;
+  return "";
+}
+
 function formatRelativeTime(timestamp: number | null | undefined) {
   if (!timestamp || !Number.isFinite(timestamp)) return "No timestamp";
   const diffMs = Date.now() - timestamp;
@@ -294,6 +312,19 @@ function getManualEstimateProgress(
   estimatePayload: Record<string, any> | null,
   estimateValues: Record<string, string | number>
 ) {
+  const evaluateChangeOrderStep = (source: Record<string, unknown> | null) => {
+    const vendorName = String(
+      source?.vendorName ?? source?.change_order_vendor ?? ""
+    ).trim();
+    const vendorCost = toFiniteNumber(
+      source?.vendorCost ?? source?.change_order_vendor_cost
+    );
+    const laborCost = toFiniteNumber(
+      source?.laborCost ?? source?.change_order_labor_cost
+    );
+    return Boolean(vendorName) && vendorCost > 0 && laborCost > 0;
+  };
+
   if (estimatePayload && typeof estimatePayload === "object") {
     const info =
       estimatePayload.info && typeof estimatePayload.info === "object"
@@ -305,11 +336,40 @@ function getManualEstimateProgress(
     const bucking = Array.isArray(estimatePayload.bucking)
       ? (estimatePayload.bucking as Array<Record<string, unknown>>)
       : null;
+    const values =
+      estimatePayload.values &&
+      typeof estimatePayload.values === "object" &&
+      !Array.isArray(estimatePayload.values)
+        ? (estimatePayload.values as Record<string, unknown>)
+        : null;
+    const changeOrder =
+      estimatePayload.changeOrder &&
+      typeof estimatePayload.changeOrder === "object" &&
+      !Array.isArray(estimatePayload.changeOrder)
+        ? (estimatePayload.changeOrder as Record<string, unknown>)
+        : null;
+    const changeOrderMode =
+      String(estimatePayload.mode ?? "").trim().toLowerCase() === "change_order" ||
+      isChangeOrderProjectType(info?.project_type ?? values?.project_type);
 
     if (info || products || bucking) {
       const projectStepComplete = REQUIRED_MANUAL_INFO_FIELDS.every((field) =>
         String(info?.[field] ?? "").trim()
       );
+      const installStepComplete =
+        toFiniteNumber(estimatePayload?.totals?.total_contract_price) > 0;
+      if (changeOrderMode) {
+        const changeOrderStepComplete = evaluateChangeOrderStep({
+          ...(values ?? {}),
+          ...(changeOrder ?? {}),
+        });
+        return {
+          started: projectStepComplete || changeOrderStepComplete || installStepComplete,
+          complete:
+            projectStepComplete && changeOrderStepComplete && installStepComplete,
+        };
+      }
+
       const productStepComplete = (products ?? []).some((item) => {
         const name = String(item?.name ?? "").trim();
         const price = toFiniteNumber(item?.price);
@@ -320,8 +380,6 @@ function getManualEstimateProgress(
         const sqft = toFiniteNumber(item?.sqft);
         return qty > 0 && sqft > 0;
       });
-      const installStepComplete =
-        toFiniteNumber(estimatePayload?.totals?.total_contract_price) > 0;
 
       return {
         started:
@@ -338,17 +396,18 @@ function getManualEstimateProgress(
     }
 
     if (
-      estimatePayload.values &&
-      typeof estimatePayload.values === "object" &&
-      !Array.isArray(estimatePayload.values)
+      values
     ) {
-      const values = estimatePayload.values as Record<string, unknown>;
+      const changeOrderModeFromValues = isChangeOrderProjectType(values.project_type);
+      const changeOrderStepComplete = evaluateChangeOrderStep(values);
       return {
         started: hasAnyManualInput(values),
         complete:
-          REQUIRED_MANUAL_INFO_FIELDS.every((field) =>
-            String(values[field] ?? "").trim()
-          ) && toFiniteNumber(values.total_contract_price) > 0,
+          REQUIRED_MANUAL_INFO_FIELDS.every((field) => String(values[field] ?? "").trim()) &&
+          (changeOrderModeFromValues
+            ? changeOrderStepComplete
+            : true) &&
+          toFiniteNumber(values.total_contract_price) > 0,
       };
     }
   }
@@ -3090,6 +3149,7 @@ export default function HomePage() {
                         const historyOpen = historyEstimateId === estimate.id;
                         const editingCurrent = editingEstimateId === estimate.id;
                         const tags = normalizeEstimateTags(estimate?.tags);
+                        const projectType = getEstimateProjectType(estimate);
                         const estimateProjectId = String(
                           estimate?.project?.id ?? ""
                         ).trim();
@@ -3118,6 +3178,11 @@ export default function HomePage() {
                                   <Badge variant="outline" className="bg-background/80">
                                     v{currentVersion}
                                   </Badge>
+                                  {projectType ? (
+                                    <Badge variant="muted" className="bg-muted/80">
+                                      {projectType}
+                                    </Badge>
+                                  ) : null}
                                   {editingCurrent ? (
                                     <Badge
                                       variant="outline"

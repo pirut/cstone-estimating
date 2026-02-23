@@ -340,8 +340,13 @@ function extractEstimateValues(estimateData: any) {
     estimateData.info ||
     estimateData.products ||
     estimateData.bucking ||
-    estimateData.calculator
+    estimateData.calculator ||
+    estimateData.changeOrder
   ) {
+    const changeOrderSource =
+      estimateData.changeOrder && typeof estimateData.changeOrder === "object"
+        ? estimateData.changeOrder
+        : {};
     const computed = computeEstimate({
       info: estimateData.info ?? {},
       products:
@@ -355,6 +360,10 @@ function extractEstimateValues(estimateData: any) {
       calculator: {
         ...DEFAULT_DRAFT.calculator,
         ...(estimateData.calculator ?? {}),
+      },
+      changeOrder: {
+        ...DEFAULT_DRAFT.changeOrder,
+        ...(changeOrderSource as Record<string, unknown>),
       },
     });
     return computed.pdfValues as Record<string, unknown>;

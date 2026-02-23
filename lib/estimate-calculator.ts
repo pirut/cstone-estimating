@@ -120,6 +120,15 @@ export type InstallCalculator = {
   override_install_total: string;
 };
 
+export type ChangeOrderDraft = {
+  vendorId: string;
+  vendorName: string;
+  vendorCost: string;
+  vendorMarkup: string;
+  laborCost: string;
+  laborMarkup: string;
+};
+
 export type MarginThresholds = {
   product_margin_min: number;
   install_margin_min: number;
@@ -137,6 +146,7 @@ export type EstimateDraft = {
   products: ProductItem[];
   bucking: BuckingLineItem[];
   calculator: InstallCalculator;
+  changeOrder: ChangeOrderDraft;
 };
 
 export type PanelType = {
@@ -167,6 +177,14 @@ export const DEFAULT_DRAFT: EstimateDraft = {
     override_bucking_cost: "",
     override_waterproofing_cost: "",
     override_install_total: "",
+  },
+  changeOrder: {
+    vendorId: "",
+    vendorName: "",
+    vendorCost: "",
+    vendorMarkup: "0.5",
+    laborCost: "",
+    laborMarkup: "0.35",
   },
 };
 
@@ -246,8 +264,12 @@ export function computeEstimate(
   panelTypes: PanelType[] = [],
   marginThresholdsInput: Partial<MarginThresholds> | null = null
 ): EstimateComputed {
-  const resolvedPanelTypes = normalizePanelTypes(panelTypes, draft.bucking ?? []);
   const marginThresholds = normalizeMarginThresholds(marginThresholdsInput);
+  if (isChangeOrderProjectType(draft.info.project_type)) {
+    return computeChangeOrderEstimate(draft, marginThresholds);
+  }
+
+  const resolvedPanelTypes = normalizePanelTypes(panelTypes, draft.bucking ?? []);
   const productMarkupDefault = toNumber(draft.calculator.product_markup_default);
   const installMarkup = toNumber(draft.calculator.install_markup);
   const buckingRate = toNumber(draft.calculator.bucking_rate);
@@ -425,6 +447,95 @@ export function computeEstimate(
   };
 }
 
+function computeChangeOrderEstimate(
+  draft: EstimateDraft,
+  marginThresholds: MarginThresholds
+): EstimateComputed {
+  const vendorName = String(draft.changeOrder.vendorName ?? "").trim();
+  const vendorCost = toNumber(draft.changeOrder.vendorCost);
+  const vendorMarkup = toNumber(draft.changeOrder.vendorMarkup);
+  const vendorPrice = roundUp(vendorCost * (1 + vendorMarkup));
+
+  const laborCost = toNumber(draft.changeOrder.laborCost);
+  const laborMarkup = toNumber(draft.changeOrder.laborMarkup);
+  const laborPrice = roundUp(laborCost * (1 + laborMarkup));
+
+  const totalContractPrice = vendorPrice + laborPrice;
+  const totalCostBase = vendorCost + laborCost;
+
+  const productMargin = calculateMargin(vendorPrice, vendorCost);
+  const installMargin = calculateMargin(laborPrice, laborCost);
+  const projectMargin = calculateMargin(totalContractPrice, totalCostBase);
+
+  const pdfValues: Record<string, number | string> = {
+    ...draft.info,
+    product_price: vendorPrice,
+    bucking_price: 0,
+    waterproofing_price: 0,
+    installation_price: laborPrice,
+    total_contract_price: totalContractPrice,
+    material_draw_1: 0,
+    material_draw_2: 0,
+    material_draw_3: 0,
+    mobilization_deposit: 0,
+    installation_draw_1: 0,
+    installation_draw_2: 0,
+    final_payment: totalContractPrice,
+    product_features_block: "- No product features selected.",
+    change_order_vendor: vendorName,
+    change_order_vendor_cost: vendorCost,
+    change_order_vendor_markup: vendorMarkup,
+    change_order_vendor_total: vendorPrice,
+    change_order_labor_cost: laborCost,
+    change_order_labor_markup: laborMarkup,
+    change_order_labor_total: laborPrice,
+    change_order_total: totalContractPrice,
+  };
+
+  return {
+    totals: {
+      product_price: vendorPrice,
+      bucking_price: 0,
+      waterproofing_price: 0,
+      installation_price: laborPrice,
+      total_contract_price: totalContractPrice,
+    },
+    schedule: {
+      material_draw_1: 0,
+      material_draw_2: 0,
+      material_draw_3: 0,
+      mobilization_deposit: 0,
+      installation_draw_1: 0,
+      installation_draw_2: 0,
+      final_payment: totalContractPrice,
+    },
+    breakdown: {
+      total_lineal_ft: 0,
+      total_install_value: laborCost,
+      install_cost_base: laborCost,
+      covers_cost_base: 0,
+      punch_cost_base: 0,
+      bucking_cost_base: 0,
+      waterproofing_cost_base: 0,
+      rentals_markup: 0,
+    },
+    margins: {
+      product_margin: productMargin,
+      install_margin: installMargin,
+      project_margin: projectMargin,
+    },
+    marginThresholds,
+    marginChecks: {
+      product_margin_ok: productMargin > marginThresholds.product_margin_min,
+      install_margin_ok: installMargin > marginThresholds.install_margin_min,
+      project_margin_ok: projectMargin > marginThresholds.project_margin_min,
+    },
+    panelCounts: {},
+    panelTotals: {},
+    pdfValues,
+  };
+}
+
 function buildProductFeaturesBlock(products: ProductItem[]) {
   const lines: string[] = [];
 
@@ -500,6 +611,16 @@ export function normalizeMarginThresholds(
     install_margin_min: normalizeMarginThreshold(value?.install_margin_min),
     project_margin_min: normalizeMarginThreshold(value?.project_margin_min),
   };
+}
+
+export function isChangeOrderProjectType(value: unknown) {
+  const normalized = String(value ?? "").trim().toLowerCase();
+  if (!normalized) return false;
+  return (
+    normalized === "change order" ||
+    normalized === "change-order" ||
+    normalized.includes("change order")
+  );
 }
 
 function normalizeMarginThreshold(value: string | number | undefined | null) {
