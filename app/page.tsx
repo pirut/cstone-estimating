@@ -3425,439 +3425,491 @@ export default function HomePage() {
               </CardContent>
             </Card>
 
-            <Card className="rounded-3xl border-border/60 bg-card/80 shadow-elevated">
-              <CardHeader className="space-y-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.42fr)_minmax(0,0.58fr)] 2xl:grid-cols-[minmax(360px,0.38fr)_minmax(0,0.62fr)]">
+              <Card className="h-fit rounded-3xl border-border/60 bg-card/80 shadow-elevated">
+                <CardHeader className="space-y-4">
                   <div className="space-y-2">
                     <Badge variant="muted" className="bg-muted/80 text-[10px]">
                       Shared
                     </Badge>
                     <CardTitle className="text-2xl font-serif">
-                      Project Library
+                      Project Management
                     </CardTitle>
                     <CardDescription>
-                      Manage projects, compare estimate options, and keep versions
-                      grouped by project.
+                      Create projects, set the active destination, and switch teams.
                     </CardDescription>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline" className="bg-background/80">
-                      {filteredTeamEstimates.length} shown
+                      {teamProjects.length} projects
                     </Badge>
                     <Badge variant="outline" className="bg-background/80">
-                      {teamEstimates.length} in project
+                      {teamEstimates.length} estimates
                     </Badge>
                   </div>
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-background/70 px-3 py-2">
-                  <p className="text-xs text-muted-foreground">
-                    Power workflow: use shortcuts for speed while estimating.
-                  </p>
-                  <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-                    <Badge variant="outline" className="bg-background/80">
-                      Ctrl/Cmd+S save
-                    </Badge>
-                    <Badge variant="outline" className="bg-background/80">
-                      Ctrl/Cmd+Enter generate
-                    </Badge>
-                    <Badge variant="outline" className="bg-background/80">
-                      Ctrl/Cmd+Shift+N new
-                    </Badge>
-                    <Badge variant="outline" className="bg-background/80">
-                      Ctrl/Cmd+. dock
-                    </Badge>
-                  </div>
-                </div>
-                <div className="grid gap-3 lg:grid-cols-[0.8fr_0.2fr]">
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      value={teamEstimateQuery}
-                      onChange={(event) => setTeamEstimateQuery(event.target.value)}
-                      placeholder="Search estimates by name..."
-                      className="pl-9"
-                    />
-                  </div>
-                  {memberTeams.length > 1 ? (
-                    <Select
-                      value={activeTeam?.id ?? undefined}
-                      onValueChange={(value) => setActiveTeamId(value)}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select team" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {memberTeams.map((team) => (
-                          <SelectItem key={team.id} value={team.id}>
-                            {team.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <div className="flex items-center justify-end">
-                      <Badge variant="outline" className="bg-background/80">
-                        Active team: {activeTeam?.name ?? "N/A"}
-                      </Badge>
-                    </div>
-                  )}
-                </div>
-                <div className="grid gap-3 lg:grid-cols-[0.65fr_0.35fr]">
-                  <Select
-                    value={activeProjectId ?? undefined}
-                    onValueChange={(value) => setActiveProjectId(value)}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select project" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {teamProjects.map((project) => (
-                        <SelectItem key={project.id} value={project.id}>
-                          {project.name}
-                        </SelectItem>
-                      ))}
-                      {unassignedTeamEstimates.length ? (
-                        <SelectItem value={UNASSIGNED_PROJECT_KEY}>
-                          Unassigned estimates
-                        </SelectItem>
-                      ) : null}
-                    </SelectContent>
-                  </Select>
-                  <div className="flex gap-2">
-                    <Input
-                      value={newProjectName}
-                      onChange={(event) => setNewProjectName(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter") return;
-                        event.preventDefault();
-                        void handleCreateProject();
-                      }}
-                      placeholder="New project name..."
-                    />
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => void handleCreateProject()}
-                      disabled={
-                        !teamReady ||
-                        !isSignedIn ||
-                        isCreatingProject ||
-                        !newProjectName.trim()
-                      }
-                    >
-                      {isCreatingProject ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Plus className="h-3.5 w-3.5" />
-                      )}
-                      Create
-                    </Button>
-                  </div>
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge variant="outline" className="bg-background/80">
-                    <FolderKanban className="mr-1 h-3.5 w-3.5" />
-                    {activeProject?.name ??
-                      (activeProjectId === UNASSIGNED_PROJECT_KEY
-                        ? "Unassigned estimates"
-                        : "No project selected")}
-                  </Badge>
-                  <Button
-                    variant={teamEstimateScope === "all" ? "secondary" : "outline"}
-                    size="sm"
-                    onClick={() => setTeamEstimateScope("all")}
-                  >
-                    All
-                  </Button>
-                  <Button
-                    variant={teamEstimateScope === "mine" ? "secondary" : "outline"}
-                    size="sm"
-                    onClick={() => setTeamEstimateScope("mine")}
-                  >
-                    Mine
-                  </Button>
-                  <Button
-                    variant={teamEstimateScope === "recent" ? "secondary" : "outline"}
-                    size="sm"
-                    onClick={() => setTeamEstimateScope("recent")}
-                  >
-                    Updated 14d
-                  </Button>
-                  {teamEstimateQuery.trim() ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setTeamEstimateQuery("")}
-                    >
-                      Clear search
-                    </Button>
-                  ) : null}
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {projectActionNotice ? (
-                  <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-800">
-                    {projectActionNotice}
-                  </div>
-                ) : null}
-                {!teamReady ? (
-                  <div className="text-sm text-muted-foreground">
-                    Preparing your team workspace...
-                  </div>
-                ) : !activeProjectId ? (
-                  <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-4 text-sm text-muted-foreground">
-                    Create your first project to start organizing estimates.
-                  </div>
-                ) : filteredTeamEstimates.length ? (
-                  <ScrollArea className="h-[24rem] rounded-xl border border-border/70 bg-background/70 xl:h-[31rem]">
-                    <div className="space-y-2 p-2">
-                      {filteredTeamEstimates.map((estimate) => {
-                        const currentVersion = getCurrentVersionForEstimate(estimate);
-                        const historyOpen = historyEstimateId === estimate.id;
-                        const editingCurrent = editingEstimateId === estimate.id;
-                        const tags = normalizeEstimateTags(estimate?.tags);
-                        const projectType = getEstimateProjectType(estimate);
-                        const estimateProjectId = String(
-                          estimate?.project?.id ?? ""
-                        ).trim();
-                        const destinationProjects = teamProjects.filter(
-                          (project) => project.id !== estimateProjectId
-                        );
-                        const selectedMoveTarget =
-                          moveTargetByEstimateId[estimate.id] ??
-                          destinationProjects[0]?.id ??
-                          "";
-                        const isMovingEstimate = movingEstimateId === estimate.id;
-                        return (
-                          <div
-                            key={estimate.id}
-                            className={cn(
-                              "rounded-lg border border-border/60 bg-card/80 px-3 py-3",
-                              historyOpen && "border-accent/40 bg-accent/5"
-                            )}
-                          >
-                            <div className="flex flex-wrap items-start justify-between gap-3">
-                              <div className="space-y-1">
-                                <p className="text-sm font-semibold text-foreground">
-                                  {estimate.title ?? "Untitled"}
-                                </p>
-                                <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                  <Badge variant="outline" className="bg-background/80">
-                                    v{currentVersion}
-                                  </Badge>
-                                  {projectType ? (
-                                    <Badge variant="muted" className="bg-muted/80">
-                                      {projectType}
-                                    </Badge>
-                                  ) : null}
-                                  {editingCurrent ? (
-                                    <Badge
-                                      variant="outline"
-                                      className="border-accent/40 bg-accent/10 text-foreground"
-                                    >
-                                      Editing
-                                    </Badge>
-                                  ) : null}
-                                  <span className="inline-flex items-center gap-1">
-                                    <Clock3 className="h-3 w-3" />
-                                    {formatRelativeTime(estimate.updatedAt)}
-                                  </span>
-                                  {estimate.updatedAt ? (
-                                    <span>{new Date(estimate.updatedAt).toLocaleString()}</span>
-                                  ) : null}
-                                </div>
-                                {tags.length ? (
-                                  <div className="mt-1 flex flex-wrap gap-1">
-                                    {tags.map((tag) => (
-                                      <Badge
-                                        key={`${estimate.id}-${tag}`}
-                                        variant="muted"
-                                        className="text-[10px]"
-                                      >
-                                        {tag}
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                ) : null}
-                              </div>
-                              <div className="flex flex-wrap items-center justify-end gap-2">
-                                {destinationProjects.length ? (
-                                  <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-background/80 p-1">
-                                    <Select
-                                      value={selectedMoveTarget || undefined}
-                                      onValueChange={(value) =>
-                                        setMoveTargetByEstimateId((previous) => ({
-                                          ...previous,
-                                          [estimate.id]: value,
-                                        }))
-                                      }
-                                    >
-                                      <SelectTrigger className="h-8 min-w-[170px] border-0 bg-transparent px-2 text-xs">
-                                        <SelectValue placeholder="Move to..." />
-                                      </SelectTrigger>
-                                      <SelectContent>
-                                        {destinationProjects.map((project) => (
-                                          <SelectItem
-                                            key={`${estimate.id}-${project.id}`}
-                                            value={project.id}
-                                          >
-                                            {project.name}
-                                          </SelectItem>
-                                        ))}
-                                      </SelectContent>
-                                    </Select>
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="h-8"
-                                      disabled={
-                                        isMovingEstimate || !selectedMoveTarget
-                                      }
-                                      onClick={() =>
-                                        void handleMoveEstimateToProject(
-                                          estimate,
-                                          selectedMoveTarget
-                                        )
-                                      }
-                                    >
-                                      {isMovingEstimate ? (
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                      ) : (
-                                        <ArrowRightLeft className="h-3.5 w-3.5" />
-                                      )}
-                                      Move
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <span className="text-[11px] text-muted-foreground">
-                                    Only project
-                                  </span>
-                                )}
-                                <Button
-                                  variant="secondary"
-                                  size="sm"
-                                  onClick={() => handleLoadTeamEstimate(estimate)}
-                                >
-                                  Load
-                                </Button>
-                                <Button
-                                  variant={historyOpen ? "secondary" : "ghost"}
-                                  size="sm"
-                                  onClick={() => {
-                                    setHistoryError(null);
-                                    setHistoryEstimateId((current) =>
-                                      current === estimate.id ? null : estimate.id
-                                    );
-                                  }}
-                                >
-                                  <History className="h-3.5 w-3.5" />
-                                  {historyOpen ? "Hide history" : "History"}
-                                </Button>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </ScrollArea>
-                ) : (
-                  <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-4 text-sm text-muted-foreground">
-                    {teamEstimates.length
-                      ? "No estimates match your current filters."
-                      : activeProjectId === UNASSIGNED_PROJECT_KEY
-                        ? "No unassigned estimates."
-                        : "No estimates in this project yet."}
-                  </div>
-                )}
-                {historyError ? (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                    {historyError}
-                  </div>
-                ) : null}
-                {selectedHistoryEstimate ? (
-                  <div className="space-y-2 rounded-lg border border-border/60 bg-background/70 p-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">
-                          Version history:{" "}
-                          {selectedHistoryEstimate.title ?? "Untitled"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Reverting creates a new version and keeps the full timeline.
-                        </p>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setHistoryEstimateId(null)}
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                      Team scope
+                    </p>
+                    {memberTeams.length > 1 ? (
+                      <Select
+                        value={activeTeam?.id ?? undefined}
+                        onValueChange={(value) => setActiveTeamId(value)}
                       >
-                        Close
-                      </Button>
-                    </div>
-                    {selectedHistoryEntries.length ? (
-                      <ScrollArea className="h-52 rounded-md border border-border/60 bg-background/70">
-                        <div className="divide-y divide-border/60">
-                          {selectedHistoryEntries.map((entry) => {
-                            const actionId = `${selectedHistoryEstimate.id}:${entry.id}`;
-                            const reverting = historyActionId === actionId;
-                            const isCurrent =
-                              selectedHistoryCurrentVersion === entry.version;
-                            return (
-                              <div
-                                key={entry.id}
-                                className="flex items-center justify-between gap-4 px-3 py-2"
-                              >
-                                <div>
-                                  <p className="text-xs font-medium text-foreground">
-                                    v{entry.version} ·{" "}
-                                    {getEstimateVersionActionLabel(entry.action)}
-                                  </p>
-                                  <p className="text-xs text-muted-foreground">
-                                    {new Date(entry.createdAt).toLocaleString()}
-                                  </p>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                  {isCurrent ? (
-                                    <Badge variant="outline" className="bg-background/80">
-                                      Current
-                                    </Badge>
-                                  ) : null}
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() =>
-                                      void handleRevertTeamEstimateVersion(
-                                        selectedHistoryEstimate,
-                                        entry
-                                      )
-                                    }
-                                    disabled={reverting || isCurrent || !entry.payload}
-                                  >
-                                    {reverting ? (
-                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                    ) : null}
-                                    Revert
-                                  </Button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </ScrollArea>
+                        <SelectTrigger className="w-full">
+                          <SelectValue placeholder="Select team" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {memberTeams.map((team) => (
+                            <SelectItem key={team.id} value={team.id}>
+                              {team.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     ) : (
-                      <div className="text-xs text-muted-foreground">
-                        No versions recorded yet.
+                      <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2 text-sm text-foreground">
+                        Active team: {activeTeam?.name ?? "N/A"}
                       </div>
                     )}
                   </div>
-                ) : null}
-                {editingEstimateId ? (
-                  <div className="text-xs text-muted-foreground">
-                    Editing a project estimate. Use “Save to project” to update it.
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                      Active project
+                    </p>
+                    <Select
+                      value={activeProjectId ?? undefined}
+                      onValueChange={(value) => setActiveProjectId(value)}
+                    >
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Select project" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {teamProjects.map((project) => (
+                          <SelectItem key={project.id} value={project.id}>
+                            {project.name}
+                          </SelectItem>
+                        ))}
+                        {unassignedTeamEstimates.length ? (
+                          <SelectItem value={UNASSIGNED_PROJECT_KEY}>
+                            Unassigned estimates
+                          </SelectItem>
+                        ) : null}
+                      </SelectContent>
+                    </Select>
                   </div>
-                ) : null}
-              </CardContent>
-            </Card>
+                  <div className="space-y-2">
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                      Create project
+                    </p>
+                    <div className="flex gap-2">
+                      <Input
+                        value={newProjectName}
+                        onChange={(event) => setNewProjectName(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter") return;
+                          event.preventDefault();
+                          void handleCreateProject();
+                        }}
+                        placeholder="New project name..."
+                      />
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => void handleCreateProject()}
+                        disabled={
+                          !teamReady ||
+                          !isSignedIn ||
+                          isCreatingProject ||
+                          !newProjectName.trim()
+                        }
+                      >
+                        {isCreatingProject ? (
+                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <Plus className="h-3.5 w-3.5" />
+                        )}
+                        Create
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-3">
+                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
+                      Current destination
+                    </p>
+                    <Badge variant="outline" className="mt-2 bg-background/80">
+                      <FolderKanban className="mr-1 h-3.5 w-3.5" />
+                      {activeProject?.name ??
+                        (activeProjectId === UNASSIGNED_PROJECT_KEY
+                          ? "Unassigned estimates"
+                          : "No project selected")}
+                    </Badge>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-3">
+                    <p className="text-xs text-muted-foreground">
+                      Power workflow shortcuts
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
+                      <Badge variant="outline" className="bg-background/80">
+                        Ctrl/Cmd+S save
+                      </Badge>
+                      <Badge variant="outline" className="bg-background/80">
+                        Ctrl/Cmd+Enter generate
+                      </Badge>
+                      <Badge variant="outline" className="bg-background/80">
+                        Ctrl/Cmd+Shift+N new
+                      </Badge>
+                      <Badge variant="outline" className="bg-background/80">
+                        Ctrl/Cmd+. dock
+                      </Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="rounded-3xl border-border/60 bg-card/80 shadow-elevated">
+                <CardHeader className="space-y-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="space-y-2">
+                      <Badge variant="muted" className="bg-muted/80 text-[10px]">
+                        Shared
+                      </Badge>
+                      <CardTitle className="text-2xl font-serif">
+                        Estimates & History
+                      </CardTitle>
+                      <CardDescription>
+                        Search estimates, move between projects, and manage versions.
+                      </CardDescription>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="bg-background/80">
+                        {filteredTeamEstimates.length} shown
+                      </Badge>
+                      <Badge variant="outline" className="bg-background/80">
+                        {teamEstimates.length} in project
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="grid gap-3 lg:grid-cols-[0.7fr_0.3fr]">
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        value={teamEstimateQuery}
+                        onChange={(event) => setTeamEstimateQuery(event.target.value)}
+                        placeholder="Search estimates by name..."
+                        className="pl-9"
+                      />
+                    </div>
+                    <div className="flex items-center lg:justify-end">
+                      <Badge variant="outline" className="bg-background/80">
+                        <FolderKanban className="mr-1 h-3.5 w-3.5" />
+                        {activeProject?.name ??
+                          (activeProjectId === UNASSIGNED_PROJECT_KEY
+                            ? "Unassigned estimates"
+                            : "No project selected")}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      variant={teamEstimateScope === "all" ? "secondary" : "outline"}
+                      size="sm"
+                      onClick={() => setTeamEstimateScope("all")}
+                    >
+                      All
+                    </Button>
+                    <Button
+                      variant={teamEstimateScope === "mine" ? "secondary" : "outline"}
+                      size="sm"
+                      onClick={() => setTeamEstimateScope("mine")}
+                    >
+                      Mine
+                    </Button>
+                    <Button
+                      variant={teamEstimateScope === "recent" ? "secondary" : "outline"}
+                      size="sm"
+                      onClick={() => setTeamEstimateScope("recent")}
+                    >
+                      Updated 14d
+                    </Button>
+                    {teamEstimateQuery.trim() ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setTeamEstimateQuery("")}
+                      >
+                        Clear search
+                      </Button>
+                    ) : null}
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {projectActionNotice ? (
+                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-800">
+                      {projectActionNotice}
+                    </div>
+                  ) : null}
+                  {!teamReady ? (
+                    <div className="text-sm text-muted-foreground">
+                      Preparing your team workspace...
+                    </div>
+                  ) : !activeProjectId ? (
+                    <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-4 text-sm text-muted-foreground">
+                      Create your first project to start organizing estimates.
+                    </div>
+                  ) : filteredTeamEstimates.length ? (
+                    <ScrollArea className="h-[28rem] rounded-xl border border-border/70 bg-background/70 xl:h-[35rem]">
+                      <div className="space-y-2 p-2">
+                        {filteredTeamEstimates.map((estimate) => {
+                          const currentVersion = getCurrentVersionForEstimate(estimate);
+                          const historyOpen = historyEstimateId === estimate.id;
+                          const editingCurrent = editingEstimateId === estimate.id;
+                          const tags = normalizeEstimateTags(estimate?.tags);
+                          const projectType = getEstimateProjectType(estimate);
+                          const estimateProjectId = String(
+                            estimate?.project?.id ?? ""
+                          ).trim();
+                          const destinationProjects = teamProjects.filter(
+                            (project) => project.id !== estimateProjectId
+                          );
+                          const selectedMoveTarget =
+                            moveTargetByEstimateId[estimate.id] ??
+                            destinationProjects[0]?.id ??
+                            "";
+                          const isMovingEstimate = movingEstimateId === estimate.id;
+                          return (
+                            <div
+                              key={estimate.id}
+                              className={cn(
+                                "rounded-lg border border-border/60 bg-card/80 px-3 py-3",
+                                historyOpen && "border-accent/40 bg-accent/5"
+                              )}
+                            >
+                              <div className="flex flex-wrap items-start justify-between gap-3">
+                                <div className="space-y-1">
+                                  <p className="text-sm font-semibold text-foreground">
+                                    {estimate.title ?? "Untitled"}
+                                  </p>
+                                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                                    <Badge variant="outline" className="bg-background/80">
+                                      v{currentVersion}
+                                    </Badge>
+                                    {projectType ? (
+                                      <Badge variant="muted" className="bg-muted/80">
+                                        {projectType}
+                                      </Badge>
+                                    ) : null}
+                                    {editingCurrent ? (
+                                      <Badge
+                                        variant="outline"
+                                        className="border-accent/40 bg-accent/10 text-foreground"
+                                      >
+                                        Editing
+                                      </Badge>
+                                    ) : null}
+                                    <span className="inline-flex items-center gap-1">
+                                      <Clock3 className="h-3 w-3" />
+                                      {formatRelativeTime(estimate.updatedAt)}
+                                    </span>
+                                    {estimate.updatedAt ? (
+                                      <span>{new Date(estimate.updatedAt).toLocaleString()}</span>
+                                    ) : null}
+                                  </div>
+                                  {tags.length ? (
+                                    <div className="mt-1 flex flex-wrap gap-1">
+                                      {tags.map((tag) => (
+                                        <Badge
+                                          key={`${estimate.id}-${tag}`}
+                                          variant="muted"
+                                          className="text-[10px]"
+                                        >
+                                          {tag}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                </div>
+                                <div className="flex flex-wrap items-center justify-end gap-2">
+                                  {destinationProjects.length ? (
+                                    <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-background/80 p-1">
+                                      <Select
+                                        value={selectedMoveTarget || undefined}
+                                        onValueChange={(value) =>
+                                          setMoveTargetByEstimateId((previous) => ({
+                                            ...previous,
+                                            [estimate.id]: value,
+                                          }))
+                                        }
+                                      >
+                                        <SelectTrigger className="h-8 min-w-[170px] border-0 bg-transparent px-2 text-xs">
+                                          <SelectValue placeholder="Move to..." />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                          {destinationProjects.map((project) => (
+                                            <SelectItem
+                                              key={`${estimate.id}-${project.id}`}
+                                              value={project.id}
+                                            >
+                                              {project.name}
+                                            </SelectItem>
+                                          ))}
+                                        </SelectContent>
+                                      </Select>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-8"
+                                        disabled={
+                                          isMovingEstimate || !selectedMoveTarget
+                                        }
+                                        onClick={() =>
+                                          void handleMoveEstimateToProject(
+                                            estimate,
+                                            selectedMoveTarget
+                                          )
+                                        }
+                                      >
+                                        {isMovingEstimate ? (
+                                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        ) : (
+                                          <ArrowRightLeft className="h-3.5 w-3.5" />
+                                        )}
+                                        Move
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <span className="text-[11px] text-muted-foreground">
+                                      Only project
+                                    </span>
+                                  )}
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={() => handleLoadTeamEstimate(estimate)}
+                                  >
+                                    Load
+                                  </Button>
+                                  <Button
+                                    variant={historyOpen ? "secondary" : "ghost"}
+                                    size="sm"
+                                    onClick={() => {
+                                      setHistoryError(null);
+                                      setHistoryEstimateId((current) =>
+                                        current === estimate.id ? null : estimate.id
+                                      );
+                                    }}
+                                  >
+                                    <History className="h-3.5 w-3.5" />
+                                    {historyOpen ? "Hide history" : "History"}
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </ScrollArea>
+                  ) : (
+                    <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-4 text-sm text-muted-foreground">
+                      {teamEstimates.length
+                        ? "No estimates match your current filters."
+                        : activeProjectId === UNASSIGNED_PROJECT_KEY
+                          ? "No unassigned estimates."
+                          : "No estimates in this project yet."}
+                    </div>
+                  )}
+                  {historyError ? (
+                    <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                      {historyError}
+                    </div>
+                  ) : null}
+                  {selectedHistoryEstimate ? (
+                    <div className="space-y-2 rounded-lg border border-border/60 bg-background/70 p-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <p className="text-sm font-medium text-foreground">
+                            Version history:{" "}
+                            {selectedHistoryEstimate.title ?? "Untitled"}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Reverting creates a new version and keeps the full timeline.
+                          </p>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setHistoryEstimateId(null)}
+                        >
+                          Close
+                        </Button>
+                      </div>
+                      {selectedHistoryEntries.length ? (
+                        <ScrollArea className="h-52 rounded-md border border-border/60 bg-background/70">
+                          <div className="divide-y divide-border/60">
+                            {selectedHistoryEntries.map((entry) => {
+                              const actionId = `${selectedHistoryEstimate.id}:${entry.id}`;
+                              const reverting = historyActionId === actionId;
+                              const isCurrent =
+                                selectedHistoryCurrentVersion === entry.version;
+                              return (
+                                <div
+                                  key={entry.id}
+                                  className="flex items-center justify-between gap-4 px-3 py-2"
+                                >
+                                  <div>
+                                    <p className="text-xs font-medium text-foreground">
+                                      v{entry.version} ·{" "}
+                                      {getEstimateVersionActionLabel(entry.action)}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {new Date(entry.createdAt).toLocaleString()}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    {isCurrent ? (
+                                      <Badge variant="outline" className="bg-background/80">
+                                        Current
+                                      </Badge>
+                                    ) : null}
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() =>
+                                        void handleRevertTeamEstimateVersion(
+                                          selectedHistoryEstimate,
+                                          entry
+                                        )
+                                      }
+                                      disabled={reverting || isCurrent || !entry.payload}
+                                    >
+                                      {reverting ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      ) : null}
+                                      Revert
+                                    </Button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </ScrollArea>
+                      ) : (
+                        <div className="text-xs text-muted-foreground">
+                          No versions recorded yet.
+                        </div>
+                      )}
+                    </div>
+                  ) : null}
+                  {editingEstimateId ? (
+                    <div className="text-xs text-muted-foreground">
+                      Editing a project estimate. Use “Save to project” to update it.
+                    </div>
+                  ) : null}
+                </CardContent>
+              </Card>
+            </div>
           </section>
         ) : null}
 
