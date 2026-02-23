@@ -1181,6 +1181,24 @@ export default function AdminPage() {
                   specific PandaDoc templates.
                 </p>
               )}
+              <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/60 bg-muted/20 px-3 py-2">
+                <p className="text-xs text-muted-foreground">
+                  Rule changes are saved to the active template preset.
+                </p>
+                <Button
+                  variant="accent"
+                  size="sm"
+                  onClick={handleSave}
+                  disabled={saveLoading}
+                >
+                  {saveLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  {saveLoading ? "Saving..." : "Save template routes"}
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
