@@ -53,6 +53,23 @@ type VendorDraft = {
   usesEuroPricing: boolean;
 };
 
+function hasEuroLabel(name: string) {
+  const normalized = String(name ?? "").trim().toLowerCase();
+  return /\b(eur|euro)\b/.test(normalized) || normalized.includes("€");
+}
+
+function stripEuroSuffix(name: string) {
+  return String(name ?? "")
+    .replace(/\s*\((?:eur|euro|€)\)\s*$/i, "")
+    .trim();
+}
+
+function withEuroSuffix(name: string) {
+  const base = stripEuroSuffix(name);
+  if (!base) return "(EUR)";
+  return `${base} (EUR)`;
+}
+
 type UnitTypeDraft = {
   id?: string;
   code: string;
@@ -409,7 +426,8 @@ export default function TeamAdminPage() {
         typeof vendor.sortOrder === "number" ? vendor.sortOrder : index + 1,
       isActive: vendor.isActive !== false,
       allowsSplitFinish: vendor.allowsSplitFinish === true,
-      usesEuroPricing: vendor.usesEuroPricing === true,
+      usesEuroPricing:
+        vendor.usesEuroPricing === true || hasEuroLabel(String(vendor.name ?? "")),
     }));
     setVendorDrafts(next);
   }, [vendorRecords]);
@@ -746,9 +764,17 @@ export default function TeamAdminPage() {
 
   const handleVendorChange = (index: number, patch: Partial<VendorDraft>) => {
     setVendorDrafts((prev) =>
-      prev.map((vendor, idx) =>
-        idx === index ? { ...vendor, ...patch } : vendor
-      )
+      prev.map((vendor, idx) => {
+        if (idx !== index) return vendor;
+        const next = { ...vendor, ...patch };
+        if (Object.prototype.hasOwnProperty.call(patch, "usesEuroPricing")) {
+          next.name =
+            patch.usesEuroPricing === true
+              ? withEuroSuffix(next.name)
+              : stripEuroSuffix(next.name);
+        }
+        return next;
+      })
     );
   };
 
@@ -811,11 +837,13 @@ export default function TeamAdminPage() {
     const now = Date.now();
     const txs = cleaned.map((vendor, index) => {
       const payload = {
-        name: vendor.name,
+        name:
+          vendor.usesEuroPricing === true
+            ? withEuroSuffix(vendor.name)
+            : stripEuroSuffix(vendor.name),
         sortOrder: vendor.sortOrder || index + 1,
         isActive: vendor.isActive,
         allowsSplitFinish: vendor.allowsSplitFinish,
-        usesEuroPricing: vendor.usesEuroPricing,
         updatedAt: now,
       };
       if (vendor.id) {
@@ -882,7 +910,6 @@ export default function TeamAdminPage() {
           sortOrder: vendor.sortOrder,
           isActive: vendor.isActive,
           allowsSplitFinish: false,
-          usesEuroPricing: false,
           createdAt: now,
           updatedAt: now,
         })

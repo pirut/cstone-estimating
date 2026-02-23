@@ -116,6 +116,17 @@ type ExchangeRateStatusByProduct = Record<
   }
 >;
 
+function vendorSupportsEuroPricing(vendor: {
+  name?: string;
+  usesEuroPricing?: boolean;
+} | null) {
+  if (!vendor) return false;
+  if (vendor.usesEuroPricing === true) return true;
+  const name = String(vendor.name ?? "").trim().toLowerCase();
+  if (!name) return false;
+  return /\b(eur|euro)\b/.test(name) || name.includes("€");
+}
+
 function normalizeLoadedEuroPricing(
   source: unknown,
   fallback: EuroPricing
@@ -1072,7 +1083,7 @@ export function EstimateBuilderCard({
                 const selectedVendorRecord = resolveVendorForProduct(item);
                 const selectedVendor = selectedVendorRecord?.id ?? "__none__";
                 const usesEuroPricing =
-                  selectedVendorRecord?.usesEuroPricing === true ||
+                  vendorSupportsEuroPricing(selectedVendorRecord) ||
                   item.euroPricingEnabled;
                 const euroPricing = item.euroPricing ?? createDefaultEuroPricing();
                 const euroTotals = computeEuroPricingTotals(euroPricing);
@@ -1131,7 +1142,8 @@ export function EstimateBuilderCard({
                           onValueChange={(value) => {
                             const vendor = vendorOptions.find((entry) => entry.id === value);
                             const vendorUsesEuroPricing =
-                              value !== "__none__" && vendor?.usesEuroPricing === true;
+                              value !== "__none__" &&
+                              vendorSupportsEuroPricing(vendor ?? null);
                             const nextEuroPricing = vendorUsesEuroPricing
                               ? item.euroPricing ?? createDefaultEuroPricing()
                               : item.euroPricing;
