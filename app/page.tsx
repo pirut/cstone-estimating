@@ -3426,7 +3426,7 @@ export default function HomePage() {
             </Card>
 
             <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.42fr)_minmax(0,0.58fr)] 2xl:grid-cols-[minmax(360px,0.38fr)_minmax(0,0.62fr)]">
-              <div className="xl:sticky xl:top-6 xl:self-start">
+              <div>
                 <Card className="h-fit rounded-3xl border-border/60 bg-card/80 shadow-elevated">
                 <CardHeader className="space-y-4">
                   <div className="space-y-2">
@@ -3919,7 +3919,7 @@ export default function HomePage() {
           id="step-input"
           className="mt-12 grid gap-6 xl:grid-cols-[minmax(0,1.28fr)_minmax(360px,0.72fr)] 2xl:grid-cols-[minmax(0,1.38fr)_minmax(440px,0.62fr)]"
         >
-          <div className="space-y-6 xl:sticky xl:top-6 xl:self-start">
+          <div className="space-y-6">
             <EstimateBuilderCard
               values={estimateValues}
               onValuesChange={setEstimateValues}
@@ -4128,7 +4128,7 @@ export default function HomePage() {
 
             <Card
               id="step-generate"
-              className="h-fit rounded-3xl border-border/60 bg-card/85 shadow-elevated"
+              className="h-fit rounded-3xl border-border/60 bg-card/85 shadow-elevated xl:sticky xl:top-6 xl:self-start"
             >
               <CardHeader>
                 <div className="flex items-start justify-between gap-3">
