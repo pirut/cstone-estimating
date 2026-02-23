@@ -3175,7 +3175,7 @@ export default function HomePage() {
         <div className="absolute top-20 right-0 h-72 w-72 rounded-full bg-foreground/10 blur-3xl" />
         <div className="absolute -bottom-24 left-10 h-72 w-72 rounded-full bg-accent/15 blur-3xl" />
       </div>
-      <div className="container relative py-8 md:py-10">
+      <div className="relative w-full px-4 py-8 sm:px-6 md:py-10 lg:px-8 xl:px-10 2xl:px-12">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-card/70 px-4 py-3 backdrop-blur-sm">
           <div className="text-xs text-muted-foreground">
             {!clerkEnabled ? (
@@ -3232,7 +3232,7 @@ export default function HomePage() {
         <section className="relative overflow-hidden rounded-[32px] border border-border/60 bg-foreground text-white shadow-elevated">
           <div className="absolute -right-28 -top-24 h-72 w-72 rounded-full bg-accent/25 blur-3xl" />
           <div className="absolute bottom-0 left-10 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
-          <div className="relative grid gap-8 p-8 lg:grid-cols-[1.05fr_0.95fr]">
+          <div className="relative grid gap-8 p-8 lg:grid-cols-[1.15fr_0.85fr] 2xl:grid-cols-[1.25fr_0.75fr]">
             <div className="space-y-6">
               <BrandMark tone="dark" />
               <div className="space-y-4">
@@ -3609,7 +3609,7 @@ export default function HomePage() {
                     Create your first project to start organizing estimates.
                   </div>
                 ) : filteredTeamEstimates.length ? (
-                  <ScrollArea className="h-72 rounded-xl border border-border/70 bg-background/70">
+                  <ScrollArea className="h-[24rem] rounded-xl border border-border/70 bg-background/70 xl:h-[31rem]">
                     <div className="space-y-2 p-2">
                       {filteredTeamEstimates.map((estimate) => {
                         const currentVersion = getCurrentVersionForEstimate(estimate);
@@ -3863,7 +3863,7 @@ export default function HomePage() {
 
         <section
           id="step-input"
-          className="mt-12 space-y-6"
+          className="mt-12 grid gap-6 xl:grid-cols-[minmax(0,1.28fr)_minmax(360px,0.72fr)] 2xl:grid-cols-[minmax(0,1.38fr)_minmax(440px,0.62fr)]"
         >
           <div className="space-y-6">
             <EstimateBuilderCard
@@ -3982,270 +3982,357 @@ export default function HomePage() {
               ) : null}
             </div>
           </div>
-          {templateCard}
-        </section>
 
-        <section className="mt-10">
-          <Card
-            id="step-generate"
-            className="h-fit rounded-3xl border-border/60 bg-card/85 shadow-elevated"
-          >
-            <CardHeader>
-              <div className="flex items-start justify-between gap-3">
-                <div className="space-y-2">
-                  <Badge variant="muted" className="bg-muted/80 text-[10px]">
-                    Step 3
-                  </Badge>
-                  <CardTitle className="text-2xl font-serif">
-                    Generate PandaDoc
-                  </CardTitle>
-                  <CardDescription>
-                    Create the proposal in PandaDoc and start signing.
-                  </CardDescription>
-                </div>
-                <LayoutTemplate className="mt-1 h-5 w-5 text-muted-foreground" />
-              </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {error ? (
-                <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                  {error}
-                </div>
-              ) : null}
-              <div className="space-y-2 rounded-xl border border-border/60 bg-muted/30 p-3">
-                {workflowMilestones.map((milestone) => (
-                  <div key={milestone.id} className="flex items-center gap-2 text-sm">
-                    {milestone.done ? (
-                      <CheckCircle2 className="h-4 w-4 text-accent" />
-                    ) : (
-                      <CircleDashed className="h-4 w-4 text-muted-foreground" />
-                    )}
-                    <span
-                      className={cn(
-                        milestone.done ? "text-foreground" : "text-muted-foreground"
-                      )}
-                    >
-                      {milestone.label}
-                    </span>
+          <div className="space-y-6">
+            <Card className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
+              <CardHeader className="pb-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-1.5">
+                    <Badge variant="muted" className="bg-muted/80 text-[10px]">
+                      Workspace
+                    </Badge>
+                    <CardTitle className="text-xl font-serif">At a glance</CardTitle>
+                    <CardDescription>
+                      Keep core estimate context visible while editing and generating.
+                    </CardDescription>
                   </div>
-                ))}
-              </div>
-              {showProgress ? (
-                <div className="space-y-2 rounded-lg border border-border/60 bg-muted/40 px-4 py-3">
-                  <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
-                    <span>{progressLabel ?? "Working..."}</span>
-                    <span>{progressPercent}%</span>
+                  <Workflow className="mt-1 h-5 w-5 text-muted-foreground" />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-xl border border-border/60 bg-background/75 px-3 py-2">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                      Readiness
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">
+                      {canGenerate
+                        ? "Ready to generate"
+                        : hasEstimateInput
+                          ? "Needs required fields"
+                          : "Not started"}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-background/75 px-3 py-2">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                      Workflow
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">
+                      {workflowPercent}% complete
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-background/75 px-3 py-2">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                      Active Project
+                    </p>
+                    <p className="mt-1 text-sm font-semibold leading-tight text-foreground">
+                      {activeProject?.name ??
+                        (activeProjectId === UNASSIGNED_PROJECT_KEY
+                          ? "Unassigned estimates"
+                          : "Not selected")}
+                    </p>
+                  </div>
+                  <div className="rounded-xl border border-border/60 bg-background/75 px-3 py-2">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                      Tagged Options
+                    </p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">
+                      {estimateTags.length}
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-2 rounded-xl border border-border/60 bg-muted/35 px-3 py-3">
+                  <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                    <span>Milestone progress</span>
+                    <span>{workflowPercent}%</span>
                   </div>
                   <div className="h-2 w-full overflow-hidden rounded-full bg-border/60">
                     <div
                       className="h-full rounded-full bg-accent transition-all duration-500"
-                      style={{ width: `${progressPercent}%` }}
+                      style={{ width: `${workflowPercent}%` }}
                     />
                   </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {workflowMilestones.map((milestone) => (
+                      <Badge
+                        key={`quick-${milestone.id}`}
+                        variant={milestone.done ? "outline" : "muted"}
+                        className={cn(
+                          "text-[10px]",
+                          milestone.done && "border-accent/40 bg-accent/10"
+                        )}
+                      >
+                        {milestone.label}
+                      </Badge>
+                    ))}
+                  </div>
                 </div>
-              ) : null}
-              <div className="space-y-3 text-sm">
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-muted-foreground">Input source</span>
-                  <span className="text-right font-medium text-foreground">
-                    Manual estimate
-                  </span>
+              </CardContent>
+            </Card>
+
+            {templateCard}
+
+            <Card
+              id="step-generate"
+              className="h-fit rounded-3xl border-border/60 bg-card/85 shadow-elevated"
+            >
+              <CardHeader>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-2">
+                    <Badge variant="muted" className="bg-muted/80 text-[10px]">
+                      Step 3
+                    </Badge>
+                    <CardTitle className="text-2xl font-serif">
+                      Generate PandaDoc
+                    </CardTitle>
+                    <CardDescription>
+                      Create the proposal in PandaDoc and start signing.
+                    </CardDescription>
+                  </div>
+                  <LayoutTemplate className="mt-1 h-5 w-5 text-muted-foreground" />
                 </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-muted-foreground">Estimate</span>
-                  <span className="text-right font-medium text-foreground">
-                    {estimateName.trim() ||
-                      selectedEstimate?.name ||
-                      (hasEstimateInput ? "Manual entry" : "Not started")}
-                  </span>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {error ? (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {error}
+                  </div>
+                ) : null}
+                <div className="space-y-2 rounded-xl border border-border/60 bg-muted/30 p-3">
+                  {workflowMilestones.map((milestone) => (
+                    <div key={milestone.id} className="flex items-center gap-2 text-sm">
+                      {milestone.done ? (
+                        <CheckCircle2 className="h-4 w-4 text-accent" />
+                      ) : (
+                        <CircleDashed className="h-4 w-4 text-muted-foreground" />
+                      )}
+                      <span
+                        className={cn(
+                          milestone.done ? "text-foreground" : "text-muted-foreground"
+                        )}
+                      >
+                        {milestone.label}
+                      </span>
+                    </div>
+                  ))}
                 </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-muted-foreground">Project</span>
-                  <span className="text-right font-medium text-foreground">
-                    {activeProject?.name ??
-                      (activeProjectId === UNASSIGNED_PROJECT_KEY
-                        ? "Unassigned estimates"
-                        : "Not selected")}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-muted-foreground">Tags</span>
-                  <span className="text-right font-medium text-foreground">
-                    {estimateTags.length ? estimateTags.join(", ") : "None"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-muted-foreground">Preset</span>
-                  <span className="text-right font-medium text-foreground">
-                    {templateConfig
-                      ? formatTemplateDisplayName(
-                          templateConfig.name,
-                          templateConfig.templateVersion
-                        )
-                      : "Not selected"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <span className="text-muted-foreground">Linked PandaDoc</span>
-                  <span className="text-right font-medium text-foreground">
-                    {activeTrackedPandaDocDocument?.documentId
-                      ? `Revising ${activeTrackedPandaDocDocument.name ?? activeTrackedPandaDocDocument.documentId}`
-                      : "Create new document"}
-                  </span>
-                </div>
-                {activeTrackedPandaDocDocument?.documentId ? (
+                {showProgress ? (
+                  <div className="space-y-2 rounded-lg border border-border/60 bg-muted/40 px-4 py-3">
+                    <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+                      <span>{progressLabel ?? "Working..."}</span>
+                      <span>{progressPercent}%</span>
+                    </div>
+                    <div className="h-2 w-full overflow-hidden rounded-full bg-border/60">
+                      <div
+                        className="h-full rounded-full bg-accent transition-all duration-500"
+                        style={{ width: `${progressPercent}%` }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+                <div className="space-y-3 text-sm">
                   <div className="flex items-center justify-between gap-4">
-                    <span className="text-muted-foreground">Linked status</span>
+                    <span className="text-muted-foreground">Input source</span>
                     <span className="text-right font-medium text-foreground">
-                      {linkedDocumentLive?.loading
-                        ? "Checking..."
-                        : formatPandaDocStatus(resolvedTrackedDocumentStatus)}
+                      Manual estimate
                     </span>
                   </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-muted-foreground">Estimate</span>
+                    <span className="text-right font-medium text-foreground">
+                      {estimateName.trim() ||
+                        selectedEstimate?.name ||
+                        (hasEstimateInput ? "Manual entry" : "Not started")}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-muted-foreground">Project</span>
+                    <span className="text-right font-medium text-foreground">
+                      {activeProject?.name ??
+                        (activeProjectId === UNASSIGNED_PROJECT_KEY
+                          ? "Unassigned estimates"
+                          : "Not selected")}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-muted-foreground">Tags</span>
+                    <span className="text-right font-medium text-foreground">
+                      {estimateTags.length ? estimateTags.join(", ") : "None"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-muted-foreground">Preset</span>
+                    <span className="text-right font-medium text-foreground">
+                      {templateConfig
+                        ? formatTemplateDisplayName(
+                            templateConfig.name,
+                            templateConfig.templateVersion
+                          )
+                        : "Not selected"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-4">
+                    <span className="text-muted-foreground">Linked PandaDoc</span>
+                    <span className="text-right font-medium text-foreground">
+                      {activeTrackedPandaDocDocument?.documentId
+                        ? `Revising ${activeTrackedPandaDocDocument.name ?? activeTrackedPandaDocDocument.documentId}`
+                        : "Create new document"}
+                    </span>
+                  </div>
+                  {activeTrackedPandaDocDocument?.documentId ? (
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-muted-foreground">Linked status</span>
+                      <span className="text-right font-medium text-foreground">
+                        {linkedDocumentLive?.loading
+                          ? "Checking..."
+                          : formatPandaDocStatus(resolvedTrackedDocumentStatus)}
+                      </span>
+                    </div>
+                  ) : null}
+                  {activeTrackedPandaDocDocument?.documentId &&
+                  resolvedTrackedDocumentValue ? (
+                    <div className="flex items-center justify-between gap-4">
+                      <span className="text-muted-foreground">Document value</span>
+                      <span className="text-right font-medium text-foreground">
+                        {resolvedTrackedDocumentValue}
+                      </span>
+                    </div>
+                  ) : null}
+                </div>
+                <Separator />
+                {activeTrackedPandaDocDocument?.documentId &&
+                trackedDocumentNeedsDraftRevert ? (
+                  <p className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-900">
+                    Current document status is{" "}
+                    {formatPandaDocStatus(resolvedTrackedDocumentStatus)}. Regenerate
+                    will move it back to Draft so revisions can be applied.
+                  </p>
                 ) : null}
                 {activeTrackedPandaDocDocument?.documentId &&
-                resolvedTrackedDocumentValue ? (
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-muted-foreground">Document value</span>
-                    <span className="text-right font-medium text-foreground">
-                      {resolvedTrackedDocumentValue}
-                    </span>
+                trackedDocumentIsArchived ? (
+                  <p className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-900">
+                    The linked document is no longer accessible (assumed archived).
+                    Regenerate will create a replacement document and continue
+                    tracking from there.
+                  </p>
+                ) : null}
+                {activeTrackedPandaDocDocument?.documentId &&
+                linkedDocumentLive?.error ? (
+                  <p className="text-xs text-muted-foreground">
+                    Unable to refresh PandaDoc status: {linkedDocumentLive.error}
+                  </p>
+                ) : null}
+                <div className="flex flex-col gap-3">
+                  <Button
+                    variant="accent"
+                    size="lg"
+                    onClick={handleGenerate}
+                    disabled={!canGenerate || isGenerating}
+                  >
+                    {isGenerating ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ArrowDownToLine className="h-4 w-4" />
+                    )}
+                    {isGenerating ? "Generating..." : "Generate PandaDoc"}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => void handleCopyPlanningLines()}
+                    disabled={
+                      !canDownloadPlanningLines ||
+                      isPlanningLinesCopying ||
+                      isGenerating
+                    }
+                  >
+                    {isPlanningLinesCopying ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <FileText className="h-4 w-4" />
+                    )}
+                    {isPlanningLinesCopying
+                      ? "Copying planning lines..."
+                      : "Copy _SYNC rows now"}
+                  </Button>
+                </div>
+                {lastGeneration?.document?.id ? (
+                  <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 px-4 py-3 text-sm">
+                    <p className="font-medium text-foreground">
+                      Last document: {lastGeneration.document.name ?? lastGeneration.document.id}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {lastGeneration.operation === "updated"
+                        ? "Operation: revised existing document"
+                        : lastGeneration.fallbackFromDocumentId
+                          ? "Operation: created replacement document"
+                          : "Operation: created new document"}
+                    </p>
+                    {lastGeneration.revision?.revertedToDraft ? (
+                      <p className="text-xs text-muted-foreground">
+                        Reverted from{" "}
+                        {formatPandaDocStatus(
+                          lastGeneration.revision.previousStatus
+                        )}{" "}
+                        to Draft before applying updates.
+                      </p>
+                    ) : null}
+                    <p className="text-xs text-muted-foreground">
+                      Status: {formatPandaDocStatus(lastGeneration.document.status)}
+                      {lastGeneration.businessCentralSync?.status
+                        ? ` · Business Central sync: ${lastGeneration.businessCentralSync.status}`
+                        : ""}
+                    </p>
+                    {formatPandaDocDocumentValue({
+                      valueAmount: lastGeneration.document.valueAmount,
+                      valueCurrency: lastGeneration.document.valueCurrency,
+                      valueFormatted: lastGeneration.document.valueFormatted,
+                    }) ? (
+                      <p className="text-xs text-muted-foreground">
+                        Document value:{" "}
+                        {formatPandaDocDocumentValue({
+                          valueAmount: lastGeneration.document.valueAmount,
+                          valueCurrency: lastGeneration.document.valueCurrency,
+                          valueFormatted: lastGeneration.document.valueFormatted,
+                        })}
+                      </p>
+                    ) : null}
+                    <div className="flex flex-wrap gap-2">
+                      {lastGeneration.session?.url ? (
+                        <Button asChild size="sm" variant="outline">
+                          <a href={lastGeneration.session.url} target="_blank" rel="noreferrer">
+                            Open signing session
+                          </a>
+                        </Button>
+                      ) : null}
+                      {lastGeneration.document?.sharedLink ? (
+                        <Button asChild size="sm" variant="outline">
+                          <a
+                            href={lastGeneration.document.sharedLink}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Open recipient link
+                          </a>
+                        </Button>
+                      ) : null}
+                      {lastGeneration.document?.appUrl ? (
+                        <Button asChild size="sm" variant="outline">
+                          <a href={lastGeneration.document.appUrl} target="_blank" rel="noreferrer">
+                            Open PandaDoc
+                          </a>
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                 ) : null}
-              </div>
-              <Separator />
-              {activeTrackedPandaDocDocument?.documentId &&
-              trackedDocumentNeedsDraftRevert ? (
-                <p className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-900">
-                  Current document status is{" "}
-                  {formatPandaDocStatus(resolvedTrackedDocumentStatus)}. Regenerate
-                  will move it back to Draft so revisions can be applied.
-                </p>
-              ) : null}
-              {activeTrackedPandaDocDocument?.documentId &&
-              trackedDocumentIsArchived ? (
-                <p className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-900">
-                  The linked document is no longer accessible (assumed archived).
-                  Regenerate will create a replacement document and continue
-                  tracking from there.
-                </p>
-              ) : null}
-              {activeTrackedPandaDocDocument?.documentId &&
-              linkedDocumentLive?.error ? (
                 <p className="text-xs text-muted-foreground">
-                  Unable to refresh PandaDoc status: {linkedDocumentLive.error}
+                  For saved projects, this step revises the linked PandaDoc
+                  document. If it is sent, we move it back to Draft and then apply
+                  updates. Add recipients and send from PandaDoc.
                 </p>
-              ) : null}
-              <div className="flex flex-col gap-3">
-                <Button
-                  variant="accent"
-                  size="lg"
-                  onClick={handleGenerate}
-                  disabled={!canGenerate || isGenerating}
-                >
-                  {isGenerating ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <ArrowDownToLine className="h-4 w-4" />
-                  )}
-                  {isGenerating ? "Generating..." : "Generate PandaDoc"}
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={() => void handleCopyPlanningLines()}
-                  disabled={
-                    !canDownloadPlanningLines ||
-                    isPlanningLinesCopying ||
-                    isGenerating
-                  }
-                >
-                  {isPlanningLinesCopying ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <FileText className="h-4 w-4" />
-                  )}
-                  {isPlanningLinesCopying
-                    ? "Copying planning lines..."
-                    : "Copy _SYNC rows now"}
-                </Button>
-              </div>
-              {lastGeneration?.document?.id ? (
-                <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 px-4 py-3 text-sm">
-                  <p className="font-medium text-foreground">
-                    Last document: {lastGeneration.document.name ?? lastGeneration.document.id}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {lastGeneration.operation === "updated"
-                      ? "Operation: revised existing document"
-                      : lastGeneration.fallbackFromDocumentId
-                        ? "Operation: created replacement document"
-                        : "Operation: created new document"}
-                  </p>
-                  {lastGeneration.revision?.revertedToDraft ? (
-                    <p className="text-xs text-muted-foreground">
-                      Reverted from{" "}
-                      {formatPandaDocStatus(
-                        lastGeneration.revision.previousStatus
-                      )}{" "}
-                      to Draft before applying updates.
-                    </p>
-                  ) : null}
-                  <p className="text-xs text-muted-foreground">
-                    Status: {formatPandaDocStatus(lastGeneration.document.status)}
-                    {lastGeneration.businessCentralSync?.status
-                      ? ` · Business Central sync: ${lastGeneration.businessCentralSync.status}`
-                      : ""}
-                  </p>
-                  {formatPandaDocDocumentValue({
-                    valueAmount: lastGeneration.document.valueAmount,
-                    valueCurrency: lastGeneration.document.valueCurrency,
-                    valueFormatted: lastGeneration.document.valueFormatted,
-                  }) ? (
-                    <p className="text-xs text-muted-foreground">
-                      Document value:{" "}
-                      {formatPandaDocDocumentValue({
-                        valueAmount: lastGeneration.document.valueAmount,
-                        valueCurrency: lastGeneration.document.valueCurrency,
-                        valueFormatted: lastGeneration.document.valueFormatted,
-                      })}
-                    </p>
-                  ) : null}
-                  <div className="flex flex-wrap gap-2">
-                    {lastGeneration.session?.url ? (
-                      <Button asChild size="sm" variant="outline">
-                        <a href={lastGeneration.session.url} target="_blank" rel="noreferrer">
-                          Open signing session
-                        </a>
-                      </Button>
-                    ) : null}
-                    {lastGeneration.document?.sharedLink ? (
-                      <Button asChild size="sm" variant="outline">
-                        <a
-                          href={lastGeneration.document.sharedLink}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Open recipient link
-                        </a>
-                      </Button>
-                    ) : null}
-                    {lastGeneration.document?.appUrl ? (
-                      <Button asChild size="sm" variant="outline">
-                        <a href={lastGeneration.document.appUrl} target="_blank" rel="noreferrer">
-                          Open PandaDoc
-                        </a>
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
-              <p className="text-xs text-muted-foreground">
-                For saved projects, this step revises the linked PandaDoc
-                document. If it is sent, we move it back to Draft and then apply
-                updates. Add recipients and send from PandaDoc.
-              </p>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          </div>
         </section>
 
           </>
