@@ -147,6 +147,8 @@ type AdminMappingDashboardProps = {
   includeAuthSync?: boolean;
   showHero?: boolean;
   showAmbientBackground?: boolean;
+  showRecordSections?: boolean;
+  showMappingSections?: boolean;
   sectionId?: string;
 };
 
@@ -155,6 +157,8 @@ export default function AdminPage({
   includeAuthSync = true,
   showHero = true,
   showAmbientBackground = true,
+  showRecordSections = true,
+  showMappingSections = true,
   sectionId,
 }: AdminMappingDashboardProps) {
   const [configName, setConfigName] = useState("Team PandaDoc Mapping");
@@ -1302,7 +1306,8 @@ export default function AdminPage({
           </div>
         ) : null}
 
-        <section className="grid gap-4 xl:grid-cols-[minmax(320px,0.4fr)_minmax(0,0.6fr)]">
+        {showRecordSections ? (
+          <section className="grid gap-4 xl:grid-cols-[minmax(320px,0.4fr)_minmax(0,0.6fr)]">
           <Card
             id="project-management"
             className="rounded-3xl border-border/60 bg-card/85 shadow-elevated"
@@ -1648,9 +1653,12 @@ export default function AdminPage({
               )}
             </CardContent>
           </Card>
-        </section>
+          </section>
+        ) : null}
 
-        <Card id="template-config" className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
+        {showMappingSections ? (
+          <>
+          <Card id="template-config" className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
           <CardHeader>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="space-y-1">
@@ -1723,9 +1731,9 @@ export default function AdminPage({
               )}
             </div>
           </CardContent>
-        </Card>
+          </Card>
 
-        <Card id="pandadoc-template" className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
+          <Card id="pandadoc-template" className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
           <CardHeader>
             <CardTitle className="text-xl font-serif">PandaDoc Template</CardTitle>
             <CardDescription>
@@ -2055,9 +2063,9 @@ export default function AdminPage({
               ) : null}
             </div>
           </CardContent>
-        </Card>
+          </Card>
 
-        <Card id="field-catalog" className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
+          <Card id="field-catalog" className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
           <CardHeader>
             <CardTitle className="text-xl font-serif">Field Catalog</CardTitle>
             <CardDescription>
@@ -2079,9 +2087,9 @@ export default function AdminPage({
               </Button>
             </div>
           </CardContent>
-        </Card>
+          </Card>
 
-        <Card id="pandadoc-bindings" className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
+          <Card id="pandadoc-bindings" className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
           <CardHeader>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
@@ -2309,7 +2317,9 @@ export default function AdminPage({
               </p>
             </div>
           </CardContent>
-        </Card>
+          </Card>
+          </>
+        ) : null}
       </div>
     </section>
   );

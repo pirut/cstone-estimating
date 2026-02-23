@@ -2,6 +2,9 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import AdminMappingDashboard from "@/components/admin-mapping-dashboard";
+import { ConvexAuthSync } from "@/components/convex-auth-sync";
+import TeamAdminDashboard from "@/components/team-admin-dashboard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,9 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import AdminMappingDashboard from "@/components/admin-mapping-dashboard";
-import { ConvexAuthSync } from "@/components/convex-auth-sync";
-import TeamAdminDashboard from "@/components/team-admin-dashboard";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SignInButton, clerkEnabled, useOptionalAuth } from "@/lib/clerk";
 import {
   ArrowRight,
@@ -24,9 +25,12 @@ import {
   WandSparkles,
 } from "lucide-react";
 
+type AdminTab = "workspace" | "catalog" | "records" | "pandadoc";
+
 export default function UnifiedAdminPage() {
   const { isLoaded, isSignedIn } = useOptionalAuth();
   const [convexSetupError, setConvexSetupError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<AdminTab>("workspace");
 
   if (!clerkEnabled) {
     return (
@@ -122,29 +126,36 @@ export default function UnifiedAdminPage() {
                   One dashboard for teams, catalogs, projects, estimates, and PandaDoc routing.
                 </h1>
                 <p className="max-w-3xl text-sm text-white/75 md:text-base">
-                  Rebuilt as a single operational surface so you can manage the whole
-                  system without jumping between separate admin pages.
+                  Rebuilt as a single operational surface so you can focus one lane at a time.
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                <Button asChild variant="secondary" size="sm">
-                  <a href="#workspace-control">Team and Catalog</a>
+                <Button variant="secondary" size="sm" onClick={() => setActiveTab("workspace")}>
+                  Team Ops
                 </Button>
                 <Button
-                  asChild
                   variant="outline"
                   size="sm"
                   className="border-white/25 bg-white/5 text-white hover:bg-white/10"
+                  onClick={() => setActiveTab("catalog")}
                 >
-                  <a href="#project-management">Projects and Estimates</a>
+                  Catalog
                 </Button>
                 <Button
-                  asChild
                   variant="outline"
                   size="sm"
                   className="border-white/25 bg-white/5 text-white hover:bg-white/10"
+                  onClick={() => setActiveTab("records")}
                 >
-                  <a href="#pandadoc-template">PandaDoc Mapping</a>
+                  Projects + Estimates
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-white/25 bg-white/5 text-white hover:bg-white/10"
+                  onClick={() => setActiveTab("pandadoc")}
+                >
+                  PandaDoc Mapping
                 </Button>
               </div>
             </div>
@@ -161,7 +172,7 @@ export default function UnifiedAdminPage() {
                   Catalog
                 </p>
                 <p className="mt-1 text-xl font-semibold text-white">Pricing Inputs</p>
-                <p className="text-xs text-white/65">Vendors, types, and feature options</p>
+                <p className="text-xs text-white/65">Vendors, unit types, product options</p>
               </div>
               <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
                 <p className="text-[10px] uppercase tracking-[0.2em] text-white/65">
@@ -187,37 +198,11 @@ export default function UnifiedAdminPage() {
           </div>
         ) : null}
 
-        <div className="sticky top-2 z-40 mt-4 rounded-2xl border border-border/60 bg-background/90 p-2 shadow-sm backdrop-blur">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button asChild variant="outline" size="sm">
-                <a href="#workspace-control">
-                  <UsersRound className="h-4 w-4" />
-                  Workspace
-                </a>
-              </Button>
-              <Button asChild variant="outline" size="sm">
-                <a href="#catalog-settings">
-                  <WandSparkles className="h-4 w-4" />
-                  Catalog
-                </a>
-              </Button>
-              <Button asChild variant="outline" size="sm">
-                <a href="#project-management">
-                  <FolderKanban className="h-4 w-4" />
-                  Projects
-                </a>
-              </Button>
-              <Button asChild variant="outline" size="sm">
-                <a href="#estimate-management">
-                  <FileStack className="h-4 w-4" />
-                  Estimates
-                </a>
-              </Button>
-              <Button asChild variant="outline" size="sm">
-                <a href="#pandadoc-template">PandaDoc</a>
-              </Button>
-            </div>
+        <section className="mt-4 rounded-2xl border border-border/60 bg-card/80 p-3 shadow-sm">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
+              Focus Tabs
+            </p>
             <Button asChild variant="accent" size="sm">
               <Link href="/">
                 Proposal workspace
@@ -225,40 +210,85 @@ export default function UnifiedAdminPage() {
               </Link>
             </Button>
           </div>
-        </div>
 
-        <section id="workspace-control" className="mt-6 scroll-mt-24 space-y-3">
-          <div className="rounded-2xl border border-border/60 bg-card/70 px-4 py-3 sm:px-5">
-            <h2 className="text-xl font-serif">Workspace, Teams, and Catalog Controls</h2>
-            <p className="text-sm text-muted-foreground">
-              Organization structure, member roles, team settings, and pricing/product catalogs.
-            </p>
-          </div>
-          <TeamAdminDashboard
-            embedded
-            includeAuthSync={false}
-            showHeader={false}
-            showFooter={false}
-            includeEstimateSection={false}
-            sectionId="workspace-teams"
-          />
+          <Tabs
+            value={activeTab}
+            onValueChange={(value) => setActiveTab(value as AdminTab)}
+            className="w-full"
+          >
+            <TabsList className="grid h-auto w-full grid-cols-2 gap-2 bg-transparent p-0 md:grid-cols-4">
+              <TabsTrigger value="workspace" className="justify-start gap-2 rounded-xl border border-border/60 bg-background/60 px-3 py-2 data-[state=active]:bg-accent/20">
+                <UsersRound className="h-4 w-4" />
+                Workspace
+              </TabsTrigger>
+              <TabsTrigger value="catalog" className="justify-start gap-2 rounded-xl border border-border/60 bg-background/60 px-3 py-2 data-[state=active]:bg-accent/20">
+                <WandSparkles className="h-4 w-4" />
+                Catalog
+              </TabsTrigger>
+              <TabsTrigger value="records" className="justify-start gap-2 rounded-xl border border-border/60 bg-background/60 px-3 py-2 data-[state=active]:bg-accent/20">
+                <FolderKanban className="h-4 w-4" />
+                Projects & Estimates
+              </TabsTrigger>
+              <TabsTrigger value="pandadoc" className="justify-start gap-2 rounded-xl border border-border/60 bg-background/60 px-3 py-2 data-[state=active]:bg-accent/20">
+                <FileStack className="h-4 w-4" />
+                PandaDoc Mapping
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
         </section>
 
-        <section id="records-and-mapping" className="mt-8 scroll-mt-24 space-y-3">
-          <div className="rounded-2xl border border-border/60 bg-card/70 px-4 py-3 sm:px-5">
-            <h2 className="text-xl font-serif">Project, Estimate, and PandaDoc Operations</h2>
-            <p className="text-sm text-muted-foreground">
-              Project and estimate lifecycle management plus PandaDoc template routing and binding configuration.
-            </p>
-          </div>
-          <AdminMappingDashboard
-            embedded
-            includeAuthSync={false}
-            showHero={false}
-            showAmbientBackground={false}
-            sectionId="records-mapping"
-          />
-        </section>
+        {(activeTab === "workspace" || activeTab === "catalog") ? (
+          <section className="mt-6 scroll-mt-24 space-y-3">
+            <div className="rounded-2xl border border-border/60 bg-card/70 px-4 py-3 sm:px-5">
+              <h2 className="text-xl font-serif">
+                {activeTab === "workspace"
+                  ? "Workspace and Team Operations"
+                  : "Catalog Management"}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {activeTab === "workspace"
+                  ? "Organization structure, member roles, and team settings."
+                  : "Vendors, project types, unit types, and product feature options."}
+              </p>
+            </div>
+            <TeamAdminDashboard
+              embedded
+              includeAuthSync={false}
+              showHeader={false}
+              showFooter={false}
+              includeEstimateSection={false}
+              showWorkspaceSections={activeTab === "workspace"}
+              showCatalogSection={activeTab === "catalog"}
+              sectionId="workspace-teams"
+            />
+          </section>
+        ) : null}
+
+        {(activeTab === "records" || activeTab === "pandadoc") ? (
+          <section className="mt-8 scroll-mt-24 space-y-3">
+            <div className="rounded-2xl border border-border/60 bg-card/70 px-4 py-3 sm:px-5">
+              <h2 className="text-xl font-serif">
+                {activeTab === "records"
+                  ? "Project and Estimate Operations"
+                  : "PandaDoc Mapping and Template Config"}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {activeTab === "records"
+                  ? "Create, rename, move, and clean up project and estimate records."
+                  : "Control template selection, routing rules, field catalog, and binding presets."}
+              </p>
+            </div>
+            <AdminMappingDashboard
+              embedded
+              includeAuthSync={false}
+              showHero={false}
+              showAmbientBackground={false}
+              showRecordSections={activeTab === "records"}
+              showMappingSections={activeTab === "pandadoc"}
+              sectionId="records-mapping"
+            />
+          </section>
+        ) : null}
       </div>
     </main>
   );

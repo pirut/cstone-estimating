@@ -138,6 +138,8 @@ type TeamAdminDashboardProps = {
   showHeader?: boolean;
   showFooter?: boolean;
   includeEstimateSection?: boolean;
+  showWorkspaceSections?: boolean;
+  showCatalogSection?: boolean;
   sectionId?: string;
 };
 
@@ -147,6 +149,8 @@ export default function TeamAdminPage({
   showHeader = true,
   showFooter = true,
   includeEstimateSection = true,
+  showWorkspaceSections = true,
+  showCatalogSection = true,
   sectionId,
 }: TeamAdminDashboardProps) {
   const { isLoaded: authLoaded, isSignedIn } = useOptionalAuth();
@@ -1889,181 +1893,183 @@ export default function TeamAdminPage({
           </Card>
         ) : (
           <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-            <Card id="org-overview" className="border-border/60 bg-card/80 shadow-elevated">
-              <CardHeader>
-                <CardTitle className="text-2xl font-serif">
-                  Organization overview
-                </CardTitle>
-                <CardDescription>
-                  Primary workspace for {teamDomain || "your domain"}.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {convexLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Connecting to Convex...
-                  </div>
-                ) : null}
-                {orgTeam ? (
-                  <>
-                    <div className="space-y-1">
-                      <p className="text-sm text-muted-foreground">
-                        Org workspace
-                      </p>
-                      <p className="text-lg font-semibold text-foreground">
-                        {orgTeam.name}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-                      <Badge variant="outline" className="bg-background/80">
-                        Members: {orgTeam.memberships?.length ?? 0}
-                      </Badge>
-                      <Badge variant="outline" className="bg-background/80">
-                        Sub teams: {subTeamCount}
-                      </Badge>
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-sm text-muted-foreground">
-                    Organization workspace has not been created yet.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card className="border-border/60 bg-card/80 shadow-elevated">
-              <CardHeader>
-                <CardTitle className="text-2xl font-serif">
-                  Create sub team
-                </CardTitle>
-                <CardDescription>
-                  Add a focused team within your organization.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {teamError ? (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                    {teamError}
-                  </div>
-                ) : null}
-                <div className="space-y-2">
-                  <label className="text-xs text-muted-foreground">
-                    Team name
-                  </label>
-                  <Input
-                    value={subTeamName}
-                    onChange={(event) => setSubTeamName(event.target.value)}
-                    placeholder="Estimator Pod A"
-                  />
-                </div>
-                <Button
-                  variant="accent"
-                  onClick={handleCreateSubTeam}
-                  disabled={teamSaving || !orgTeam}
-                >
-                  {teamSaving ? "Creating..." : "Create sub team"}
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card id="team-directory" className="border-border/60 bg-card/80 shadow-elevated lg:col-span-2">
-              <CardHeader>
-                <CardTitle className="text-2xl font-serif">Teams</CardTitle>
-                <CardDescription>
-                  Select a team to manage its members.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="grid gap-6 lg:grid-cols-[0.6fr_0.4fr]">
-                <ScrollArea className="h-72 rounded-lg border border-border/70 bg-background/70">
-                  <div className="divide-y divide-border/60">
-                    {orgScopedTeams.map((team) => {
-                      const isPrimary = team.isPrimary;
-                      return (
-                        <button
-                          key={team.id}
-                          type="button"
-                          className={`flex w-full items-start justify-between gap-4 px-4 py-3 text-left transition ${
-                            selectedTeamId === team.id
-                              ? "bg-accent/10"
-                              : "hover:bg-muted/40"
-                          }`}
-                          onClick={() => setSelectedTeamId(team.id)}
-                        >
-                          <div>
-                            <p className="text-sm font-semibold text-foreground">
-                              {team.name}
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Members: {team.memberships?.length ?? 0}
-                            </p>
-                          </div>
-                          {isPrimary ? (
-                            <Badge variant="outline" className="bg-background/80">
-                              Org
-                            </Badge>
-                          ) : null}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </ScrollArea>
-
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <p className="text-sm font-semibold text-foreground">
-                      Add org member
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      Add a teammate from the org workspace to this team.
-                    </p>
-                    {!hasTeamAdminAccess ? (
-                      <p className="text-xs text-muted-foreground">
-                        Owners and admins can assign members to sub teams.
-                      </p>
+            {showWorkspaceSections ? (
+              <>
+                <Card id="org-overview" className="border-border/60 bg-card/80 shadow-elevated">
+                  <CardHeader>
+                    <CardTitle className="text-2xl font-serif">
+                      Organization overview
+                    </CardTitle>
+                    <CardDescription>
+                      Primary workspace for {teamDomain || "your domain"}.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {convexLoading ? (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Connecting to Convex...
+                      </div>
                     ) : null}
-                    <Select
-                      value={selectedMemberId ?? "__none__"}
-                      onValueChange={(value) =>
-                        setSelectedMemberId(value === "__none__" ? null : value)
-                      }
-                      disabled={!availableOrgMembers.length || !hasTeamAdminAccess}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select member" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">Select member</SelectItem>
-                        {availableOrgMembers.map((member) => (
-                          <SelectItem key={member.id} value={member.user?.id ?? member.id}>
-                            {getMemberProfile(member).name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      variant="outline"
-                      onClick={handleAddMember}
-                      disabled={
-                        !selectedMemberId ||
-                        memberActionLoading ||
-                        !selectedTeam ||
-                        !hasTeamAdminAccess
-                      }
-                    >
-                      Add member
-                    </Button>
-                  </div>
-                  {availableOrgMembers.length === 0 ? (
-                    <div className="text-xs text-muted-foreground">
-                      All org members are already on this team.
-                    </div>
-                  ) : null}
-                </div>
-              </CardContent>
-            </Card>
+                    {orgTeam ? (
+                      <>
+                        <div className="space-y-1">
+                          <p className="text-sm text-muted-foreground">
+                            Org workspace
+                          </p>
+                          <p className="text-lg font-semibold text-foreground">
+                            {orgTeam.name}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                          <Badge variant="outline" className="bg-background/80">
+                            Members: {orgTeam.memberships?.length ?? 0}
+                          </Badge>
+                          <Badge variant="outline" className="bg-background/80">
+                            Sub teams: {subTeamCount}
+                          </Badge>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="text-sm text-muted-foreground">
+                        Organization workspace has not been created yet.
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
 
-            <Card id="team-members" className="border-border/60 bg-card/80 shadow-elevated lg:col-span-2">
+                <Card className="border-border/60 bg-card/80 shadow-elevated">
+                  <CardHeader>
+                    <CardTitle className="text-2xl font-serif">
+                      Create sub team
+                    </CardTitle>
+                    <CardDescription>
+                      Add a focused team within your organization.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {teamError ? (
+                      <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                        {teamError}
+                      </div>
+                    ) : null}
+                    <div className="space-y-2">
+                      <label className="text-xs text-muted-foreground">
+                        Team name
+                      </label>
+                      <Input
+                        value={subTeamName}
+                        onChange={(event) => setSubTeamName(event.target.value)}
+                        placeholder="Estimator Pod A"
+                      />
+                    </div>
+                    <Button
+                      variant="accent"
+                      onClick={handleCreateSubTeam}
+                      disabled={teamSaving || !orgTeam}
+                    >
+                      {teamSaving ? "Creating..." : "Create sub team"}
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                <Card id="team-directory" className="border-border/60 bg-card/80 shadow-elevated lg:col-span-2">
+                  <CardHeader>
+                    <CardTitle className="text-2xl font-serif">Teams</CardTitle>
+                    <CardDescription>
+                      Select a team to manage its members.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent className="grid gap-6 lg:grid-cols-[0.6fr_0.4fr]">
+                    <ScrollArea className="h-72 rounded-lg border border-border/70 bg-background/70">
+                      <div className="divide-y divide-border/60">
+                        {orgScopedTeams.map((team) => {
+                          const isPrimary = team.isPrimary;
+                          return (
+                            <button
+                              key={team.id}
+                              type="button"
+                              className={`flex w-full items-start justify-between gap-4 px-4 py-3 text-left transition ${
+                                selectedTeamId === team.id
+                                  ? "bg-accent/10"
+                                  : "hover:bg-muted/40"
+                              }`}
+                              onClick={() => setSelectedTeamId(team.id)}
+                            >
+                              <div>
+                                <p className="text-sm font-semibold text-foreground">
+                                  {team.name}
+                                </p>
+                                <p className="text-xs text-muted-foreground">
+                                  Members: {team.memberships?.length ?? 0}
+                                </p>
+                              </div>
+                              {isPrimary ? (
+                                <Badge variant="outline" className="bg-background/80">
+                                  Org
+                                </Badge>
+                              ) : null}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </ScrollArea>
+
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <p className="text-sm font-semibold text-foreground">
+                          Add org member
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          Add a teammate from the org workspace to this team.
+                        </p>
+                        {!hasTeamAdminAccess ? (
+                          <p className="text-xs text-muted-foreground">
+                            Owners and admins can assign members to sub teams.
+                          </p>
+                        ) : null}
+                        <Select
+                          value={selectedMemberId ?? "__none__"}
+                          onValueChange={(value) =>
+                            setSelectedMemberId(value === "__none__" ? null : value)
+                          }
+                          disabled={!availableOrgMembers.length || !hasTeamAdminAccess}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select member" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">Select member</SelectItem>
+                            {availableOrgMembers.map((member) => (
+                              <SelectItem key={member.id} value={member.user?.id ?? member.id}>
+                                {getMemberProfile(member).name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          variant="outline"
+                          onClick={handleAddMember}
+                          disabled={
+                            !selectedMemberId ||
+                            memberActionLoading ||
+                            !selectedTeam ||
+                            !hasTeamAdminAccess
+                          }
+                        >
+                          Add member
+                        </Button>
+                      </div>
+                      {availableOrgMembers.length === 0 ? (
+                        <div className="text-xs text-muted-foreground">
+                          All org members are already on this team.
+                        </div>
+                      ) : null}
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card id="team-members" className="border-border/60 bg-card/80 shadow-elevated lg:col-span-2">
               <CardHeader>
                 <CardTitle className="text-2xl font-serif">
                   Team members
@@ -2444,8 +2450,11 @@ export default function TeamAdminPage({
                 </CardContent>
               </Card>
             ) : null}
+              </>
+            ) : null}
 
-            <Card id="catalog-settings" className="border-border/60 bg-card/80 shadow-elevated lg:col-span-2">
+            {showCatalogSection ? (
+              <Card id="catalog-settings" className="border-border/60 bg-card/80 shadow-elevated lg:col-span-2">
               <CardHeader>
                 <CardTitle className="text-2xl font-serif">
                   Catalog settings
@@ -3181,7 +3190,8 @@ export default function TeamAdminPage({
                   </div>
                 </section>
               </CardContent>
-            </Card>
+              </Card>
+            ) : null}
           </div>
         )}
 
