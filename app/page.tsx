@@ -30,6 +30,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import type {
   LibraryItem,
   LibraryState,
@@ -449,6 +454,12 @@ export default function HomePage() {
   const [projectActionNotice, setProjectActionNotice] = useState<string | null>(null);
   const [floatingDockOpen, setFloatingDockOpen] = useState(false);
   const [floatingDockMoveTargetId, setFloatingDockMoveTargetId] = useState("");
+  const [dockRenameEstimateOpen, setDockRenameEstimateOpen] = useState(false);
+  const [dockRenameEstimateValue, setDockRenameEstimateValue] = useState("");
+  const [dockRenameProjectOpen, setDockRenameProjectOpen] = useState(false);
+  const [dockRenameProjectValue, setDockRenameProjectValue] = useState("");
+  const [dockCreateProjectOpen, setDockCreateProjectOpen] = useState(false);
+  const [dockCreateProjectValue, setDockCreateProjectValue] = useState("");
   const [loadedEstimatePayload, setLoadedEstimatePayload] = useState<Record<
     string,
     any
@@ -1865,15 +1876,20 @@ export default function HomePage() {
     }
   };
 
-  const handleRenameCurrentEstimate = useCallback(() => {
-    const current = estimateName.trim() || "Untitled Estimate";
-    const next = window.prompt("Rename current estimate", current);
-    if (next === null) return;
-    const normalized = next.trim();
-    if (!normalized) return;
-    setEstimateName(normalized);
-    setProjectActionNotice("Estimate name updated.");
-  }, [estimateName]);
+  const handleRenameCurrentEstimate = useCallback(
+    (nextName: string) => {
+      const normalized = nextName.trim();
+      if (!normalized) {
+        setError("Estimate name can't be empty.");
+        return false;
+      }
+      setEstimateName(normalized);
+      setProjectActionNotice(`Renamed estimate to "${normalized}".`);
+      setDockRenameEstimateOpen(false);
+      return true;
+    },
+    []
+  );
 
   const handleRenameActiveProject = useCallback(async () => {
     setError(null);
@@ -1894,10 +1910,8 @@ export default function HomePage() {
       return;
     }
 
-    const current = String(activeProject.name ?? "").trim() || "Project";
-    const next = window.prompt("Rename active project", current);
-    if (next === null) return;
-    const normalized = next.trim();
+    const current = String(activeProject.name ?? "").trim();
+    const normalized = dockRenameProjectValue.trim();
     if (!normalized || normalized === current) return;
 
     try {
@@ -1909,11 +1923,13 @@ export default function HomePage() {
         })
       );
       setProjectActionNotice(`Renamed project to "${normalized}".`);
+      setDockRenameProjectOpen(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setError(message);
     }
   }, [
+    dockRenameProjectValue,
     activeMembership,
     activeProject,
     activeTeam,
@@ -2088,14 +2104,7 @@ export default function HomePage() {
       return;
     }
 
-    const suggestedName =
-      estimateName.trim() ||
-      activeEditingEstimate?.title ||
-      activeProject?.name ||
-      "New Project";
-    const entered = window.prompt("Create project", suggestedName);
-    if (entered === null) return;
-    const normalized = entered.trim();
+    const normalized = dockCreateProjectValue.trim();
     if (!normalized) {
       setError("Enter a project name.");
       return;
@@ -2116,19 +2125,38 @@ export default function HomePage() {
       );
       setActiveProjectId(projectId);
       setProjectActionNotice(`Created project "${normalized}".`);
+      setDockCreateProjectOpen(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setError(message);
     }
   }, [
-    activeEditingEstimate?.title,
+    dockCreateProjectValue,
     activeMembership,
-    activeProject?.name,
     activeTeam,
     convexAppUrl,
     convexUser,
-    estimateName,
   ]);
+
+  const openDockRenameEstimate = useCallback(() => {
+    setDockRenameEstimateValue(estimateName.trim() || "Untitled Estimate");
+    setDockRenameEstimateOpen(true);
+  }, [estimateName]);
+
+  const openDockRenameProject = useCallback(() => {
+    setDockRenameProjectValue(String(activeProject?.name ?? "").trim());
+    setDockRenameProjectOpen(true);
+  }, [activeProject?.name]);
+
+  const openDockCreateProject = useCallback(() => {
+    const suggestedName =
+      estimateName.trim() ||
+      activeEditingEstimate?.title ||
+      activeProject?.name ||
+      "New Project";
+    setDockCreateProjectValue(suggestedName);
+    setDockCreateProjectOpen(true);
+  }, [activeEditingEstimate?.title, activeProject?.name, estimateName]);
 
   const handleCreateProject = async () => {
     setError(null);
@@ -3638,9 +3666,9 @@ export default function HomePage() {
           </>
         )}
 
-        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end gap-3">
+        <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
           {floatingDockOpen ? (
-            <div className="w-[320px] space-y-2 rounded-2xl border border-border/70 bg-card/95 p-3 shadow-elevated backdrop-blur">
+            <div className="w-[340px] space-y-2 rounded-2xl border border-border/70 bg-card/95 p-3 shadow-elevated backdrop-blur">
               <div className="flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-foreground">Project Action Dock</p>
                 <Badge variant="outline" className="bg-background/80 text-[10px]">
@@ -3673,119 +3701,283 @@ export default function HomePage() {
                   Load an estimate to enable move and version-control actions.
                 </p>
               )}
+              <p className="text-[11px] text-muted-foreground">
+                Hover any icon to preview action details.
+              </p>
             </div>
           ) : null}
-          <div className="relative h-56 w-56">
+          <div className="relative h-[19rem] w-[19rem]">
             <div
               className={cn(
                 "absolute inset-0 transition-all duration-300",
                 floatingDockOpen
                   ? "scale-100 opacity-100"
-                  : "pointer-events-none scale-75 opacity-0"
+                  : "pointer-events-none scale-90 opacity-0"
               )}
             >
-              <Button
-                variant="secondary"
-                size="icon"
-                className="absolute bottom-0 right-0 h-11 w-11 rounded-full border border-border/60 shadow-lg"
-                style={{ transform: "translate(-88px, -32px)" }}
-                onClick={() => void handleSaveEstimateToDb()}
-                disabled={!isSignedIn || !teamReady || !hasSelectedProject}
-                title="Save estimate to active project"
+              <div
+                className="group absolute bottom-0 right-0"
+                style={{ transform: "translate(-78px, -24px)" }}
               >
-                <Workflow className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="secondary"
-                size="icon"
-                className="absolute bottom-0 right-0 h-11 w-11 rounded-full border border-border/60 shadow-lg"
-                style={{ transform: "translate(-128px, -84px)" }}
-                onClick={handleGenerate}
-                disabled={!canGenerate || isGenerating}
-                title="Generate PandaDoc"
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  className="h-11 w-11 rounded-full border border-border/60 shadow-lg"
+                  onClick={() => void handleSaveEstimateToDb()}
+                  disabled={!isSignedIn || !teamReady || !hasSelectedProject}
+                >
+                  <Workflow className="h-4 w-4" />
+                </Button>
+                <span className="pointer-events-none absolute right-[calc(100%+0.55rem)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                  Save To Project
+                </span>
+              </div>
+
+              <div
+                className="group absolute bottom-0 right-0"
+                style={{ transform: "translate(-122px, -62px)" }}
               >
-                <Rocket className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="secondary"
-                size="icon"
-                className="absolute bottom-0 right-0 h-11 w-11 rounded-full border border-border/60 shadow-lg"
-                style={{ transform: "translate(-150px, -146px)" }}
-                onClick={() => void handleMoveEditingEstimateToProject()}
-                disabled={
-                  !activeEditingEstimate ||
-                  !floatingDockMoveTargetId ||
-                  !floatingDockMoveOptions.length ||
-                  movingEstimateId === activeEditingEstimate.id
-                }
-                title="Move loaded estimate to selected project"
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  className="h-11 w-11 rounded-full border border-border/60 shadow-lg"
+                  onClick={handleGenerate}
+                  disabled={!canGenerate || isGenerating}
+                >
+                  <Rocket className="h-4 w-4" />
+                </Button>
+                <span className="pointer-events-none absolute right-[calc(100%+0.55rem)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                  Generate PandaDoc
+                </span>
+              </div>
+
+              <div
+                className="group absolute bottom-0 right-0"
+                style={{ transform: "translate(-158px, -112px)" }}
               >
-                {movingEstimateId === activeEditingEstimate?.id ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <ArrowRightLeft className="h-4 w-4" />
-                )}
-              </Button>
-              <Button
-                variant="secondary"
-                size="icon"
-                className="absolute bottom-0 right-0 h-11 w-11 rounded-full border border-border/60 shadow-lg"
-                style={{ transform: "translate(-108px, -196px)" }}
-                onClick={handleRenameCurrentEstimate}
-                title="Rename current estimate"
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  className="h-11 w-11 rounded-full border border-border/60 shadow-lg"
+                  onClick={() => void handleMoveEditingEstimateToProject()}
+                  disabled={
+                    !activeEditingEstimate ||
+                    !floatingDockMoveTargetId ||
+                    !floatingDockMoveOptions.length ||
+                    movingEstimateId === activeEditingEstimate.id
+                  }
+                >
+                  {movingEstimateId === activeEditingEstimate?.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <ArrowRightLeft className="h-4 w-4" />
+                  )}
+                </Button>
+                <span className="pointer-events-none absolute right-[calc(100%+0.55rem)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                  Move Loaded Estimate
+                </span>
+              </div>
+
+              <Popover
+                open={dockRenameEstimateOpen}
+                onOpenChange={(open) => {
+                  setDockRenameEstimateOpen(open);
+                  if (open) openDockRenameEstimate();
+                }}
               >
-                <PencilLine className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="secondary"
-                size="icon"
-                className="absolute bottom-0 right-0 h-11 w-11 rounded-full border border-border/60 shadow-lg"
-                style={{ transform: "translate(-46px, -214px)" }}
-                onClick={() => void handleRenameActiveProject()}
-                disabled={!activeProject}
-                title="Rename active project"
+                <div
+                  className="group absolute bottom-0 right-0"
+                  style={{ transform: "translate(-176px, -174px)" }}
+                >
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="h-11 w-11 rounded-full border border-border/60 shadow-lg"
+                    >
+                      <PencilLine className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <span className="pointer-events-none absolute right-[calc(100%+0.55rem)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                    Rename Estimate
+                  </span>
+                </div>
+                <PopoverContent align="end" className="w-80 space-y-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-foreground">Rename estimate</p>
+                    <p className="text-xs text-muted-foreground">
+                      Update the working estimate name for this session.
+                    </p>
+                  </div>
+                  <Input
+                    value={dockRenameEstimateValue}
+                    onChange={(event) => setDockRenameEstimateValue(event.target.value)}
+                    placeholder="Estimate name"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDockRenameEstimateOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        handleRenameCurrentEstimate(dockRenameEstimateValue);
+                      }}
+                    >
+                      Save name
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              <Popover
+                open={dockRenameProjectOpen}
+                onOpenChange={(open) => {
+                  setDockRenameProjectOpen(open);
+                  if (open) openDockRenameProject();
+                }}
               >
-                <Settings2 className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="secondary"
-                size="icon"
-                className="absolute bottom-0 right-0 h-11 w-11 rounded-full border border-border/60 shadow-lg"
-                style={{ transform: "translate(16px, -206px)" }}
-                onClick={handleOpenActiveEstimateHistory}
-                disabled={!activeEditingEstimate}
-                title="Open version history for loaded estimate"
+                <div
+                  className="group absolute bottom-0 right-0"
+                  style={{ transform: "translate(-154px, -236px)" }}
+                >
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="h-11 w-11 rounded-full border border-border/60 shadow-lg"
+                      disabled={!activeProject}
+                    >
+                      <Settings2 className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <span className="pointer-events-none absolute right-[calc(100%+0.55rem)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                    Rename Project
+                  </span>
+                </div>
+                <PopoverContent align="end" className="w-80 space-y-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-foreground">Rename project</p>
+                    <p className="text-xs text-muted-foreground">
+                      Keep the project library organized for your team.
+                    </p>
+                  </div>
+                  <Input
+                    value={dockRenameProjectValue}
+                    onChange={(event) => setDockRenameProjectValue(event.target.value)}
+                    placeholder="Project name"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDockRenameProjectOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button size="sm" onClick={() => void handleRenameActiveProject()}>
+                      Save name
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
+              <div
+                className="group absolute bottom-0 right-0"
+                style={{ transform: "translate(-102px, -262px)" }}
               >
-                <History className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="secondary"
-                size="icon"
-                className="absolute bottom-0 right-0 h-11 w-11 rounded-full border border-border/60 shadow-lg"
-                style={{ transform: "translate(64px, -160px)" }}
-                onClick={resetEstimateWorkspace}
-                title="Start a new estimate"
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  className="h-11 w-11 rounded-full border border-border/60 shadow-lg"
+                  onClick={handleOpenActiveEstimateHistory}
+                  disabled={!activeEditingEstimate}
+                >
+                  <History className="h-4 w-4" />
+                </Button>
+                <span className="pointer-events-none absolute right-[calc(100%+0.55rem)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                  Open Version History
+                </span>
+              </div>
+
+              <div
+                className="group absolute bottom-0 right-0"
+                style={{ transform: "translate(-44px, -252px)" }}
               >
-                <RotateCcw className="h-4 w-4" />
-              </Button>
-              <Button
-                variant="secondary"
-                size="icon"
-                className="absolute bottom-0 right-0 h-11 w-11 rounded-full border border-border/60 shadow-lg"
-                style={{ transform: "translate(86px, -102px)" }}
-                onClick={() => void handleCreateProjectFromDock()}
-                disabled={!isSignedIn || !teamReady}
-                title="Create a project quickly"
+                <Button
+                  variant="secondary"
+                  size="icon"
+                  className="h-11 w-11 rounded-full border border-border/60 shadow-lg"
+                  onClick={resetEstimateWorkspace}
+                >
+                  <RotateCcw className="h-4 w-4" />
+                </Button>
+                <span className="pointer-events-none absolute right-[calc(100%+0.55rem)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                  New Estimate
+                </span>
+              </div>
+
+              <Popover
+                open={dockCreateProjectOpen}
+                onOpenChange={(open) => {
+                  setDockCreateProjectOpen(open);
+                  if (open) openDockCreateProject();
+                }}
               >
-                <Plus className="h-4 w-4" />
-              </Button>
+                <div
+                  className="group absolute bottom-0 right-0"
+                  style={{ transform: "translate(-10px, -198px)" }}
+                >
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      className="h-11 w-11 rounded-full border border-border/60 shadow-lg"
+                      disabled={!isSignedIn || !teamReady}
+                    >
+                      <Plus className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <span className="pointer-events-none absolute right-[calc(100%+0.55rem)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                    Create Project
+                  </span>
+                </div>
+                <PopoverContent align="end" className="w-80 space-y-3">
+                  <div className="space-y-1">
+                    <p className="text-sm font-semibold text-foreground">Create project</p>
+                    <p className="text-xs text-muted-foreground">
+                      Spin up a new destination for upcoming estimates.
+                    </p>
+                  </div>
+                  <Input
+                    value={dockCreateProjectValue}
+                    onChange={(event) => setDockCreateProjectValue(event.target.value)}
+                    placeholder="Project name"
+                  />
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setDockCreateProjectOpen(false)}
+                    >
+                      Cancel
+                    </Button>
+                    <Button size="sm" onClick={() => void handleCreateProjectFromDock()}>
+                      Create
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
             <Button
               variant="accent"
               size="icon"
               className="absolute bottom-0 right-0 h-14 w-14 rounded-full border border-accent/40 shadow-xl"
               onClick={() => setFloatingDockOpen((open) => !open)}
-              title={floatingDockOpen ? "Close action dock" : "Open action dock"}
             >
               {floatingDockOpen ? (
                 <X className="h-5 w-5" />
