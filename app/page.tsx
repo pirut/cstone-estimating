@@ -3674,45 +3674,6 @@ export default function HomePage() {
         )}
 
         <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
-          {floatingDockOpen ? (
-            <div className="w-[340px] space-y-2 rounded-2xl border border-border/70 bg-card/95 p-3 shadow-elevated backdrop-blur">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm font-semibold text-foreground">Project Action Dock</p>
-                <Badge variant="outline" className="bg-background/80 text-[10px]">
-                  Power Mode
-                </Badge>
-              </div>
-              {activeEditingEstimate && floatingDockMoveOptions.length ? (
-                <div className="space-y-1">
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                    Move Loaded Estimate
-                  </p>
-                  <Select
-                    value={floatingDockMoveTargetId || undefined}
-                    onValueChange={setFloatingDockMoveTargetId}
-                  >
-                    <SelectTrigger className="h-9 bg-background/80">
-                      <SelectValue placeholder="Choose destination project" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {floatingDockMoveOptions.map((project) => (
-                        <SelectItem key={`dock-move-${project.id}`} value={project.id}>
-                          {project.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Load an estimate to enable move and version-control actions.
-                </p>
-              )}
-              <p className="text-[11px] text-muted-foreground">
-                Hover any icon to preview action details.
-              </p>
-            </div>
-          ) : null}
           <div className="relative flex flex-col items-end gap-2">
             <div
               className={cn(
