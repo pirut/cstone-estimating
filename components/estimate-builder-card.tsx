@@ -122,6 +122,7 @@ function vendorSupportsEuroPricing(vendor: {
 } | null) {
   if (!vendor) return false;
   if (vendor.usesEuroPricing === true) return true;
+  if (vendor.usesEuroPricing === false) return false;
   const name = String(vendor.name ?? "").trim().toLowerCase();
   if (!name) return false;
   return /\b(eur|euro)\b/.test(name) || name.includes("€");
