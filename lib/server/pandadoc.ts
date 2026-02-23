@@ -59,6 +59,12 @@ export type PandaDocSendOptions = {
   silent?: boolean;
 };
 
+export type PandaDocDocumentValue = {
+  amount: number;
+  currency?: string;
+  formatted: string;
+};
+
 export type CreatePandaDocDocumentOptions = {
   draft: PandaDocDraft;
   sendDocument: boolean;
@@ -86,6 +92,9 @@ export type PandaDocCreateResult = {
     appUrl: string;
     apiUrl: string;
     sharedLink?: string;
+    valueAmount?: number;
+    valueCurrency?: string;
+    valueFormatted?: string;
   };
   recipient?: {
     email: string;
@@ -145,8 +154,14 @@ type PandaDocRecipientDetails = {
   shared_link?: string;
 };
 
+type PandaDocGrandTotal = {
+  amount?: string;
+  currency?: string;
+};
+
 type PandaDocDetailsResponse = {
   recipients?: PandaDocRecipientDetails[];
+  grand_total?: PandaDocGrandTotal;
 };
 
 type PandaDocTemplateListResponse = {
@@ -194,6 +209,9 @@ export type PandaDocDocumentSummary = {
   status: string;
   appUrl: string;
   apiUrl: string;
+  valueAmount?: number;
+  valueCurrency?: string;
+  valueFormatted?: string;
 };
 
 function coerceString(value: unknown) {
@@ -215,6 +233,39 @@ function toPositiveInteger(value: unknown, fallback: number) {
   if (!Number.isFinite(parsed)) return fallback;
   const rounded = Math.trunc(parsed);
   return rounded > 0 ? rounded : fallback;
+}
+
+function normalizeCurrencyCode(value: unknown) {
+  const normalized = coerceString(value).toUpperCase();
+  if (!/^[A-Z]{3}$/.test(normalized)) return undefined;
+  return normalized;
+}
+
+function toDocumentValue(
+  grandTotal: PandaDocGrandTotal | undefined
+): PandaDocDocumentValue | undefined {
+  if (!grandTotal || typeof grandTotal !== "object") return undefined;
+  const rawAmount = coerceString(grandTotal.amount);
+  if (!rawAmount) return undefined;
+  const parsedAmount = Number(rawAmount.replace(/,/g, ""));
+  if (!Number.isFinite(parsedAmount)) return undefined;
+  const currency = normalizeCurrencyCode(grandTotal.currency);
+  let formatted = parsedAmount.toFixed(2);
+  if (currency) {
+    try {
+      formatted = new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency,
+      }).format(parsedAmount);
+    } catch {
+      formatted = `${currency} ${parsedAmount.toFixed(2)}`;
+    }
+  }
+  return {
+    amount: parsedAmount,
+    currency,
+    formatted,
+  };
 }
 
 function inferDocumentName(fieldValues: Record<string, string>) {
@@ -475,14 +526,19 @@ async function waitForDocumentReady(documentId: string) {
 
 function toDocumentSummary(
   documentId: string,
-  statusResponse: PandaDocStatusResponse
+  statusResponse: PandaDocStatusResponse,
+  detailsResponse?: PandaDocDetailsResponse
 ): PandaDocDocumentSummary {
+  const value = toDocumentValue(detailsResponse?.grand_total);
   return {
     id: documentId,
     name: coerceString(statusResponse.name) || documentId,
     status: coerceString(statusResponse.status) || "unknown",
     appUrl: buildDocumentAppUrl(documentId),
     apiUrl: `${getApiBaseUrl()}/documents/${documentId}`,
+    valueAmount: value?.amount,
+    valueCurrency: value?.currency,
+    valueFormatted: value?.formatted,
   };
 }
 
@@ -590,7 +646,19 @@ export async function getPandaDocDocumentSummary(documentId: string) {
       expectedStatus: 200,
     }
   );
-  return toDocumentSummary(normalizedDocumentId, response);
+  let detailsResponse: PandaDocDetailsResponse | undefined;
+  try {
+    detailsResponse = await pandadocRequest<PandaDocDetailsResponse>(
+      `/documents/${encodeURIComponent(normalizedDocumentId)}/details`,
+      {
+        method: "GET",
+        expectedStatus: 200,
+      }
+    );
+  } catch {
+    detailsResponse = undefined;
+  }
+  return toDocumentSummary(normalizedDocumentId, response, detailsResponse);
 }
 
 async function sendPandaDocDocument(
@@ -650,14 +718,20 @@ async function getPandaDocMatchedRecipient(
   recipientEmail?: string
 ) {
   const detailsResponse = await pandadocRequest<PandaDocDetailsResponse>(
-    `/documents/${documentId}/details`,
+    `/documents/${encodeURIComponent(documentId)}/details`,
     {
       method: "GET",
       expectedStatus: 200,
     }
   );
 
-  return extractRecipientByEmail(detailsResponse.recipients, recipientEmail);
+  return {
+    matchedRecipient: extractRecipientByEmail(
+      detailsResponse.recipients,
+      recipientEmail
+    ),
+    value: toDocumentValue(detailsResponse.grand_total),
+  };
 }
 
 function assertDocumentIsDraft(documentId: string, status: string) {
@@ -725,10 +799,12 @@ export async function createPandaDocDocument(
     );
   }
 
-  const matchedRecipient = await getPandaDocMatchedRecipient(
+  const detailsSummary = await getPandaDocMatchedRecipient(
     documentId,
     recipientEmail
   );
+  const matchedRecipient = detailsSummary.matchedRecipient;
+  const value = detailsSummary.value;
 
   return {
     document: {
@@ -741,6 +817,9 @@ export async function createPandaDocDocument(
       appUrl: buildDocumentAppUrl(documentId),
       apiUrl: `${getApiBaseUrl()}/documents/${documentId}`,
       sharedLink: coerceString(matchedRecipient?.shared_link) || undefined,
+      valueAmount: value?.amount,
+      valueCurrency: value?.currency,
+      valueFormatted: value?.formatted,
     },
     recipient:
       matchedRecipient && coerceString(matchedRecipient.email)
@@ -831,10 +910,12 @@ export async function updatePandaDocDocument(
     );
   }
 
-  const matchedRecipient = await getPandaDocMatchedRecipient(
+  const detailsSummary = await getPandaDocMatchedRecipient(
     normalizedDocumentId,
     recipientEmail
   );
+  const matchedRecipient = detailsSummary.matchedRecipient;
+  const value = detailsSummary.value;
 
   return {
     document: {
@@ -844,6 +925,9 @@ export async function updatePandaDocDocument(
       appUrl: buildDocumentAppUrl(normalizedDocumentId),
       apiUrl: `${getApiBaseUrl()}/documents/${normalizedDocumentId}`,
       sharedLink: coerceString(matchedRecipient?.shared_link) || undefined,
+      valueAmount: value?.amount,
+      valueCurrency: value?.currency,
+      valueFormatted: value?.formatted,
     },
     recipient:
       matchedRecipient && coerceString(matchedRecipient.email)

@@ -11,6 +11,9 @@ export type EstimateVersionPandaDocDocument = {
   status?: string;
   appUrl?: string;
   sharedLink?: string;
+  valueAmount?: number;
+  valueCurrency?: string;
+  valueFormatted?: string;
   recipientEmail?: string;
   recipientFirstName?: string;
   recipientLastName?: string;
@@ -73,12 +76,24 @@ function normalizePandaDocDocument(
     operationRaw === "updated" || operationRaw === "created"
       ? (operationRaw as "created" | "updated")
       : undefined;
+  const valueAmountRaw =
+    typeof value.valueAmount === "number"
+      ? value.valueAmount
+      : typeof value.valueAmount === "string"
+        ? Number(value.valueAmount)
+        : NaN;
+  const valueAmount = Number.isFinite(valueAmountRaw)
+    ? valueAmountRaw
+    : undefined;
   return {
     documentId,
     name: String(value.name ?? "").trim() || undefined,
     status: String(value.status ?? "").trim() || undefined,
     appUrl: String(value.appUrl ?? "").trim() || undefined,
     sharedLink: String(value.sharedLink ?? "").trim() || undefined,
+    valueAmount,
+    valueCurrency: String(value.valueCurrency ?? "").trim() || undefined,
+    valueFormatted: String(value.valueFormatted ?? "").trim() || undefined,
     recipientEmail: String(value.recipientEmail ?? "").trim() || undefined,
     recipientFirstName:
       String(value.recipientFirstName ?? "").trim() || undefined,
