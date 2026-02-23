@@ -144,9 +144,19 @@ function hasSameStringRecord(
 
 type AdminMappingDashboardProps = {
   embedded?: boolean;
+  includeAuthSync?: boolean;
+  showHero?: boolean;
+  showAmbientBackground?: boolean;
+  sectionId?: string;
 };
 
-export default function AdminPage({ embedded = false }: AdminMappingDashboardProps) {
+export default function AdminPage({
+  embedded = false,
+  includeAuthSync = true,
+  showHero = true,
+  showAmbientBackground = true,
+  sectionId,
+}: AdminMappingDashboardProps) {
   const [configName, setConfigName] = useState("Team PandaDoc Mapping");
   const [templateVersion, setTemplateVersion] = useState(1);
   const [recipientRole, setRecipientRole] = useState("Client");
@@ -1208,77 +1218,83 @@ export default function AdminPage({ embedded = false }: AdminMappingDashboardPro
 
   return (
     <section
-      id={embedded ? "pandadoc-mapping" : undefined}
+      id={sectionId ?? (embedded ? "pandadoc-mapping" : undefined)}
       className={embedded ? "relative w-full overflow-x-hidden" : "relative min-h-screen overflow-x-hidden"}
     >
-      <ConvexAuthSync
-        onAuthError={setConvexSetupError}
-        onDomainError={setConvexSetupError}
-      />
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-24 left-1/2 h-80 w-[620px] -translate-x-1/2 rounded-full bg-accent/20 blur-3xl" />
-        <div className="absolute top-24 right-0 h-72 w-72 rounded-full bg-foreground/10 blur-3xl" />
-        <div className="absolute bottom-0 left-0 h-72 w-72 rounded-full bg-accent/15 blur-3xl" />
-      </div>
+      {includeAuthSync ? (
+        <ConvexAuthSync
+          onAuthError={setConvexSetupError}
+          onDomainError={setConvexSetupError}
+        />
+      ) : null}
+      {showAmbientBackground ? (
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute -top-24 left-1/2 h-80 w-[620px] -translate-x-1/2 rounded-full bg-accent/20 blur-3xl" />
+          <div className="absolute top-24 right-0 h-72 w-72 rounded-full bg-foreground/10 blur-3xl" />
+          <div className="absolute bottom-0 left-0 h-72 w-72 rounded-full bg-accent/15 blur-3xl" />
+        </div>
+      ) : null}
       <div className="relative w-full space-y-6 px-4 py-8 sm:px-6 md:py-10 lg:px-8 xl:px-10 2xl:px-12">
-        <section className="relative overflow-hidden rounded-[32px] border border-border/60 bg-foreground text-white shadow-elevated">
-          <div className="absolute -right-24 -top-20 h-64 w-64 rounded-full bg-accent/25 blur-3xl" />
-          <div className="absolute -bottom-24 left-8 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
-          <div className="relative grid gap-6 p-8 lg:grid-cols-[1.15fr_0.85fr]">
-            <div className="space-y-4">
-              <Badge variant="outline" className="border-white/30 bg-white/10 text-white">
-                Admin Control Center
-              </Badge>
-              <div className="space-y-2">
-                <h1 className="text-4xl font-serif tracking-tight md:text-5xl">
-                  PandaDoc + Estimate Operations
-                </h1>
-                <p className="max-w-3xl text-sm text-white/75 md:text-base">
-                  Full-screen dashboard for template mapping, project operations,
-                  and estimate lifecycle management in one place.
-                </p>
+        {showHero ? (
+          <section className="relative overflow-hidden rounded-[32px] border border-border/60 bg-foreground text-white shadow-elevated">
+            <div className="absolute -right-24 -top-20 h-64 w-64 rounded-full bg-accent/25 blur-3xl" />
+            <div className="absolute -bottom-24 left-8 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
+            <div className="relative grid gap-6 p-8 lg:grid-cols-[1.15fr_0.85fr]">
+              <div className="space-y-4">
+                <Badge variant="outline" className="border-white/30 bg-white/10 text-white">
+                  Admin Control Center
+                </Badge>
+                <div className="space-y-2">
+                  <h1 className="text-4xl font-serif tracking-tight md:text-5xl">
+                    PandaDoc + Estimate Operations
+                  </h1>
+                  <p className="max-w-3xl text-sm text-white/75 md:text-base">
+                    Full-screen dashboard for template mapping, project operations,
+                    and estimate lifecycle management in one place.
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button asChild variant="secondary" size="sm">
+                    {embedded ? (
+                      <a href="#team-operations">Team Admin</a>
+                    ) : (
+                      <Link href="/admin#team-operations">Team Admin</Link>
+                    )}
+                  </Button>
+                  <Button asChild variant="accent" size="sm">
+                    <Link href="/">Proposal Workspace</Link>
+                  </Button>
+                </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Button asChild variant="secondary" size="sm">
-                  {embedded ? (
-                    <a href="#team-operations">Team Admin</a>
-                  ) : (
-                    <Link href="/admin#team-operations">Team Admin</Link>
-                  )}
-                </Button>
-                <Button asChild variant="accent" size="sm">
-                  <Link href="/">Proposal Workspace</Link>
-                </Button>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-white/60">
+                    Teams
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold text-white">{managementTeams.length}</p>
+                </div>
+                <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-white/60">
+                    Projects
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold text-white">{managementProjects.length}</p>
+                </div>
+                <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-white/60">
+                    Estimates
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold text-white">{managementEstimates.length}</p>
+                </div>
+                <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-white/60">
+                    Source Keys
+                  </p>
+                  <p className="mt-1 text-2xl font-semibold text-white">{sourceKeyOptions.length}</p>
+                </div>
               </div>
             </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-white/60">
-                  Teams
-                </p>
-                <p className="mt-1 text-2xl font-semibold text-white">{managementTeams.length}</p>
-              </div>
-              <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-white/60">
-                  Projects
-                </p>
-                <p className="mt-1 text-2xl font-semibold text-white">{managementProjects.length}</p>
-              </div>
-              <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-white/60">
-                  Estimates
-                </p>
-                <p className="mt-1 text-2xl font-semibold text-white">{managementEstimates.length}</p>
-              </div>
-              <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-white/60">
-                  Source Keys
-                </p>
-                <p className="mt-1 text-2xl font-semibold text-white">{sourceKeyOptions.length}</p>
-              </div>
-            </div>
-          </div>
-        </section>
+          </section>
+        ) : null}
 
         {convexSetupBanner ? (
           <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
@@ -1287,7 +1303,10 @@ export default function AdminPage({ embedded = false }: AdminMappingDashboardPro
         ) : null}
 
         <section className="grid gap-4 xl:grid-cols-[minmax(320px,0.4fr)_minmax(0,0.6fr)]">
-          <Card className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
+          <Card
+            id="project-management"
+            className="rounded-3xl border-border/60 bg-card/85 shadow-elevated"
+          >
             <CardHeader className="space-y-4">
               <div className="space-y-2">
                 <Badge variant="muted" className="bg-muted/80 text-[10px]">
@@ -1446,7 +1465,10 @@ export default function AdminPage({ embedded = false }: AdminMappingDashboardPro
             </CardContent>
           </Card>
 
-          <Card className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
+          <Card
+            id="estimate-management"
+            className="rounded-3xl border-border/60 bg-card/85 shadow-elevated"
+          >
             <CardHeader className="space-y-4">
               <div className="space-y-2">
                 <Badge variant="muted" className="bg-muted/80 text-[10px]">
@@ -1628,7 +1650,7 @@ export default function AdminPage({ embedded = false }: AdminMappingDashboardPro
           </Card>
         </section>
 
-        <Card className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
+        <Card id="template-config" className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
           <CardHeader>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="space-y-1">
@@ -1703,7 +1725,7 @@ export default function AdminPage({ embedded = false }: AdminMappingDashboardPro
           </CardContent>
         </Card>
 
-        <Card className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
+        <Card id="pandadoc-template" className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
           <CardHeader>
             <CardTitle className="text-xl font-serif">PandaDoc Template</CardTitle>
             <CardDescription>
@@ -2035,7 +2057,7 @@ export default function AdminPage({ embedded = false }: AdminMappingDashboardPro
           </CardContent>
         </Card>
 
-        <Card className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
+        <Card id="field-catalog" className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
           <CardHeader>
             <CardTitle className="text-xl font-serif">Field Catalog</CardTitle>
             <CardDescription>
@@ -2059,7 +2081,7 @@ export default function AdminPage({ embedded = false }: AdminMappingDashboardPro
           </CardContent>
         </Card>
 
-        <Card className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
+        <Card id="pandadoc-bindings" className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
           <CardHeader>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>

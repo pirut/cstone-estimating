@@ -134,9 +134,21 @@ type EstimateAdminDraft = {
 
 type TeamAdminDashboardProps = {
   embedded?: boolean;
+  includeAuthSync?: boolean;
+  showHeader?: boolean;
+  showFooter?: boolean;
+  includeEstimateSection?: boolean;
+  sectionId?: string;
 };
 
-export default function TeamAdminPage({ embedded = false }: TeamAdminDashboardProps) {
+export default function TeamAdminPage({
+  embedded = false,
+  includeAuthSync = true,
+  showHeader = true,
+  showFooter = true,
+  includeEstimateSection = true,
+  sectionId,
+}: TeamAdminDashboardProps) {
   const { isLoaded: authLoaded, isSignedIn } = useOptionalAuth();
   const { user } = useOptionalUser();
   const { isLoading: convexLoading, user: convexUser, error: convexAuthError } =
@@ -1809,10 +1821,12 @@ export default function TeamAdminPage({ embedded = false }: TeamAdminDashboardPr
 
   return (
     <section
-      id={embedded ? "team-operations" : undefined}
+      id={sectionId ?? (embedded ? "team-operations" : undefined)}
       className={embedded ? "w-full bg-background" : "min-h-screen bg-background"}
     >
-      <ConvexAuthSync onAuthError={setConvexSetupError} />
+      {includeAuthSync ? (
+        <ConvexAuthSync onAuthError={setConvexSetupError} />
+      ) : null}
       <div
         className={
           embedded
@@ -1820,26 +1834,28 @@ export default function TeamAdminPage({ embedded = false }: TeamAdminDashboardPr
             : "container py-10"
         }
       >
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-serif">Team Admin</h1>
-            <p className="text-sm text-muted-foreground">
-              Manage organization teams and memberships.
-            </p>
+        {showHeader ? (
+          <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h1 className="text-3xl font-serif">Team Admin</h1>
+              <p className="text-sm text-muted-foreground">
+                Manage organization teams and memberships.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button asChild variant="accent" size="sm">
+                {embedded ? (
+                  <a href="#pandadoc-mapping">Open PandaDoc mapping</a>
+                ) : (
+                  <Link href="/admin#pandadoc-mapping">Open PandaDoc mapping</Link>
+                )}
+              </Button>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/">Back to workspace</Link>
+              </Button>
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button asChild variant="accent" size="sm">
-              {embedded ? (
-                <a href="#pandadoc-mapping">Open PandaDoc mapping</a>
-              ) : (
-                <Link href="/admin#pandadoc-mapping">Open PandaDoc mapping</Link>
-              )}
-            </Button>
-            <Button asChild variant="outline" size="sm">
-              <Link href="/">Back to workspace</Link>
-            </Button>
-          </div>
-        </div>
+        ) : null}
 
         {convexSetupBanner ? (
           <div className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
@@ -1873,7 +1889,7 @@ export default function TeamAdminPage({ embedded = false }: TeamAdminDashboardPr
           </Card>
         ) : (
           <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-            <Card className="border-border/60 bg-card/80 shadow-elevated">
+            <Card id="org-overview" className="border-border/60 bg-card/80 shadow-elevated">
               <CardHeader>
                 <CardTitle className="text-2xl font-serif">
                   Organization overview
@@ -1951,7 +1967,7 @@ export default function TeamAdminPage({ embedded = false }: TeamAdminDashboardPr
               </CardContent>
             </Card>
 
-            <Card className="border-border/60 bg-card/80 shadow-elevated lg:col-span-2">
+            <Card id="team-directory" className="border-border/60 bg-card/80 shadow-elevated lg:col-span-2">
               <CardHeader>
                 <CardTitle className="text-2xl font-serif">Teams</CardTitle>
                 <CardDescription>
@@ -2047,7 +2063,7 @@ export default function TeamAdminPage({ embedded = false }: TeamAdminDashboardPr
               </CardContent>
             </Card>
 
-            <Card className="border-border/60 bg-card/80 shadow-elevated lg:col-span-2">
+            <Card id="team-members" className="border-border/60 bg-card/80 shadow-elevated lg:col-span-2">
               <CardHeader>
                 <CardTitle className="text-2xl font-serif">
                   Team members
@@ -2324,110 +2340,112 @@ export default function TeamAdminPage({ embedded = false }: TeamAdminDashboardPr
               </CardContent>
             </Card>
 
-            <Card
-              id="team-estimates"
-              className="border-border/60 bg-card/80 shadow-elevated lg:col-span-2"
-            >
-              <CardHeader>
-                <CardTitle className="text-2xl font-serif">
-                  Team estimates
-                </CardTitle>
-                <CardDescription>
-                  Review, rename, and remove estimates for the selected team.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {estimateError ? (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                    {estimateError}
-                  </div>
-                ) : null}
-                {estimateStatus ? (
-                  <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
-                    {estimateStatus}
-                  </div>
-                ) : null}
-                {!selectedTeam ? (
-                  <div className="text-sm text-muted-foreground">
-                    Select a team to manage estimates.
-                  </div>
-                ) : !estimateDrafts.length ? (
-                  <div className="rounded-lg border border-border/60 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
-                    No saved team estimates yet for {selectedTeam.name}.
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {estimateDrafts.map((estimate) => {
-                      const sourceEstimate = estimateSourceById.get(estimate.id);
-                      const sourceTitle = String(sourceEstimate?.title ?? "").trim();
-                      const draftTitle = estimate.title.trim();
-                      const isBusy = estimateSavingId === estimate.id;
-                      const canSaveName =
-                        Boolean(draftTitle) && draftTitle !== sourceTitle;
-                      return (
-                        <div
-                          key={estimate.id}
-                          className="rounded-lg border border-border/60 bg-background/70 px-4 py-3"
-                        >
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Input
-                              className="min-w-[280px] flex-1"
-                              value={estimate.title}
-                              onChange={(event) =>
-                                handleEstimateDraftChange(estimate.id, {
-                                  title: event.target.value,
-                                })
-                              }
-                              placeholder="Estimate title"
-                              disabled={!hasTeamAdminAccess || isBusy}
-                            />
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => void handleSaveEstimate(estimate)}
-                              disabled={!hasTeamAdminAccess || isBusy || !canSaveName}
-                            >
-                              {isBusy ? (
-                                "Saving..."
-                              ) : (
-                                <>
-                                  <Save className="h-4 w-4" />
-                                  Save name
-                                </>
-                              )}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => void handleDeleteEstimate(estimate)}
-                              disabled={!hasTeamAdminAccess || isBusy}
-                            >
-                              Delete
-                            </Button>
+            {includeEstimateSection ? (
+              <Card
+                id="team-estimates"
+                className="border-border/60 bg-card/80 shadow-elevated lg:col-span-2"
+              >
+                <CardHeader>
+                  <CardTitle className="text-2xl font-serif">
+                    Team estimates
+                  </CardTitle>
+                  <CardDescription>
+                    Review, rename, and remove estimates for the selected team.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {estimateError ? (
+                    <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                      {estimateError}
+                    </div>
+                  ) : null}
+                  {estimateStatus ? (
+                    <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                      {estimateStatus}
+                    </div>
+                  ) : null}
+                  {!selectedTeam ? (
+                    <div className="text-sm text-muted-foreground">
+                      Select a team to manage estimates.
+                    </div>
+                  ) : !estimateDrafts.length ? (
+                    <div className="rounded-lg border border-border/60 bg-background/70 px-4 py-3 text-sm text-muted-foreground">
+                      No saved team estimates yet for {selectedTeam.name}.
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {estimateDrafts.map((estimate) => {
+                        const sourceEstimate = estimateSourceById.get(estimate.id);
+                        const sourceTitle = String(sourceEstimate?.title ?? "").trim();
+                        const draftTitle = estimate.title.trim();
+                        const isBusy = estimateSavingId === estimate.id;
+                        const canSaveName =
+                          Boolean(draftTitle) && draftTitle !== sourceTitle;
+                        return (
+                          <div
+                            key={estimate.id}
+                            className="rounded-lg border border-border/60 bg-background/70 px-4 py-3"
+                          >
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Input
+                                className="min-w-[280px] flex-1"
+                                value={estimate.title}
+                                onChange={(event) =>
+                                  handleEstimateDraftChange(estimate.id, {
+                                    title: event.target.value,
+                                  })
+                                }
+                                placeholder="Estimate title"
+                                disabled={!hasTeamAdminAccess || isBusy}
+                              />
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => void handleSaveEstimate(estimate)}
+                                disabled={!hasTeamAdminAccess || isBusy || !canSaveName}
+                              >
+                                {isBusy ? (
+                                  "Saving..."
+                                ) : (
+                                  <>
+                                    <Save className="h-4 w-4" />
+                                    Save name
+                                  </>
+                                )}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => void handleDeleteEstimate(estimate)}
+                                disabled={!hasTeamAdminAccess || isBusy}
+                              >
+                                Delete
+                              </Button>
+                            </div>
+                            <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                              <Badge variant="outline" className="bg-background/80">
+                                Status: {estimate.status || "active"}
+                              </Badge>
+                              <Badge variant="outline" className="bg-background/80">
+                                Version: {estimate.version ?? 1}
+                              </Badge>
+                              <span>Owner: {estimate.ownerLabel}</span>
+                              <span>Created: {formatDateTime(estimate.createdAt)}</span>
+                              <span>Updated: {formatDateTime(estimate.updatedAt)}</span>
+                              <span>
+                                Last generated: {formatDateTime(estimate.lastGeneratedAt)}
+                              </span>
+                            </div>
                           </div>
-                          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                            <Badge variant="outline" className="bg-background/80">
-                              Status: {estimate.status || "active"}
-                            </Badge>
-                            <Badge variant="outline" className="bg-background/80">
-                              Version: {estimate.version ?? 1}
-                            </Badge>
-                            <span>Owner: {estimate.ownerLabel}</span>
-                            <span>Created: {formatDateTime(estimate.createdAt)}</span>
-                            <span>Updated: {formatDateTime(estimate.updatedAt)}</span>
-                            <span>
-                              Last generated: {formatDateTime(estimate.lastGeneratedAt)}
-                            </span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                        );
+                      })}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ) : null}
 
-            <Card className="border-border/60 bg-card/80 shadow-elevated lg:col-span-2">
+            <Card id="catalog-settings" className="border-border/60 bg-card/80 shadow-elevated lg:col-span-2">
               <CardHeader>
                 <CardTitle className="text-2xl font-serif">
                   Catalog settings
@@ -3167,12 +3185,15 @@ export default function TeamAdminPage({ embedded = false }: TeamAdminDashboardPr
           </div>
         )}
 
-        <Separator className="my-10" />
-
-        <footer className="text-xs text-muted-foreground">
-          Admin actions require Convex and Clerk to be configured for your
-          organization.
-        </footer>
+        {showFooter ? (
+          <>
+            <Separator className="my-10" />
+            <footer className="text-xs text-muted-foreground">
+              Admin actions require Convex and Clerk to be configured for your
+              organization.
+            </footer>
+          </>
+        ) : null}
       </div>
     </section>
   );
