@@ -24,7 +24,11 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { DEFAULT_UNIT_TYPES, DEFAULT_VENDORS } from "@/lib/catalog-defaults";
+import {
+  DEFAULT_PROJECT_TYPES,
+  DEFAULT_UNIT_TYPES,
+  DEFAULT_VENDORS,
+} from "@/lib/catalog-defaults";
 import {
   DEFAULT_MARGIN_THRESHOLDS,
   normalizeMarginThresholds,
@@ -94,6 +98,13 @@ type ProductFeatureOptionDraft = {
   id?: string;
   category: string;
   vendorId: string;
+  label: string;
+  sortOrder: number;
+  isActive: boolean;
+};
+
+type ProjectTypeDraft = {
+  id?: string;
   label: string;
   sortOrder: number;
   isActive: boolean;
@@ -171,6 +182,7 @@ export default function TeamAdminPage() {
           estimates: { owner: {} },
           vendors: {},
           unitTypes: {},
+          projectTypes: {},
           productFeatureOptions: {},
         },
       }
@@ -181,6 +193,7 @@ export default function TeamAdminPage() {
           estimates: { owner: {} },
           vendors: {},
           unitTypes: {},
+          projectTypes: {},
           productFeatureOptions: {},
         },
       };
@@ -275,6 +288,22 @@ export default function TeamAdminPage() {
       if (orderA !== orderB) return orderA - orderB;
       const byCode = String(a.code ?? "").localeCompare(String(b.code ?? ""));
       if (byCode !== 0) return byCode;
+      return String(a.__teamName ?? "").localeCompare(String(b.__teamName ?? ""));
+    });
+  }, [catalogDisplayTeams]);
+  const projectTypeRecords = useMemo(() => {
+    const list = catalogDisplayTeams.flatMap((team) =>
+      (team.projectTypes ?? []).map((projectType) => ({
+        ...projectType,
+        __teamName: team.name ?? "",
+      }))
+    );
+    return list.sort((a, b) => {
+      const orderA = typeof a.sortOrder === "number" ? a.sortOrder : 0;
+      const orderB = typeof b.sortOrder === "number" ? b.sortOrder : 0;
+      if (orderA !== orderB) return orderA - orderB;
+      const byLabel = String(a.label ?? "").localeCompare(String(b.label ?? ""));
+      if (byLabel !== 0) return byLabel;
       return String(a.__teamName ?? "").localeCompare(String(b.__teamName ?? ""));
     });
   }, [catalogDisplayTeams]);
@@ -401,6 +430,12 @@ export default function TeamAdminPage() {
   const [unitTypeSaving, setUnitTypeSaving] = useState(false);
   const [unitTypeError, setUnitTypeError] = useState<string | null>(null);
   const [unitTypeStatus, setUnitTypeStatus] = useState<string | null>(null);
+  const [projectTypeDrafts, setProjectTypeDrafts] = useState<ProjectTypeDraft[]>(
+    []
+  );
+  const [projectTypeSaving, setProjectTypeSaving] = useState(false);
+  const [projectTypeError, setProjectTypeError] = useState<string | null>(null);
+  const [projectTypeStatus, setProjectTypeStatus] = useState<string | null>(null);
   const [productFeatureOptionDrafts, setProductFeatureOptionDrafts] = useState<
     ProductFeatureOptionDraft[]
   >([]);
@@ -423,6 +458,12 @@ export default function TeamAdminPage() {
   const [vendorDropIndex, setVendorDropIndex] = useState<number | null>(null);
   const [dragUnitTypeIndex, setDragUnitTypeIndex] = useState<number | null>(null);
   const [unitTypeDropIndex, setUnitTypeDropIndex] = useState<number | null>(null);
+  const [dragProjectTypeIndex, setDragProjectTypeIndex] = useState<number | null>(
+    null
+  );
+  const [projectTypeDropIndex, setProjectTypeDropIndex] = useState<number | null>(
+    null
+  );
   const [dragFeatureState, setDragFeatureState] = useState<{
     groupId: string;
     entryIndex: number;
@@ -479,6 +520,19 @@ export default function TeamAdminPage() {
     }));
     setUnitTypeDrafts(next);
   }, [unitTypeRecords]);
+
+  useEffect(() => {
+    const next = projectTypeRecords.map((projectType, index) => ({
+      id: projectType.id,
+      label: String(projectType.label ?? ""),
+      sortOrder:
+        typeof projectType.sortOrder === "number"
+          ? projectType.sortOrder
+          : index + 1,
+      isActive: projectType.isActive !== false,
+    }));
+    setProjectTypeDrafts(next);
+  }, [projectTypeRecords]);
 
   useEffect(() => {
     const next = productFeatureOptionRecords.map((option, index) => ({
@@ -807,6 +861,19 @@ export default function TeamAdminPage() {
     });
     setDragUnitTypeIndex(null);
     setUnitTypeDropIndex(null);
+  };
+
+  const handleDropProjectType = (insertionIndex: number) => {
+    setProjectTypeDrafts((prev) => {
+      if (dragProjectTypeIndex === null) return prev;
+      return reorderDraftListByInsertion(
+        prev,
+        dragProjectTypeIndex,
+        insertionIndex
+      );
+    });
+    setDragProjectTypeIndex(null);
+    setProjectTypeDropIndex(null);
   };
 
   const handleDropFeatureOption = (
@@ -1164,6 +1231,168 @@ export default function TeamAdminPage() {
       setUnitTypeError(message);
     } finally {
       setUnitTypeSaving(false);
+    }
+  };
+
+  const handleProjectTypeChange = (
+    index: number,
+    patch: Partial<ProjectTypeDraft>
+  ) => {
+    setProjectTypeDrafts((prev) =>
+      prev.map((projectType, idx) =>
+        idx === index ? { ...projectType, ...patch } : projectType
+      )
+    );
+  };
+
+  const handleAddProjectType = () => {
+    const nextOrder =
+      projectTypeDrafts.reduce(
+        (max, projectType) => Math.max(max, projectType.sortOrder || 0),
+        0
+      ) + 1;
+    setProjectTypeDrafts((prev) => [
+      ...prev,
+      {
+        label: "",
+        sortOrder: nextOrder,
+        isActive: true,
+      },
+    ]);
+  };
+
+  const handleSaveProjectTypes = async () => {
+    setProjectTypeError(null);
+    setProjectTypeStatus(null);
+    if (!catalogTeam) {
+      setProjectTypeError(
+        "Select a specific team in Catalog scope before editing project types."
+      );
+      return;
+    }
+    if (!canEditCatalog) {
+      setProjectTypeError(
+        "Only organization owners and admins can update project types."
+      );
+      return;
+    }
+
+    const cleaned = projectTypeDrafts
+      .map((projectType) => ({
+        ...projectType,
+        label: projectType.label.trim(),
+        sortOrder:
+          typeof projectType.sortOrder === "number" &&
+          Number.isFinite(projectType.sortOrder)
+            ? projectType.sortOrder
+            : 0,
+      }))
+      .filter((projectType) => projectType.label);
+
+    if (!cleaned.length) {
+      setProjectTypeError("Add at least one project type before saving.");
+      return;
+    }
+
+    const seenLabels = new Set<string>();
+    for (const projectType of cleaned) {
+      const key = projectType.label.toLowerCase();
+      if (seenLabels.has(key)) {
+        setProjectTypeError(`Duplicate project type: ${projectType.label}`);
+        return;
+      }
+      seenLabels.add(key);
+    }
+
+    const now = Date.now();
+    const txs = cleaned.map((projectType, index) => {
+      const payload = {
+        label: projectType.label,
+        sortOrder: projectType.sortOrder || index + 1,
+        isActive: projectType.isActive,
+        updatedAt: now,
+      };
+      if (projectType.id) {
+        return db.tx.projectTypes[projectType.id].update(payload);
+      }
+      const projectTypeId = id();
+      return db.tx.projectTypes[projectTypeId]
+        .create({ ...payload, createdAt: now })
+        .link({ team: catalogTeam.id });
+    });
+
+    setProjectTypeSaving(true);
+    try {
+      await db.transact(txs);
+      setProjectTypeStatus("Project types updated.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setProjectTypeError(message);
+    } finally {
+      setProjectTypeSaving(false);
+    }
+  };
+
+  const handleDeleteProjectType = async (projectType: ProjectTypeDraft) => {
+    setProjectTypeError(null);
+    setProjectTypeStatus(null);
+    if (!projectType.id) {
+      setProjectTypeDrafts((prev) => prev.filter((item) => item !== projectType));
+      return;
+    }
+    if (!window.confirm(`Delete project type "${projectType.label}"?`)) return;
+    setProjectTypeSaving(true);
+    try {
+      await db.transact(db.tx.projectTypes[projectType.id].delete());
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setProjectTypeError(message);
+    } finally {
+      setProjectTypeSaving(false);
+    }
+  };
+
+  const handleSeedProjectTypes = async () => {
+    setProjectTypeError(null);
+    setProjectTypeStatus(null);
+    if (!catalogTeam) {
+      setProjectTypeError(
+        "Select a specific team in Catalog scope before seeding project types."
+      );
+      return;
+    }
+    if (!canEditCatalog) {
+      setProjectTypeError(
+        "Only organization owners and admins can seed project types."
+      );
+      return;
+    }
+    if (projectTypeRecords.length) {
+      setProjectTypeError("Project types already exist.");
+      return;
+    }
+    const now = Date.now();
+    const txs = DEFAULT_PROJECT_TYPES.map((projectType) => {
+      const projectTypeId = id();
+      return db.tx.projectTypes[projectTypeId]
+        .create({
+          label: projectType.label,
+          sortOrder: projectType.sortOrder,
+          isActive: projectType.isActive,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .link({ team: catalogTeam.id });
+    });
+    setProjectTypeSaving(true);
+    try {
+      await db.transact(txs);
+      setProjectTypeStatus("Seeded default project types.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setProjectTypeError(message);
+    } finally {
+      setProjectTypeSaving(false);
     }
   };
 
@@ -2166,7 +2395,7 @@ export default function TeamAdminPage() {
                   Catalog settings
                 </CardTitle>
                 <CardDescription>
-                  Manage vendors, unit types, and product feature dropdown options.
+                  Manage vendors, project types, unit types, and product feature dropdown options.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-8">
@@ -2367,6 +2596,153 @@ export default function TeamAdminPage() {
                         size="sm"
                         onClick={handleSeedVendors}
                         disabled={!canEditCatalog || vendorSaving}
+                      >
+                        Seed defaults
+                      </Button>
+                    ) : null}
+                  </div>
+                </section>
+
+                <Separator />
+
+                <section className="space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      Project types
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Controls the Project Type dropdown in the estimate builder.
+                    </p>
+                  </div>
+                  {projectTypeError ? (
+                    <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                      {projectTypeError}
+                    </div>
+                  ) : null}
+                  {projectTypeStatus ? (
+                    <div className="rounded-lg border border-border/60 bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                      {projectTypeStatus}
+                    </div>
+                  ) : null}
+                  <div className="rounded-lg border border-border/70 bg-background/70 overflow-x-auto">
+                    <div className="min-w-[620px]">
+                      <div className="grid grid-cols-[auto_2fr_0.6fr_auto] gap-2 border-b border-border/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
+                        <span>Active</span>
+                        <span>Label</span>
+                        <span>Order</span>
+                        <span></span>
+                      </div>
+                      <div className="divide-y divide-border/60">
+                        {projectTypeDrafts.map((projectType, index) => (
+                          <div
+                            key={projectType.id ?? `project-type-${index}`}
+                            className="relative grid grid-cols-[auto_2fr_0.6fr_auto] items-center gap-2 px-3 py-2 text-sm"
+                            draggable={canEditCatalog}
+                            onDragStart={() => {
+                              setDragProjectTypeIndex(index);
+                              setProjectTypeDropIndex(index);
+                            }}
+                            onDragOver={(event) => {
+                              if (dragProjectTypeIndex === null) return;
+                              event.preventDefault();
+                              setProjectTypeDropIndex(
+                                getInsertionIndexFromDrag(event, index)
+                              );
+                            }}
+                            onDrop={(event) => {
+                              event.preventDefault();
+                              handleDropProjectType(
+                                projectTypeDropIndex ??
+                                  getInsertionIndexFromDrag(event, index)
+                              );
+                            }}
+                            onDragEnd={() => {
+                              setDragProjectTypeIndex(null);
+                              setProjectTypeDropIndex(null);
+                            }}
+                          >
+                            {dragProjectTypeIndex !== null &&
+                            projectTypeDropIndex === index ? (
+                              <div className="pointer-events-none absolute left-2 right-2 top-0 h-0.5 rounded-full bg-accent" />
+                            ) : null}
+                            {dragProjectTypeIndex !== null &&
+                            index === projectTypeDrafts.length - 1 &&
+                            projectTypeDropIndex === projectTypeDrafts.length ? (
+                              <div className="pointer-events-none absolute bottom-0 left-2 right-2 h-0.5 rounded-full bg-accent" />
+                            ) : null}
+                            <Checkbox
+                              checked={projectType.isActive}
+                              onCheckedChange={(checked) =>
+                                handleProjectTypeChange(index, {
+                                  isActive: checked === true,
+                                })
+                              }
+                              disabled={!canEditCatalog}
+                            />
+                            <Input
+                              uiSize="xs"
+                              value={projectType.label}
+                              onChange={(event) =>
+                                handleProjectTypeChange(index, {
+                                  label: event.target.value,
+                                })
+                              }
+                              placeholder="Project type label"
+                              disabled={!canEditCatalog}
+                            />
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <GripVertical className="h-4 w-4" />
+                              <span>{index + 1}</span>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => handleDeleteProjectType(projectType)}
+                              disabled={!canEditCatalog || projectTypeSaving}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                        {!projectTypeDrafts.length ? (
+                          <div className="px-3 py-3 text-sm text-muted-foreground">
+                            No project types yet.
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleAddProjectType}
+                      disabled={!canEditCatalog}
+                    >
+                      <Plus className="h-4 w-4" />
+                      Add project type
+                    </Button>
+                    <Button
+                      variant="accent"
+                      size="sm"
+                      onClick={handleSaveProjectTypes}
+                      disabled={!canEditCatalog || projectTypeSaving}
+                    >
+                      {projectTypeSaving ? (
+                        "Saving..."
+                      ) : (
+                        <>
+                          <Save className="h-4 w-4" />
+                          Save project types
+                        </>
+                      )}
+                    </Button>
+                    {!projectTypeRecords.length ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={handleSeedProjectTypes}
+                        disabled={!canEditCatalog || projectTypeSaving}
                       >
                         Seed defaults
                       </Button>

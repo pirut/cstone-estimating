@@ -588,6 +588,7 @@ export default function HomePage() {
           projects: { owner: {}, estimates: { owner: {}, project: {} } },
           vendors: {},
           unitTypes: {},
+          projectTypes: {},
           productFeatureOptions: {},
         },
       }
@@ -599,6 +600,7 @@ export default function HomePage() {
           projects: { owner: {}, estimates: { owner: {}, project: {} } },
           vendors: {},
           unitTypes: {},
+          projectTypes: {},
           productFeatureOptions: {},
         },
       };
@@ -899,6 +901,54 @@ export default function HomePage() {
       price: typeof unit.price === "number" ? unit.price : 0,
     }));
   }, [catalogTeam?.unitTypes]);
+  const teamProjectTypeOptions = useMemo(() => {
+    const list = (catalogTeam?.projectTypes ?? [])
+      .filter((projectType) => projectType.isActive !== false)
+      .slice()
+      .sort((a, b) => {
+        const orderA =
+          typeof a.sortOrder === "number" && Number.isFinite(a.sortOrder)
+            ? a.sortOrder
+            : 0;
+        const orderB =
+          typeof b.sortOrder === "number" && Number.isFinite(b.sortOrder)
+            ? b.sortOrder
+            : 0;
+        if (orderA !== orderB) return orderA - orderB;
+        return String(a.label ?? "").localeCompare(String(b.label ?? ""));
+      });
+
+    const seen = new Set<string>();
+    const options: string[] = [];
+    list.forEach((projectType) => {
+      const label = String(projectType.label ?? "").trim();
+      if (!label) return;
+      const key = label.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      options.push(label);
+    });
+    return options;
+  }, [catalogTeam?.projectTypes]);
+  const mergedProjectTypeOptions = useMemo(() => {
+    const templateProjectTypes = Array.isArray(
+      templateConfig?.masterTemplate?.selection?.projectTypes
+    )
+      ? templateConfig.masterTemplate.selection.projectTypes
+      : [];
+    const source = [...teamProjectTypeOptions, ...templateProjectTypes];
+    const seen = new Set<string>();
+    const merged: string[] = [];
+    source.forEach((entry) => {
+      const option = String(entry ?? "").trim();
+      if (!option) return;
+      const key = option.toLowerCase();
+      if (seen.has(key)) return;
+      seen.add(key);
+      merged.push(option);
+    });
+    return merged;
+  }, [teamProjectTypeOptions, templateConfig?.masterTemplate?.selection?.projectTypes]);
 
   const manualEstimateProgress = useMemo(
     () => getManualEstimateProgress(estimatePayload, estimateValues),
@@ -3414,9 +3464,7 @@ export default function HomePage() {
               productFeatureOptions={productFeatureOptions}
               catalogTeamId={catalogTeam?.id ?? null}
               marginThresholds={activeTeam?.marginThresholds ?? null}
-              projectTypeOptions={
-                templateConfig?.masterTemplate?.selection?.projectTypes
-              }
+              projectTypeOptions={mergedProjectTypeOptions}
               onActivate={() => {
                 setError(null);
               }}

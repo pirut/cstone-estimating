@@ -13,6 +13,12 @@ export type UnitTypeDefault = {
   isActive: boolean;
 };
 
+export type ProjectTypeDefault = {
+  label: string;
+  sortOrder: number;
+  isActive: boolean;
+};
+
 export const DEFAULT_VENDORS: VendorDefault[] = [
   { name: "ES Windows & Doors", sortOrder: 1, isActive: true },
   {
@@ -82,4 +88,11 @@ export const DEFAULT_UNIT_TYPES: UnitTypeDefault[] = [
     sortOrder: 10,
     isActive: true,
   },
+];
+
+export const DEFAULT_PROJECT_TYPES: ProjectTypeDefault[] = [
+  { label: "New Construction", sortOrder: 1, isActive: true },
+  { label: "Replacement", sortOrder: 2, isActive: true },
+  { label: "Remodel", sortOrder: 3, isActive: true },
+  { label: "Change Order", sortOrder: 4, isActive: true },
 ];

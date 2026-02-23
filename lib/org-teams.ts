@@ -9,6 +9,7 @@ type TeamLike = {
 type CatalogTeamLike = TeamLike & {
   vendors?: unknown[] | null;
   unitTypes?: unknown[] | null;
+  projectTypes?: unknown[] | null;
   productFeatureOptions?: unknown[] | null;
 };
 
@@ -59,10 +60,13 @@ export function getCatalogItemCount<T extends CatalogTeamLike>(team?: T | null) 
   if (!team) return 0;
   const vendors = Array.isArray(team.vendors) ? team.vendors.length : 0;
   const unitTypes = Array.isArray(team.unitTypes) ? team.unitTypes.length : 0;
+  const projectTypes = Array.isArray(team.projectTypes)
+    ? team.projectTypes.length
+    : 0;
   const options = Array.isArray(team.productFeatureOptions)
     ? team.productFeatureOptions.length
     : 0;
-  return vendors + unitTypes + options;
+  return vendors + unitTypes + projectTypes + options;
 }
 
 export function hasCatalogData<T extends CatalogTeamLike>(team?: T | null) {

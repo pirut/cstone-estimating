@@ -113,6 +113,19 @@ export default defineSchema({
     .index("by_teamId", ["teamId"])
     .index("by_teamId_and_sortOrder", ["teamId", "sortOrder"]),
 
+  projectTypes: defineTable({
+    id: v.string(),
+    label: v.string(),
+    sortOrder: v.optional(v.number()),
+    isActive: v.optional(v.boolean()),
+    createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+    teamId: v.string(),
+  })
+    .index("by_custom_id", ["id"])
+    .index("by_teamId", ["teamId"])
+    .index("by_teamId_and_sortOrder", ["teamId", "sortOrder"]),
+
   productFeatureOptions: defineTable({
     id: v.string(),
     category: v.string(),
