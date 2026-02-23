@@ -80,9 +80,8 @@ import {
   PencilLine,
   Plus,
   Rocket,
-  RotateCcw,
+  Save,
   Search,
-  Settings2,
   Tag,
   Workflow,
   X,
@@ -3726,6 +3725,15 @@ export default function HomePage() {
                       </CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
+                      <Button
+                        variant="secondary"
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={resetEstimateWorkspace}
+                      >
+                        <Plus className="h-4 w-4" />
+                        <span className="sr-only">New estimate</span>
+                      </Button>
                       <Badge variant="outline" className="bg-background/80">
                         {filteredTeamEstimates.length} shown
                       </Badge>
@@ -4152,15 +4160,6 @@ export default function HomePage() {
               >
                 {editingEstimateId ? "Update project estimate" : "Save to project"}
               </Button>
-              {editingEstimateId ? (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={resetEstimateWorkspace}
-                >
-                  New estimate
-                </Button>
-              ) : null}
               {!clerkEnabled ? (
                 <span className="text-xs text-muted-foreground">
                   Configure Clerk + Convex to enable project saving.
@@ -4553,7 +4552,7 @@ export default function HomePage() {
                   onClick={() => void handleSaveEstimateToDb()}
                   disabled={!isSignedIn || !teamReady || !hasSelectedProject}
                 >
-                  <Workflow className="h-4 w-4" />
+                  <Save className="h-4 w-4" />
                 </Button>
               </div>
 
@@ -4667,7 +4666,7 @@ export default function HomePage() {
                       className="h-11 w-11 rounded-full border border-border/60 shadow-lg"
                       disabled={!activeProject}
                     >
-                      <Settings2 className="h-4 w-4" />
+                      <FolderKanban className="h-4 w-4" />
                     </Button>
                   </PopoverTrigger>
                 </div>
@@ -4723,7 +4722,7 @@ export default function HomePage() {
                   className="h-11 w-11 rounded-full border border-border/60 shadow-lg"
                   onClick={resetEstimateWorkspace}
                 >
-                  <RotateCcw className="h-4 w-4" />
+                  <FileText className="h-4 w-4" />
                 </Button>
               </div>
 
