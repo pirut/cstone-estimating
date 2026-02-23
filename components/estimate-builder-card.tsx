@@ -1443,7 +1443,8 @@ export function EstimateBuilderCard({
                           Features
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Ordered to match your product details list.
+                          Ordered to match your product details list. Choose from
+                          suggestions or type a custom value.
                         </p>
                       </div>
 
@@ -1456,41 +1457,33 @@ export function EstimateBuilderCard({
                               : getFeatureOptionsForProduct(item, field.category);
                           const value = item[field.key];
                           const isDisabled = Boolean(legacyValues);
+                          const datalistId = `feature-${item.id}-${field.key}`;
                           return (
                             <div key={`${item.id}-${field.key}`} className="space-y-1">
                               <label className="text-xs text-muted-foreground">
                                 {field.label}
                               </label>
-                              <Select
-                                value={value || "__none__"}
-                                onValueChange={(nextValue) =>
+                              <Input
+                                className={inputSmClassName}
+                                list={datalistId}
+                                value={value}
+                                onChange={(event) =>
                                   handleProductChange(index, {
-                                    [field.key]:
-                                      nextValue === "__none__" ? "" : nextValue,
+                                    [field.key]: event.target.value,
                                   } as Partial<ProductItem>)
                                 }
+                                placeholder={
+                                  options.length
+                                    ? `Select or type ${field.label.toLowerCase()}`
+                                    : `Type ${field.label.toLowerCase()}`
+                                }
                                 disabled={isDisabled}
-                              >
-                                <SelectTrigger className={inputSmClassName}>
-                                  <SelectValue
-                                    placeholder={
-                                      options.length
-                                        ? `Select ${field.label.toLowerCase()}`
-                                        : "No options configured"
-                                    }
-                                  />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="__none__">
-                                    Select {field.label.toLowerCase()}
-                                  </SelectItem>
-                                  {options.map((option) => (
-                                    <SelectItem key={option.id} value={option.label}>
-                                      {option.label}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                              />
+                              <datalist id={datalistId}>
+                                {options.map((option) => (
+                                  <option key={option.id} value={option.label} />
+                                ))}
+                              </datalist>
                             </div>
                           );
                         })}
