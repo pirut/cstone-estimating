@@ -21,6 +21,7 @@ type TeamGraphDoc = {
   projects: Array<ProjectGraphDoc>;
   vendors: Array<VendorGraphDoc>;
   unitTypes: Array<UnitTypeGraphDoc>;
+  projectTypes: Array<ProjectTypeGraphDoc>;
   productFeatureOptions: Array<ProductFeatureOptionGraphDoc>;
 };
 
@@ -99,6 +100,15 @@ type UnitTypeGraphDoc = {
   updatedAt?: number;
 };
 
+type ProjectTypeGraphDoc = {
+  id: string;
+  label: string;
+  sortOrder?: number;
+  isActive?: boolean;
+  createdAt: number;
+  updatedAt?: number;
+};
+
 type ProductFeatureOptionGraphDoc = {
   id: string;
   category: string;
@@ -119,6 +129,7 @@ type TxOperation = {
     | "projects"
     | "vendors"
     | "unitTypes"
+    | "projectTypes"
     | "productFeatureOptions";
   id: string;
   operation: "create" | "update" | "delete";
@@ -138,6 +149,7 @@ const txOperationValidator = v.object({
     v.literal("projects"),
     v.literal("vendors"),
     v.literal("unitTypes"),
+    v.literal("projectTypes"),
     v.literal("productFeatureOptions")
   ),
   id: v.string(),
@@ -154,6 +166,7 @@ const importTableValidator = v.union(
   v.literal("projects"),
   v.literal("vendors"),
   v.literal("unitTypes"),
+  v.literal("projectTypes"),
   v.literal("productFeatureOptions")
 );
 
@@ -208,6 +221,11 @@ async function getByCustomId(ctx: Ctx, table: CompatTable, id: string) {
       return await ctx.db.query("vendors").withIndex("by_custom_id", (q) => q.eq("id", id)).unique();
     case "unitTypes":
       return await ctx.db.query("unitTypes").withIndex("by_custom_id", (q) => q.eq("id", id)).unique();
+    case "projectTypes":
+      return await ctx.db
+        .query("projectTypes")
+        .withIndex("by_custom_id", (q) => q.eq("id", id))
+        .unique();
     case "productFeatureOptions":
       return await ctx.db
         .query("productFeatureOptions")
@@ -253,6 +271,7 @@ function applyLinkPayload(table: CompatTable, base: Record<string, any>, linksVa
   if (
     table === "vendors" ||
     table === "unitTypes" ||
+    table === "projectTypes" ||
     table === "productFeatureOptions"
   ) {
     if (typeof links.team === "string") {
@@ -300,6 +319,14 @@ async function deleteTeamCascade(ctx: MutationCtx, teamDoc: Doc<"teams">) {
     .collect();
   for (const unitType of unitTypes) {
     await ctx.db.delete(unitType._id);
+  }
+
+  const projectTypes = await ctx.db
+    .query("projectTypes")
+    .withIndex("by_teamId", (q) => q.eq("teamId", teamDoc.id))
+    .collect();
+  for (const projectType of projectTypes) {
+    await ctx.db.delete(projectType._id);
   }
 
   const productFeatureOptions = await ctx.db
@@ -386,6 +413,7 @@ export const teamGraphByDomain = query({
     const projects: Array<Doc<"projects">> = [];
     const vendors: Array<Doc<"vendors">> = [];
     const unitTypes: Array<Doc<"unitTypes">> = [];
+    const projectTypes: Array<Doc<"projectTypes">> = [];
     const productFeatureOptions: Array<Doc<"productFeatureOptions">> = [];
 
     for (const team of teams) {
@@ -438,6 +466,12 @@ export const teamGraphByDomain = query({
         .withIndex("by_teamId", (q) => q.eq("teamId", team.id))
         .collect();
       teamUnitTypes.forEach((unitType) => unitTypes.push(unitType));
+
+      const teamProjectTypes = await ctx.db
+        .query("projectTypes")
+        .withIndex("by_teamId", (q) => q.eq("teamId", team.id))
+        .collect();
+      teamProjectTypes.forEach((projectType) => projectTypes.push(projectType));
 
       const teamProductFeatureOptions = await ctx.db
         .query("productFeatureOptions")
@@ -519,6 +553,10 @@ export const teamGraphByDomain = query({
         .filter((unitType) => unitType.teamId === team.id)
         .map((unitType) => toPublicDoc(unitType) as UnitTypeGraphDoc);
 
+      const teamProjectTypes = projectTypes
+        .filter((projectType) => projectType.teamId === team.id)
+        .map((projectType) => toPublicDoc(projectType) as ProjectTypeGraphDoc);
+
       const teamProductFeatureOptions = productFeatureOptions
         .filter((option) => option.teamId === team.id)
         .map(
@@ -530,13 +568,14 @@ export const teamGraphByDomain = query({
       return {
         ...(publicTeam as Omit<
           TeamGraphDoc,
-          "memberships" | "estimates" | "projects" | "vendors" | "unitTypes" | "productFeatureOptions"
+          "memberships" | "estimates" | "projects" | "vendors" | "unitTypes" | "projectTypes" | "productFeatureOptions"
         >),
         memberships: teamMemberships,
         estimates: teamEstimates,
         projects: teamProjects,
         vendors: teamVendors,
         unitTypes: teamUnitTypes,
+        projectTypes: teamProjectTypes,
         productFeatureOptions: teamProductFeatureOptions,
       };
     });
@@ -622,6 +661,9 @@ export const transact = mutation({
             break;
           case "unitTypes":
             await ctx.db.insert("unitTypes", createdPayload);
+            break;
+          case "projectTypes":
+            await ctx.db.insert("projectTypes", createdPayload);
             break;
           case "productFeatureOptions":
             await ctx.db.insert("productFeatureOptions", createdPayload);
@@ -728,6 +770,13 @@ export const importRows = mutation({
           }
           break;
         }
+        case "projectTypes": {
+          const docs = await ctx.db.query("projectTypes").collect();
+          for (const doc of docs) {
+            await ctx.db.delete(doc._id);
+          }
+          break;
+        }
         case "productFeatureOptions": {
           const docs = await ctx.db.query("productFeatureOptions").collect();
           for (const doc of docs) {
@@ -769,6 +818,9 @@ export const importRows = mutation({
             break;
           case "unitTypes":
             await ctx.db.insert("unitTypes", row as any);
+            break;
+          case "projectTypes":
+            await ctx.db.insert("projectTypes", row as any);
             break;
           case "productFeatureOptions":
             await ctx.db.insert("productFeatureOptions", row as any);
