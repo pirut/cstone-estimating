@@ -716,6 +716,8 @@ export default function HomePage() {
   const [teamSetupPending, setTeamSetupPending] = useState(false);
   const [activeTeamId, setActiveTeamId] = useState<string | null>(null);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
+  const [projectLibraryQuery, setProjectLibraryQuery] = useState("");
+  const [projectCreatePopoverOpen, setProjectCreatePopoverOpen] = useState(false);
   const [newProjectName, setNewProjectName] = useState("");
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [teamSetupAction, setTeamSetupAction] = useState<
@@ -931,6 +933,48 @@ export default function HomePage() {
     const list = activeProject?.estimates ?? [];
     return [...list].sort((a, b) => (b.updatedAt ?? 0) - (a.updatedAt ?? 0));
   }, [activeProject, activeProjectId, unassignedTeamEstimates]);
+  const projectLibraryItems = useMemo(() => {
+    const list = teamProjects.map((project) => {
+      const projectId = String(project?.id ?? "").trim();
+      return {
+        id: projectId,
+        name: String(project?.name ?? "").trim() || "Untitled Project",
+        estimateCount: Array.isArray(project?.estimates) ? project.estimates.length : 0,
+        updatedAt:
+          typeof project?.updatedAt === "number"
+            ? project.updatedAt
+            : typeof project?.createdAt === "number"
+              ? project.createdAt
+              : null,
+      };
+    });
+    if (unassignedTeamEstimates.length) {
+      const latestUnassignedUpdate = unassignedTeamEstimates.reduce<number | null>(
+        (latest, estimate) => {
+          const updatedAt =
+            typeof estimate?.updatedAt === "number" ? estimate.updatedAt : null;
+          if (!updatedAt) return latest;
+          if (!latest) return updatedAt;
+          return updatedAt > latest ? updatedAt : latest;
+        },
+        null
+      );
+      list.push({
+        id: UNASSIGNED_PROJECT_KEY,
+        name: "Unassigned estimates",
+        estimateCount: unassignedTeamEstimates.length,
+        updatedAt: latestUnassignedUpdate,
+      });
+    }
+    return list;
+  }, [teamProjects, unassignedTeamEstimates]);
+  const filteredProjectLibraryItems = useMemo(() => {
+    const query = projectLibraryQuery.trim().toLowerCase();
+    if (!query) return projectLibraryItems;
+    return projectLibraryItems.filter((project) =>
+      project.name.toLowerCase().includes(query)
+    );
+  }, [projectLibraryItems, projectLibraryQuery]);
   const filteredTeamEstimates = useMemo(() => {
     const query = teamEstimateQuery.trim().toLowerCase();
     const recentCutoff = Date.now() - 1000 * 60 * 60 * 24 * 14;
@@ -2749,6 +2793,7 @@ export default function HomePage() {
       );
       setActiveProjectId(projectId);
       setNewProjectName("");
+      setProjectCreatePopoverOpen(false);
       setProjectActionNotice(`Created project "${name}".`);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
@@ -3478,63 +3523,158 @@ export default function HomePage() {
                   </div>
                   <div className="space-y-2">
                     <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                      Active project
+                      Project library
                     </p>
-                    <Select
-                      value={activeProjectId ?? undefined}
-                      onValueChange={(value) => setActiveProjectId(value)}
-                    >
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select project" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {teamProjects.map((project) => (
-                          <SelectItem key={project.id} value={project.id}>
-                            {project.name}
-                          </SelectItem>
-                        ))}
-                        {unassignedTeamEstimates.length ? (
-                          <SelectItem value={UNASSIGNED_PROJECT_KEY}>
-                            Unassigned estimates
-                          </SelectItem>
-                        ) : null}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                      Create project
-                    </p>
-                    <div className="flex gap-2">
-                      <Input
-                        value={newProjectName}
-                        onChange={(event) => setNewProjectName(event.target.value)}
-                        onKeyDown={(event) => {
-                          if (event.key !== "Enter") return;
-                          event.preventDefault();
-                          void handleCreateProject();
+                    <div className="flex items-center gap-2">
+                      <div className="relative flex-1">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                          value={projectLibraryQuery}
+                          onChange={(event) =>
+                            setProjectLibraryQuery(event.target.value)
+                          }
+                          className="pl-9"
+                          placeholder="Search projects..."
+                        />
+                      </div>
+                      <Popover
+                        open={projectCreatePopoverOpen}
+                        onOpenChange={(open) => {
+                          setProjectCreatePopoverOpen(open);
+                          if (open && !newProjectName.trim()) {
+                            setNewProjectName(
+                              estimateName.trim() ||
+                                activeProject?.name ||
+                                "New Project"
+                            );
+                          }
                         }}
-                        placeholder="New project name..."
-                      />
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        onClick={() => void handleCreateProject()}
-                        disabled={
-                          !teamReady ||
-                          !isSignedIn ||
-                          isCreatingProject ||
-                          !newProjectName.trim()
-                        }
                       >
-                        {isCreatingProject ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <Plus className="h-3.5 w-3.5" />
-                        )}
-                        Create
-                      </Button>
+                        <PopoverTrigger asChild>
+                          <Button
+                            variant="secondary"
+                            size="icon"
+                            className="h-10 w-10 shrink-0"
+                            disabled={!isSignedIn || !teamReady}
+                          >
+                            <Plus className="h-4 w-4" />
+                            <span className="sr-only">Create project</span>
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align="end" className="w-80 space-y-3">
+                          <div className="space-y-1">
+                            <p className="text-sm font-semibold text-foreground">
+                              New project
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Enter the required project details to add it to your
+                              active team.
+                            </p>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                              Project name
+                            </label>
+                            <Input
+                              value={newProjectName}
+                              onChange={(event) =>
+                                setNewProjectName(event.target.value)
+                              }
+                              onKeyDown={(event) => {
+                                if (event.key !== "Enter") return;
+                                event.preventDefault();
+                                void handleCreateProject();
+                              }}
+                              placeholder="Project name..."
+                            />
+                          </div>
+                          <div className="rounded-lg border border-border/60 bg-background/70 px-3 py-2 text-xs text-muted-foreground">
+                            Team: {activeTeam?.name ?? "Select a team first"}
+                          </div>
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setProjectCreatePopoverOpen(false)}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              size="sm"
+                              onClick={() => void handleCreateProject()}
+                              disabled={
+                                !teamReady ||
+                                !isSignedIn ||
+                                isCreatingProject ||
+                                !newProjectName.trim()
+                              }
+                            >
+                              {isCreatingProject ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <Plus className="h-3.5 w-3.5" />
+                              )}
+                              Create
+                            </Button>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                     </div>
+                    {filteredProjectLibraryItems.length ? (
+                      <ScrollArea className="h-60 rounded-xl border border-border/60 bg-background/70">
+                        <div className="space-y-2 p-2">
+                          {filteredProjectLibraryItems.map((project) => {
+                            const isActive = activeProjectId === project.id;
+                            return (
+                              <button
+                                key={project.id}
+                                type="button"
+                                onClick={() => setActiveProjectId(project.id)}
+                                className={cn(
+                                  "w-full rounded-lg border px-3 py-2 text-left transition",
+                                  isActive
+                                    ? "border-accent/60 bg-accent/10"
+                                    : "border-border/60 bg-card/80 hover:border-accent/40 hover:bg-accent/5"
+                                )}
+                              >
+                                <div className="flex items-center justify-between gap-2">
+                                  <p className="text-sm font-medium text-foreground">
+                                    {project.name}
+                                  </p>
+                                  {isActive ? (
+                                    <Badge
+                                      variant="outline"
+                                      className="border-accent/40 bg-accent/10 text-foreground"
+                                    >
+                                      Active
+                                    </Badge>
+                                  ) : null}
+                                </div>
+                                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                                  <span className="inline-flex items-center gap-1">
+                                    <FolderKanban className="h-3 w-3" />
+                                    {project.estimateCount} estimate
+                                    {project.estimateCount === 1 ? "" : "s"}
+                                  </span>
+                                  <span>
+                                    Updated{" "}
+                                    {project.updatedAt
+                                      ? formatRelativeTime(project.updatedAt)
+                                      : "never"}
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </ScrollArea>
+                    ) : (
+                      <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-4 text-sm text-muted-foreground">
+                        {projectLibraryItems.length
+                          ? "No projects match your search."
+                          : "No projects yet. Use + to create your first project."}
+                      </div>
+                    )}
                   </div>
                   <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-3">
                     <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
