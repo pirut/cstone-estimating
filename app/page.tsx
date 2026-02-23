@@ -64,6 +64,7 @@ import {
   hasCatalogData,
   pickOrganizationTeam,
 } from "@/lib/org-teams";
+import { DEFAULT_MARGIN_THRESHOLDS } from "@/lib/estimate-calculator";
 import {
   ArrowDownToLine,
   ArrowRightLeft,
@@ -2263,6 +2264,7 @@ export default function HomePage() {
           createdAt: now,
           isPrimary: true,
           ownerId: convexUser.id,
+          marginThresholds: DEFAULT_MARGIN_THRESHOLDS,
         }),
         db.tx.memberships[membershipId]
           .create({ role, createdAt: now })
@@ -3346,6 +3348,7 @@ export default function HomePage() {
               panelTypes={panelTypeOptions}
               productFeatureOptions={productFeatureOptions}
               catalogTeamId={catalogTeam?.id ?? null}
+              marginThresholds={activeTeam?.marginThresholds ?? null}
               projectTypeOptions={
                 templateConfig?.masterTemplate?.selection?.projectTypes
               }

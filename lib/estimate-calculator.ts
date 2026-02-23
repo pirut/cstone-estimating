@@ -120,6 +120,18 @@ export type InstallCalculator = {
   override_install_total: string;
 };
 
+export type MarginThresholds = {
+  product_margin_min: number;
+  install_margin_min: number;
+  project_margin_min: number;
+};
+
+export const DEFAULT_MARGIN_THRESHOLDS: MarginThresholds = {
+  product_margin_min: 0,
+  install_margin_min: 0,
+  project_margin_min: 0,
+};
+
 export type EstimateDraft = {
   info: EstimateInfo;
   products: ProductItem[];
@@ -190,6 +202,7 @@ export type EstimateComputed = {
     install_margin: number;
     project_margin: number;
   };
+  marginThresholds: MarginThresholds;
   marginChecks: {
     product_margin_ok: boolean;
     install_margin_ok: boolean;
@@ -230,9 +243,11 @@ export function resolveProductBasePrice(item: ProductItem): number {
 
 export function computeEstimate(
   draft: EstimateDraft,
-  panelTypes: PanelType[] = []
+  panelTypes: PanelType[] = [],
+  marginThresholdsInput: Partial<MarginThresholds> | null = null
 ): EstimateComputed {
   const resolvedPanelTypes = normalizePanelTypes(panelTypes, draft.bucking ?? []);
+  const marginThresholds = normalizeMarginThresholds(marginThresholdsInput);
   const productMarkupDefault = toNumber(draft.calculator.product_markup_default);
   const installMarkup = toNumber(draft.calculator.install_markup);
   const buckingRate = toNumber(draft.calculator.bucking_rate);
@@ -398,10 +413,11 @@ export function computeEstimate(
       install_margin: installMargin,
       project_margin: projectMargin,
     },
+    marginThresholds,
     marginChecks: {
-      product_margin_ok: productMargin > 0,
-      install_margin_ok: installMargin > 0,
-      project_margin_ok: projectMargin > 0,
+      product_margin_ok: productMargin > marginThresholds.product_margin_min,
+      install_margin_ok: installMargin > marginThresholds.install_margin_min,
+      project_margin_ok: projectMargin > marginThresholds.project_margin_min,
     },
     panelCounts,
     panelTotals,
@@ -474,6 +490,24 @@ export function toNumber(value: string | number | undefined | null) {
   if (!cleaned) return 0;
   const parsed = Number(cleaned);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function normalizeMarginThresholds(
+  value: Partial<MarginThresholds> | null | undefined
+): MarginThresholds {
+  return {
+    product_margin_min: normalizeMarginThreshold(value?.product_margin_min),
+    install_margin_min: normalizeMarginThreshold(value?.install_margin_min),
+    project_margin_min: normalizeMarginThreshold(value?.project_margin_min),
+  };
+}
+
+function normalizeMarginThreshold(value: string | number | undefined | null) {
+  const numeric = toNumber(value);
+  if (!Number.isFinite(numeric)) return 0;
+  if (numeric < 0) return 0;
+  if (numeric > 1) return 1;
+  return numeric;
 }
 
 function calculateMargin(revenue: number, cost: number) {

@@ -38,6 +38,7 @@ import {
   type EuroPricing,
   type EuroPricingSectionLine,
   type EstimateDraft,
+  type MarginThresholds,
   type PanelType,
   type ProductItem,
 } from "@/lib/estimate-calculator";
@@ -95,6 +96,7 @@ type EstimateBuilderCardProps = {
   productFeatureOptions?: ProductFeatureOption[];
   catalogTeamId?: string | null;
   projectTypeOptions?: string[];
+  marginThresholds?: Partial<MarginThresholds> | null;
 };
 
 type AddressSuggestion = {
@@ -279,6 +281,7 @@ export function EstimateBuilderCard({
   productFeatureOptions,
   catalogTeamId,
   projectTypeOptions,
+  marginThresholds,
 }: EstimateBuilderCardProps) {
   const [draft, setDraft] = useState<EstimateDraft>(DEFAULT_DRAFT);
   const [legacyValues, setLegacyValues] = useState<
@@ -377,8 +380,8 @@ export function EstimateBuilderCard({
   }, [projectTypeOptions]);
 
   const computed = useMemo(
-    () => computeEstimate(draft, panelTypeOptions),
-    [draft, panelTypeOptions]
+    () => computeEstimate(draft, panelTypeOptions, marginThresholds ?? null),
+    [draft, marginThresholds, panelTypeOptions]
   );
   const projectNameValue = String(draft.info.project_name ?? "").trim();
 
@@ -401,6 +404,7 @@ export function EstimateBuilderCard({
       totals: computed.totals,
       schedule: computed.schedule,
       breakdown: computed.breakdown,
+      marginThresholds: computed.marginThresholds,
       margins: computed.margins,
       marginChecks: computed.marginChecks,
     });
@@ -2007,18 +2011,21 @@ export function EstimateBuilderCard({
                     "Product margin",
                     computed.margins.product_margin,
                     computed.marginChecks.product_margin_ok,
+                    computed.marginThresholds.product_margin_min,
                   ],
                   [
                     "Install margin",
                     computed.margins.install_margin,
                     computed.marginChecks.install_margin_ok,
+                    computed.marginThresholds.install_margin_min,
                   ],
                   [
                     "Overall project margin",
                     computed.margins.project_margin,
                     computed.marginChecks.project_margin_ok,
+                    computed.marginThresholds.project_margin_min,
                   ],
-                ].map(([label, value, ok]) => (
+                ].map(([label, value, ok, threshold]) => (
                   <div
                     key={String(label)}
                     className="rounded-lg border border-border/60 bg-card/70 px-3 py-2"
@@ -2039,6 +2046,9 @@ export function EstimateBuilderCard({
                         {ok ? "Pass" : "Review"}
                       </Badge>
                     </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      Target: {formatMargin(threshold as number)}
+                    </p>
                   </div>
                 ))}
               </div>

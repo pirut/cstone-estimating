@@ -11,6 +11,11 @@ type TeamGraphDoc = {
   isPrimary?: boolean;
   parentTeamId?: string;
   ownerId?: string;
+  marginThresholds?: {
+    product_margin_min?: number;
+    install_margin_min?: number;
+    project_margin_min?: number;
+  };
   memberships: Array<MembershipGraphDoc>;
   estimates: Array<EstimateGraphDoc>;
   projects: Array<ProjectGraphDoc>;

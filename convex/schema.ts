@@ -21,6 +21,13 @@ export default defineSchema({
     isPrimary: v.optional(v.boolean()),
     parentTeamId: v.optional(v.string()),
     ownerId: v.optional(v.string()),
+    marginThresholds: v.optional(
+      v.object({
+        product_margin_min: v.optional(v.number()),
+        install_margin_min: v.optional(v.number()),
+        project_margin_min: v.optional(v.number()),
+      })
+    ),
   })
     .index("by_custom_id", ["id"])
     .index("by_domain", ["domain"])

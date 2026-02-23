@@ -26,6 +26,10 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { DEFAULT_UNIT_TYPES, DEFAULT_VENDORS } from "@/lib/catalog-defaults";
 import {
+  DEFAULT_MARGIN_THRESHOLDS,
+  normalizeMarginThresholds,
+} from "@/lib/estimate-calculator";
+import {
   PRODUCT_FEATURE_CATEGORIES,
   PRODUCT_FEATURE_CATEGORY_LABELS,
   isProductFeatureCategory,
@@ -56,6 +60,25 @@ type VendorDraft = {
 function hasEuroLabel(name: string) {
   const normalized = String(name ?? "").trim().toLowerCase();
   return /\b(eur|euro)\b/.test(normalized) || normalized.includes("€");
+}
+
+function formatThresholdPercentInput(value: number) {
+  if (!Number.isFinite(value)) return "";
+  const percent = value * 100;
+  const rounded = Math.round(percent * 100) / 100;
+  if (Math.abs(rounded % 1) < 0.000001) {
+    return String(Math.trunc(rounded));
+  }
+  return rounded.toFixed(2);
+}
+
+function parseThresholdPercentInput(value: string) {
+  const cleaned = String(value ?? "").replace(/[^\d.-]/g, "").trim();
+  if (!cleaned) return null;
+  const parsed = Number(cleaned);
+  if (!Number.isFinite(parsed)) return null;
+  if (parsed < 0 || parsed > 100) return null;
+  return parsed / 100;
 }
 
 type UnitTypeDraft = {
@@ -360,6 +383,14 @@ export default function TeamAdminPage() {
   const [teamNameDraft, setTeamNameDraft] = useState("");
   const [teamNameError, setTeamNameError] = useState<string | null>(null);
   const [teamNameSaving, setTeamNameSaving] = useState(false);
+  const [teamMarginDraft, setTeamMarginDraft] = useState({
+    product: "",
+    install: "",
+    project: "",
+  });
+  const [teamMarginError, setTeamMarginError] = useState<string | null>(null);
+  const [teamMarginStatus, setTeamMarginStatus] = useState<string | null>(null);
+  const [teamMarginSaving, setTeamMarginSaving] = useState(false);
   const [teamDeleteError, setTeamDeleteError] = useState<string | null>(null);
   const [teamDeleteLoading, setTeamDeleteLoading] = useState(false);
   const [vendorDrafts, setVendorDrafts] = useState<VendorDraft[]>([]);
@@ -405,6 +436,17 @@ export default function TeamAdminPage() {
     setTeamNameDraft(selectedTeam?.name ?? "");
     setTeamNameError(null);
   }, [selectedTeam?.id, selectedTeam?.name]);
+
+  useEffect(() => {
+    const normalized = normalizeMarginThresholds(selectedTeam?.marginThresholds);
+    setTeamMarginDraft({
+      product: formatThresholdPercentInput(normalized.product_margin_min),
+      install: formatThresholdPercentInput(normalized.install_margin_min),
+      project: formatThresholdPercentInput(normalized.project_margin_min),
+    });
+    setTeamMarginError(null);
+    setTeamMarginStatus(null);
+  }, [selectedTeam?.id, selectedTeam?.marginThresholds]);
 
   useEffect(() => {
     const next = vendorRecords.map((vendor, index) => ({
@@ -536,6 +578,7 @@ export default function TeamAdminPage() {
           isPrimary: false,
           parentTeamId: orgTeam.id,
           ownerId: convexUser.id,
+          marginThresholds: DEFAULT_MARGIN_THRESHOLDS,
         }),
         db.tx.memberships[membershipId]
           .create({ role: "owner", createdAt: now })
@@ -571,6 +614,50 @@ export default function TeamAdminPage() {
       setTeamNameError(message);
     } finally {
       setTeamNameSaving(false);
+    }
+  };
+
+  const handleSaveTeamMargins = async () => {
+    setTeamMarginError(null);
+    setTeamMarginStatus(null);
+    if (!selectedTeam) return;
+    if (!hasTeamAdminAccess) {
+      setTeamMarginError(
+        "Only organization owners and admins can update margin thresholds."
+      );
+      return;
+    }
+
+    const productMarginMin = parseThresholdPercentInput(teamMarginDraft.product);
+    const installMarginMin = parseThresholdPercentInput(teamMarginDraft.install);
+    const projectMarginMin = parseThresholdPercentInput(teamMarginDraft.project);
+
+    if (
+      productMarginMin === null ||
+      installMarginMin === null ||
+      projectMarginMin === null
+    ) {
+      setTeamMarginError("Margin thresholds must be numbers between 0 and 100.");
+      return;
+    }
+
+    setTeamMarginSaving(true);
+    try {
+      await db.transact(
+        db.tx.teams[selectedTeam.id].update({
+          marginThresholds: normalizeMarginThresholds({
+            product_margin_min: productMarginMin,
+            install_margin_min: installMarginMin,
+            project_margin_min: projectMarginMin,
+          }),
+        })
+      );
+      setTeamMarginStatus("Margin thresholds updated.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setTeamMarginError(message);
+    } finally {
+      setTeamMarginSaving(false);
     }
   };
 
@@ -1713,6 +1800,16 @@ export default function TeamAdminPage() {
                     {teamNameError}
                   </div>
                 ) : null}
+                {teamMarginError ? (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {teamMarginError}
+                  </div>
+                ) : null}
+                {teamMarginStatus ? (
+                  <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700">
+                    {teamMarginStatus}
+                  </div>
+                ) : null}
                 {teamDeleteError ? (
                   <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                     {teamDeleteError}
@@ -1756,6 +1853,78 @@ export default function TeamAdminPage() {
                         >
                           {teamDeleteLoading ? "Deleting..." : "Delete team"}
                         </Button>
+                      </div>
+                      <div className="mt-4 space-y-3 rounded-lg border border-border/60 bg-card/60 p-3">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            Margin thresholds
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            Minimum required margins used in Calculated Totals checks.
+                          </p>
+                        </div>
+                        <div className="grid gap-3 md:grid-cols-3">
+                          <div className="space-y-1">
+                            <label className="text-xs text-muted-foreground">
+                              Product margin (%)
+                            </label>
+                            <Input
+                              inputMode="decimal"
+                              value={teamMarginDraft.product}
+                              onChange={(event) =>
+                                setTeamMarginDraft((prev) => ({
+                                  ...prev,
+                                  product: event.target.value,
+                                }))
+                              }
+                              placeholder="0"
+                              disabled={!hasTeamAdminAccess}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs text-muted-foreground">
+                              Install margin (%)
+                            </label>
+                            <Input
+                              inputMode="decimal"
+                              value={teamMarginDraft.install}
+                              onChange={(event) =>
+                                setTeamMarginDraft((prev) => ({
+                                  ...prev,
+                                  install: event.target.value,
+                                }))
+                              }
+                              placeholder="0"
+                              disabled={!hasTeamAdminAccess}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs text-muted-foreground">
+                              Overall project margin (%)
+                            </label>
+                            <Input
+                              inputMode="decimal"
+                              value={teamMarginDraft.project}
+                              onChange={(event) =>
+                                setTeamMarginDraft((prev) => ({
+                                  ...prev,
+                                  project: event.target.value,
+                                }))
+                              }
+                              placeholder="0"
+                              disabled={!hasTeamAdminAccess}
+                            />
+                          </div>
+                        </div>
+                        <div className="flex justify-end">
+                          <Button
+                            variant="outline"
+                            onClick={handleSaveTeamMargins}
+                            disabled={!hasTeamAdminAccess || teamMarginSaving}
+                          >
+                            {teamMarginSaving ? "Saving..." : "Save margins"}
+                          </Button>
+                        </div>
                       </div>
                       <p className="mt-2 text-xs text-muted-foreground">
                         Owners and admins can rename teams. Only owners can
