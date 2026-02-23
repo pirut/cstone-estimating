@@ -3426,7 +3426,7 @@ export default function HomePage() {
             </Card>
 
             <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.42fr)_minmax(0,0.58fr)] 2xl:grid-cols-[minmax(360px,0.38fr)_minmax(0,0.62fr)]">
-              <div>
+              <div className="xl:sticky xl:top-6 xl:self-start">
                 <Card className="h-fit rounded-3xl border-border/60 bg-card/80 shadow-elevated">
                 <CardHeader className="space-y-4">
                   <div className="space-y-2">
