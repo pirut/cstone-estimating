@@ -11,6 +11,16 @@ import {
 import Link from "next/link";
 import { BrandMark } from "@/components/brand-mark";
 import { EstimateBuilderCard } from "@/components/estimate-builder-card";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -138,6 +148,12 @@ type PandaDocGenerationResponse = {
     status?: string;
     reason?: string;
   };
+};
+
+type DeleteEstimateDialogState = {
+  id: string;
+  title: string;
+  projectId: string;
 };
 
 function toPandaDocVersionDocument(
@@ -732,6 +748,8 @@ export default function HomePage() {
   const [historyActionId, setHistoryActionId] = useState<string | null>(null);
   const [movingEstimateId, setMovingEstimateId] = useState<string | null>(null);
   const [deletingEstimateId, setDeletingEstimateId] = useState<string | null>(null);
+  const [deleteEstimateDialog, setDeleteEstimateDialog] =
+    useState<DeleteEstimateDialogState | null>(null);
   const [moveTargetByEstimateId, setMoveTargetByEstimateId] = useState<
     Record<string, string>
   >({});
@@ -2620,7 +2638,7 @@ export default function HomePage() {
   }, [activeEditingEstimate, floatingDockMoveTargetId, handleMoveEstimateToProject]);
 
   const handleDeleteTeamEstimate = useCallback(
-    async (estimate: any) => {
+    (estimate: any) => {
       setError(null);
       if (!convexAppUrl) {
         setError("Convex is not configured yet.");
@@ -2650,46 +2668,73 @@ export default function HomePage() {
       }
 
       const estimateTitle = String(estimate?.title ?? "").trim() || "Untitled Estimate";
-      if (!window.confirm(`Delete estimate "${estimateTitle}"?`)) return;
-
       const sourceProjectId = String(estimate?.project?.id ?? "").trim();
-      setDeletingEstimateId(estimateId);
-      try {
-        const now = Date.now();
-        await db.transact([
-          db.tx.estimates[estimateId].delete(),
-          ...(sourceProjectId
-            ? [db.tx.projects[sourceProjectId].update({ updatedAt: now })]
-            : []),
-        ]);
-
-        if (editingEstimateId === estimateId) {
-          setEditingEstimateId(null);
-        }
-        setHistoryEstimateId((current) => (current === estimateId ? null : current));
-        setMoveTargetByEstimateId((previous) => {
-          if (!(estimateId in previous)) return previous;
-          const next = { ...previous };
-          delete next[estimateId];
-          return next;
-        });
-        setProjectActionNotice(`Deleted "${estimateTitle}".`);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Unknown error.";
-        setError(message);
-      } finally {
-        setDeletingEstimateId(null);
-      }
+      setDeleteEstimateDialog({
+        id: estimateId,
+        title: estimateTitle,
+        projectId: sourceProjectId,
+      });
     },
-    [
-      activeMembership,
-      activeTeam,
-      convexAppUrl,
-      convexUser,
-      editingEstimateId,
-      hasTeamAdminAccess,
-    ]
+    [activeMembership, activeTeam, convexAppUrl, convexUser, hasTeamAdminAccess]
   );
+
+  const handleConfirmDeleteTeamEstimate = useCallback(async () => {
+    setError(null);
+    if (!deleteEstimateDialog) return;
+    if (!convexAppUrl) {
+      setError("Convex is not configured yet.");
+      return;
+    }
+    if (!convexUser) {
+      setError("Sign in to delete estimates.");
+      return;
+    }
+    if (!activeTeam || !activeMembership) {
+      setError("Select a team workspace first.");
+      return;
+    }
+    const estimateId = String(deleteEstimateDialog.id ?? "").trim();
+    if (!estimateId) {
+      setDeleteEstimateDialog(null);
+      return;
+    }
+
+    setDeletingEstimateId(estimateId);
+    try {
+      const now = Date.now();
+      await db.transact([
+        db.tx.estimates[estimateId].delete(),
+        ...(deleteEstimateDialog.projectId
+          ? [db.tx.projects[deleteEstimateDialog.projectId].update({ updatedAt: now })]
+          : []),
+      ]);
+
+      if (editingEstimateId === estimateId) {
+        setEditingEstimateId(null);
+      }
+      setHistoryEstimateId((current) => (current === estimateId ? null : current));
+      setMoveTargetByEstimateId((previous) => {
+        if (!(estimateId in previous)) return previous;
+        const next = { ...previous };
+        delete next[estimateId];
+        return next;
+      });
+      setProjectActionNotice(`Deleted "${deleteEstimateDialog.title}".`);
+      setDeleteEstimateDialog(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Unknown error.";
+      setError(message);
+    } finally {
+      setDeletingEstimateId(null);
+    }
+  }, [
+    activeMembership,
+    activeTeam,
+    convexAppUrl,
+    convexUser,
+    deleteEstimateDialog,
+    editingEstimateId,
+  ]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -4919,6 +4964,48 @@ export default function HomePage() {
             </Button>
           </div>
         </div>
+
+        <AlertDialog
+          open={Boolean(deleteEstimateDialog)}
+          onOpenChange={(open) => {
+            if (open) return;
+            if (deletingEstimateId) return;
+            setDeleteEstimateDialog(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete estimate?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will permanently delete{" "}
+                <span className="font-semibold text-foreground">
+                  {deleteEstimateDialog?.title ?? "this estimate"}
+                </span>
+                . This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={Boolean(deletingEstimateId)}>
+                Cancel
+              </AlertDialogCancel>
+              <AlertDialogAction
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                disabled={Boolean(deletingEstimateId)}
+                onClick={(event) => {
+                  event.preventDefault();
+                  void handleConfirmDeleteTeamEstimate();
+                }}
+              >
+                {deletingEstimateId ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                Delete estimate
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
 
         <Separator className="my-12" />
 
