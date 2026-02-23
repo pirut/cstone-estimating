@@ -1016,7 +1016,8 @@ export default function HomePage() {
         Boolean(restoredName) ||
         Object.keys(restoredValues).length > 0 ||
         Boolean(restoredPayload) ||
-        restoredTags.length > 0;
+        restoredTags.length > 0 ||
+        Boolean(restoredEditingEstimateId);
       if (!hasRestoredData) return;
 
       setEstimateName(restoredName);
@@ -1046,10 +1047,30 @@ export default function HomePage() {
   }, [allTeamEstimates, historyEstimateId]);
 
   useEffect(() => {
-    if (!estimatePayload) {
+    if (!estimatePayload && !loadedEstimatePayload) {
       setEditingEstimateId(null);
     }
-  }, [estimatePayload]);
+  }, [estimatePayload, loadedEstimatePayload]);
+
+  useEffect(() => {
+    if (!editingEstimateId) return;
+    if (estimatePayload || loadedEstimatePayload) return;
+    const estimate = findTeamEstimateById(editingEstimateId);
+    if (!estimate) return;
+
+    setEstimateName(String(estimate?.title ?? ""));
+    setLoadedEstimatePayload(estimate?.payload ?? null);
+    setEstimateTags(normalizeEstimateTags(estimate?.tags));
+    setEstimateTagInput("");
+    const linkedProjectId = String(estimate?.project?.id ?? "").trim();
+    setActiveProjectId(linkedProjectId || UNASSIGNED_PROJECT_KEY);
+    setHistoryEstimateId(estimate?.id ?? null);
+  }, [
+    editingEstimateId,
+    estimatePayload,
+    loadedEstimatePayload,
+    findTeamEstimateById,
+  ]);
 
   useEffect(() => {
     if (!activeTrackedDocumentId) {
