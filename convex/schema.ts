@@ -82,6 +82,7 @@ export default defineSchema({
     sortOrder: v.optional(v.number()),
     isActive: v.optional(v.boolean()),
     allowsSplitFinish: v.optional(v.boolean()),
+    usesEuroPricing: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.optional(v.number()),
     teamId: v.string(),

@@ -50,6 +50,7 @@ type VendorDraft = {
   sortOrder: number;
   isActive: boolean;
   allowsSplitFinish: boolean;
+  usesEuroPricing: boolean;
 };
 
 type UnitTypeDraft = {
@@ -408,6 +409,7 @@ export default function TeamAdminPage() {
         typeof vendor.sortOrder === "number" ? vendor.sortOrder : index + 1,
       isActive: vendor.isActive !== false,
       allowsSplitFinish: vendor.allowsSplitFinish === true,
+      usesEuroPricing: vendor.usesEuroPricing === true,
     }));
     setVendorDrafts(next);
   }, [vendorRecords]);
@@ -763,6 +765,7 @@ export default function TeamAdminPage() {
         sortOrder: nextOrder,
         isActive: true,
         allowsSplitFinish: false,
+        usesEuroPricing: false,
       },
     ]);
   };
@@ -812,6 +815,7 @@ export default function TeamAdminPage() {
         sortOrder: vendor.sortOrder || index + 1,
         isActive: vendor.isActive,
         allowsSplitFinish: vendor.allowsSplitFinish,
+        usesEuroPricing: vendor.usesEuroPricing,
         updatedAt: now,
       };
       if (vendor.id) {
@@ -878,6 +882,7 @@ export default function TeamAdminPage() {
           sortOrder: vendor.sortOrder,
           isActive: vendor.isActive,
           allowsSplitFinish: false,
+          usesEuroPricing: false,
           createdAt: now,
           updatedAt: now,
         })
@@ -2032,7 +2037,7 @@ export default function TeamAdminPage() {
                     <p className="text-sm font-semibold text-foreground">Vendors</p>
                     <p className="text-xs text-muted-foreground">
                       Controls product dropdowns and whether split finish is
-                      available per product.
+                      available per product, plus optional EUR pricing inputs.
                     </p>
                   </div>
                   {vendorError ? (
@@ -2046,11 +2051,12 @@ export default function TeamAdminPage() {
                     </div>
                   ) : null}
                   <div className="rounded-lg border border-border/70 bg-background/70 overflow-x-auto">
-                    <div className="min-w-[760px]">
-                      <div className="grid grid-cols-[auto_2fr_1.1fr_0.8fr_auto] gap-2 border-b border-border/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
+                    <div className="min-w-[940px]">
+                      <div className="grid grid-cols-[auto_2fr_1.1fr_1fr_0.8fr_auto] gap-2 border-b border-border/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
                         <span>Active</span>
                         <span>Name</span>
                         <span>Split finish</span>
+                        <span>EUR pricing</span>
                         <span>Order</span>
                         <span></span>
                       </div>
@@ -2058,7 +2064,7 @@ export default function TeamAdminPage() {
                         {vendorDrafts.map((vendor, index) => (
                           <div
                             key={vendor.id ?? `vendor-${index}`}
-                            className="relative grid grid-cols-[auto_2fr_1.1fr_0.8fr_auto] items-center gap-2 px-3 py-2 text-sm"
+                            className="relative grid grid-cols-[auto_2fr_1.1fr_1fr_0.8fr_auto] items-center gap-2 px-3 py-2 text-sm"
                             draggable={canEditCatalog}
                             onDragStart={() => {
                               setDragVendorIndex(index);
@@ -2120,6 +2126,18 @@ export default function TeamAdminPage() {
                                 disabled={!canEditCatalog}
                               />
                               <span>Allow split finish</span>
+                            </label>
+                            <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <Checkbox
+                                checked={vendor.usesEuroPricing}
+                                onCheckedChange={(checked) =>
+                                  handleVendorChange(index, {
+                                    usesEuroPricing: checked === true,
+                                  })
+                                }
+                                disabled={!canEditCatalog}
+                              />
+                              <span>Uses EUR pricing</span>
                             </label>
                             <div className="flex items-center gap-2 text-xs text-muted-foreground">
                               <GripVertical className="h-4 w-4" />

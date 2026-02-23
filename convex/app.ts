@@ -78,6 +78,7 @@ type VendorGraphDoc = {
   sortOrder?: number;
   isActive?: boolean;
   allowsSplitFinish?: boolean;
+  usesEuroPricing?: boolean;
   createdAt: number;
   updatedAt?: number;
 };

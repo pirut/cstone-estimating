@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import estimateFields from "@/config/estimate-fields.json";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,13 +24,19 @@ import {
 import { Separator } from "@/components/ui/separator";
 import type { UploadedFile } from "@/lib/types";
 import {
+  computeEuroPricingTotals,
   createDefaultProductItem,
+  createDefaultEuroPricing,
   computeEstimate,
   createId,
   DEFAULT_DRAFT,
+  EURO_DEFAULT_FLUFF,
   roundUp,
+  resolveProductBasePrice,
   toNumber,
   type BuckingLineItem,
+  type EuroPricing,
+  type EuroPricingSectionLine,
   type EstimateDraft,
   type PanelType,
   type ProductItem,
@@ -45,8 +51,10 @@ import { cn } from "@/lib/utils";
 import {
   CheckCircle2,
   CircleDashed,
+  Loader2,
   LockKeyhole,
   Plus,
+  RefreshCw,
   Sparkles,
   X,
 } from "lucide-react";
@@ -79,6 +87,7 @@ type EstimateBuilderCardProps = {
     sortOrder?: number;
     isActive?: boolean;
     allowsSplitFinish?: boolean;
+    usesEuroPricing?: boolean;
   }>;
   panelTypes?: PanelType[];
   productFeatureOptions?: ProductFeatureOption[];
@@ -91,6 +100,96 @@ type AddressSuggestion = {
   cityStateZip: string;
   fullAddress: string;
 };
+
+type ExchangeRateResponse = {
+  from: string;
+  to: string;
+  rate: number;
+  asOf: string;
+};
+
+type ExchangeRateStatusByProduct = Record<
+  string,
+  {
+    loading: boolean;
+    error: string | null;
+  }
+>;
+
+function normalizeLoadedEuroPricing(
+  source: unknown,
+  fallback: EuroPricing
+): EuroPricing {
+  const input =
+    source && typeof source === "object" && !Array.isArray(source)
+      ? (source as Partial<EuroPricing>)
+      : null;
+  const liveRateRaw = toNumber(input?.liveRate);
+  const fluffRaw = toNumber(input?.fluff);
+  const appliedRateRaw = toNumber(input?.appliedRate);
+  const sectionsRaw = Array.isArray(input?.sections) ? input.sections : [];
+  const normalizedSections = sectionsRaw.reduce<EuroPricingSectionLine[]>(
+    (result, section) => {
+      if (!section || typeof section !== "object") return result;
+      const entry = section as Partial<EuroPricingSectionLine>;
+      const label = String(entry.label ?? "").trim();
+      if (!label) return result;
+      result.push({
+        id: String(entry.id ?? createId("euro")),
+        label,
+        amount: typeof entry.amount === "string" ? entry.amount : "",
+        isMisc: entry.isMisc === true,
+      });
+      return result;
+    },
+    []
+  );
+
+  const hasMisc = normalizedSections.some((entry) => entry.isMisc);
+  const fallbackMisc = fallback.sections.filter((entry) => entry.isMisc);
+  const sections =
+    normalizedSections.length > 0
+      ? hasMisc
+        ? normalizedSections
+        : [...normalizedSections, ...fallbackMisc]
+      : fallback.sections;
+
+  return {
+    liveRate:
+      liveRateRaw > 0
+        ? liveRateRaw.toFixed(4)
+        : toNumber(fallback.liveRate).toFixed(4),
+    fluff:
+      Number.isFinite(fluffRaw) && fluffRaw >= 0
+        ? fluffRaw.toFixed(2)
+        : toNumber(fallback.fluff).toFixed(2),
+    appliedRate:
+      appliedRateRaw > 0
+        ? appliedRateRaw.toFixed(4)
+        : toNumber(fallback.appliedRate).toFixed(4),
+    sections,
+    lastUpdatedOn:
+      typeof input?.lastUpdatedOn === "string" ? input.lastUpdatedOn : undefined,
+  };
+}
+
+function buildProductFromPatch(
+  item: ProductItem,
+  patch: Partial<ProductItem>
+): ProductItem {
+  const merged = { ...item, ...patch };
+  if (!merged.split_finish) {
+    merged.exterior_frame_color = merged.interior_frame_color;
+  }
+  if (merged.euroPricingEnabled && !merged.euroPricing) {
+    merged.euroPricing = createDefaultEuroPricing();
+  }
+  if (merged.euroPricingEnabled && merged.euroPricing) {
+    const { usdSubtotal } = computeEuroPricingTotals(merged.euroPricing);
+    merged.price = usdSubtotal > 0 ? usdSubtotal.toFixed(2) : "";
+  }
+  return merged;
+}
 
 function normalizeLoadedProductFeatures(
   source: Partial<ProductItem> | null | undefined
@@ -124,8 +223,12 @@ function normalizeLoadedProduct(
   const exterior = splitFinish
     ? features.exterior_frame_color
     : features.exterior_frame_color || interior;
+  const euroPricingEnabled = source?.euroPricingEnabled === true;
+  const fallbackEuroPricing = createDefaultEuroPricing();
 
-  return {
+  return buildProductFromPatch(
+    base,
+    {
     ...base,
     id: String(source?.id ?? base.id),
     vendorId: typeof source?.vendorId === "string" ? source.vendorId : "",
@@ -136,9 +239,13 @@ function normalizeLoadedProduct(
         ? source.markup
         : base.markup,
     split_finish: splitFinish,
+    euroPricingEnabled,
+    euroPricing: euroPricingEnabled
+      ? normalizeLoadedEuroPricing(source?.euroPricing, fallbackEuroPricing)
+      : undefined,
     ...features,
     exterior_frame_color: exterior,
-  };
+  });
 }
 
 export function EstimateBuilderCard({
@@ -167,6 +274,8 @@ export function EstimateBuilderCard({
   const [isAddressLookupLoading, setIsAddressLookupLoading] = useState(false);
   const [addressLookupError, setAddressLookupError] = useState<string | null>(null);
   const [addressLookupOpen, setAddressLookupOpen] = useState(false);
+  const [exchangeRateStatusByProduct, setExchangeRateStatusByProduct] =
+    useState<ExchangeRateStatusByProduct>({});
   const addressLookupRequestRef = useRef(0);
   const normalizedPreparedByName = preparedByName?.trim() ?? "";
 
@@ -181,6 +290,7 @@ export function EstimateBuilderCard({
         typeof vendor.sortOrder === "number" ? vendor.sortOrder : index + 1,
       isActive: vendor.isActive !== false,
       allowsSplitFinish: vendor.allowsSplitFinish === true,
+      usesEuroPricing: vendor.usesEuroPricing === true,
     }));
     return normalized
       .filter((vendor) => vendor.isActive)
@@ -275,6 +385,7 @@ export function EstimateBuilderCard({
     if (loadPayload.values && !loadPayload.calculator) {
       setLegacyValues(loadPayload.values as Record<string, string | number>);
       setDraft(DEFAULT_DRAFT);
+      setExchangeRateStatusByProduct({});
       return;
     }
 
@@ -301,6 +412,7 @@ export function EstimateBuilderCard({
 
     setLegacyValues(null);
     setDraft(nextDraft);
+    setExchangeRateStatusByProduct({});
   }, [loadPayload]);
 
   useEffect(() => {
@@ -408,21 +520,102 @@ export function EstimateBuilderCard({
 
   const handleProductChange = (index: number, patch: Partial<ProductItem>) => {
     const next = draft.products.map((item, idx) =>
-      idx === index
-        ? (() => {
-            const merged = { ...item, ...patch };
-            if (!merged.split_finish) {
-              merged.exterior_frame_color = merged.interior_frame_color;
-            }
-            return merged;
-          })()
-        : item
+      idx === index ? buildProductFromPatch(item, patch) : item
     );
     handleDraftChange({
       ...draft,
       products: next,
     });
   };
+
+  const updateProductById = useCallback(
+    (productId: string, updater: (item: ProductItem) => ProductItem) => {
+      setDraft((prev) => ({
+        ...prev,
+        products: prev.products.map((item) =>
+          item.id === productId ? updater(item) : item
+        ),
+      }));
+      setLegacyValues(null);
+      onActivate?.();
+    },
+    [onActivate]
+  );
+
+  const refreshEuroExchangeRate = useCallback(async (productId: string) => {
+    setExchangeRateStatusByProduct((prev) => ({
+      ...prev,
+      [productId]: { loading: true, error: null },
+    }));
+
+    try {
+      const response = await fetch("/api/exchange-rate?from=EUR&to=USD", {
+        cache: "no-store",
+      });
+      const data = (await response.json().catch(() => null)) as
+        | ExchangeRateResponse
+        | { error?: string }
+        | null;
+      if (!response.ok || !data || typeof (data as ExchangeRateResponse).rate !== "number") {
+        const message =
+          data &&
+          typeof data === "object" &&
+          "error" in data &&
+          typeof data.error === "string"
+            ? data.error
+            : "Failed to load EUR rate.";
+        throw new Error(
+          message
+        );
+      }
+      const payload = data as ExchangeRateResponse;
+      const liveRate = payload.rate;
+
+      updateProductById(productId, (product) => {
+        if (!product.euroPricingEnabled) return product;
+        const currentPricing = product.euroPricing ?? createDefaultEuroPricing();
+        const fluff = toNumber(currentPricing.fluff);
+        const nextPricing: EuroPricing = {
+          ...currentPricing,
+          liveRate: liveRate.toFixed(4),
+          appliedRate: (liveRate + Math.max(0, fluff)).toFixed(4),
+          lastUpdatedOn: payload.asOf,
+        };
+        return buildProductFromPatch(product, {
+          euroPricing: nextPricing,
+          euroPricingEnabled: true,
+        });
+      });
+
+      setExchangeRateStatusByProduct((prev) => ({
+        ...prev,
+        [productId]: { loading: false, error: null },
+      }));
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Failed to load EUR rate.";
+      setExchangeRateStatusByProduct((prev) => ({
+        ...prev,
+        [productId]: { loading: false, error: message },
+      }));
+    }
+  }, [updateProductById]);
+
+  useEffect(() => {
+    if (legacyValues) return;
+    draft.products.forEach((item) => {
+      if (!item.euroPricingEnabled) return;
+      const liveRate = toNumber(item.euroPricing?.liveRate);
+      const status = exchangeRateStatusByProduct[item.id];
+      if (liveRate > 0 || status?.loading) return;
+      void refreshEuroExchangeRate(item.id);
+    });
+  }, [
+    draft.products,
+    exchangeRateStatusByProduct,
+    legacyValues,
+    refreshEuroExchangeRate,
+  ]);
 
   const resolveVendorForProduct = (item: ProductItem) => {
     if (item.vendorId) {
@@ -491,6 +684,7 @@ export function EstimateBuilderCard({
     setIsAddressLookupLoading(false);
     setAddressLookupError(null);
     setAddressLookupOpen(false);
+    setExchangeRateStatusByProduct({});
     onValuesChange(EMPTY_VALUES);
     onNameChange("");
     onSelectEstimate?.(null);
@@ -501,7 +695,7 @@ export function EstimateBuilderCard({
     String(draft.info[field] ?? "").trim()
   );
   const productStepComplete = draft.products.some(
-    (item) => item.name.trim() && toNumber(item.price) > 0
+    (item) => item.name.trim() && resolveProductBasePrice(item) > 0
   );
   const buckingStepComplete = draft.bucking.some(
     (item) => toNumber(item.qty) > 0 && toNumber(item.sqft) > 0
@@ -870,13 +1064,22 @@ export function EstimateBuilderCard({
 
             <div className="space-y-3">
               {draft.products.map((item, index) => {
-                const price = toNumber(item.price);
+                const price = resolveProductBasePrice(item);
                 const markup = item.markup.trim()
                   ? toNumber(item.markup)
                   : toNumber(draft.calculator.product_markup_default);
                 const total = roundUp(price * (1 + markup));
                 const selectedVendorRecord = resolveVendorForProduct(item);
                 const selectedVendor = selectedVendorRecord?.id ?? "__none__";
+                const usesEuroPricing =
+                  selectedVendorRecord?.usesEuroPricing === true ||
+                  item.euroPricingEnabled;
+                const euroPricing = item.euroPricing ?? createDefaultEuroPricing();
+                const euroTotals = computeEuroPricingTotals(euroPricing);
+                const rateStatus = exchangeRateStatusByProduct[item.id] ?? {
+                  loading: false,
+                  error: null,
+                };
                 const allowsSplitFinish =
                   selectedVendorRecord?.allowsSplitFinish === true;
                 const visibleFeatureFields = allowsSplitFinish
@@ -927,6 +1130,11 @@ export function EstimateBuilderCard({
                           value={selectedVendor}
                           onValueChange={(value) => {
                             const vendor = vendorOptions.find((entry) => entry.id === value);
+                            const vendorUsesEuroPricing =
+                              value !== "__none__" && vendor?.usesEuroPricing === true;
+                            const nextEuroPricing = vendorUsesEuroPricing
+                              ? item.euroPricing ?? createDefaultEuroPricing()
+                              : item.euroPricing;
                             handleProductChange(index, {
                               vendorId: value === "__none__" ? "" : vendor?.id ?? "",
                               name: value === "__none__" ? "" : vendor?.name ?? "",
@@ -936,7 +1144,12 @@ export function EstimateBuilderCard({
                                   : vendor?.allowsSplitFinish === true
                                     ? item.split_finish
                                     : false,
+                              euroPricingEnabled: vendorUsesEuroPricing,
+                              euroPricing: nextEuroPricing,
                             });
+                            if (vendorUsesEuroPricing) {
+                              void refreshEuroExchangeRate(item.id);
+                            }
                           }}
                           disabled={Boolean(legacyValues) || !vendorOptions.length}
                         >
@@ -954,16 +1167,18 @@ export function EstimateBuilderCard({
                         </Select>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">Price</label>
+                        <label className="text-xs text-muted-foreground">
+                          {usesEuroPricing ? "Price (USD, auto)" : "Price"}
+                        </label>
                         <Input
                           className={inputSmClassName}
-                          value={item.price}
+                          value={usesEuroPricing ? (price > 0 ? price.toFixed(2) : "") : item.price}
                           onChange={(event) =>
                             handleProductChange(index, { price: event.target.value })
                           }
                           inputMode="decimal"
                           placeholder="0"
-                          disabled={Boolean(legacyValues)}
+                          disabled={Boolean(legacyValues) || usesEuroPricing}
                         />
                       </div>
                       <div className="space-y-1">
@@ -1002,6 +1217,212 @@ export function EstimateBuilderCard({
                         </Button>
                       </div>
                     </div>
+
+                    {usesEuroPricing ? (
+                      <div className="mt-3 space-y-3 rounded-lg border border-border/60 bg-background/80 p-3">
+                        <div className="flex flex-wrap items-start justify-between gap-2">
+                          <div>
+                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                              EUR Cost Calculator
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                              Mirrors workbook section labels and converts to USD.
+                            </p>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => void refreshEuroExchangeRate(item.id)}
+                            disabled={Boolean(legacyValues) || rateStatus.loading}
+                          >
+                            {rateStatus.loading ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-4 w-4" />
+                            )}
+                            Refresh rate
+                          </Button>
+                        </div>
+                        {rateStatus.error ? (
+                          <p className="text-xs text-destructive">{rateStatus.error}</p>
+                        ) : null}
+                        <div className="grid gap-3 md:grid-cols-3">
+                          <div className="space-y-1">
+                            <label className="text-xs text-muted-foreground">
+                              Live EUR to USD
+                            </label>
+                            <Input
+                              className={inputSmClassName}
+                              value={euroPricing.liveRate}
+                              disabled
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs text-muted-foreground">
+                              Fluff (default +0.05)
+                            </label>
+                            <Input
+                              className={inputSmClassName}
+                              value={euroPricing.fluff}
+                              onChange={(event) => {
+                                const nextFluff = event.target.value;
+                                const liveRate = toNumber(euroPricing.liveRate);
+                                const parsedFluff = Math.max(0, toNumber(nextFluff));
+                                handleProductChange(index, {
+                                  euroPricing: {
+                                    ...euroPricing,
+                                    fluff: nextFluff,
+                                    appliedRate: (liveRate + parsedFluff).toFixed(4),
+                                  },
+                                  euroPricingEnabled: true,
+                                });
+                              }}
+                              inputMode="decimal"
+                              placeholder={EURO_DEFAULT_FLUFF.toFixed(2)}
+                              disabled={Boolean(legacyValues)}
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs text-muted-foreground">
+                              Applied rate
+                            </label>
+                            <Input
+                              className={inputSmClassName}
+                              value={euroPricing.appliedRate}
+                              onChange={(event) =>
+                                handleProductChange(index, {
+                                  euroPricing: {
+                                    ...euroPricing,
+                                    appliedRate: event.target.value,
+                                  },
+                                  euroPricingEnabled: true,
+                                })
+                              }
+                              inputMode="decimal"
+                              disabled={Boolean(legacyValues)}
+                            />
+                          </div>
+                        </div>
+                        {euroPricing.lastUpdatedOn ? (
+                          <p className="text-xs text-muted-foreground">
+                            Rate date: {euroPricing.lastUpdatedOn}
+                          </p>
+                        ) : null}
+                        <div className="space-y-2">
+                          {euroPricing.sections.map((section) => {
+                            return (
+                              <div
+                                key={section.id}
+                                className={cn(
+                                  "grid gap-2",
+                                  section.isMisc
+                                    ? "md:grid-cols-[1.4fr_1fr_auto]"
+                                    : "md:grid-cols-[1.4fr_1fr]"
+                                )}
+                              >
+                                {section.isMisc ? (
+                                  <Input
+                                    className={inputSmClassName}
+                                    value={section.label}
+                                    onChange={(event) =>
+                                      handleProductChange(index, {
+                                        euroPricing: {
+                                          ...euroPricing,
+                                          sections: euroPricing.sections.map((entry) =>
+                                            entry.id === section.id
+                                              ? { ...entry, label: event.target.value }
+                                              : entry
+                                          ),
+                                        },
+                                        euroPricingEnabled: true,
+                                      })
+                                    }
+                                    placeholder="Misc"
+                                    disabled={Boolean(legacyValues)}
+                                  />
+                                ) : (
+                                  <div className="flex items-center rounded-md border border-border/60 bg-muted/30 px-3 text-sm text-foreground">
+                                    {section.label}
+                                  </div>
+                                )}
+                                <Input
+                                  className={inputSmClassName}
+                                  value={section.amount}
+                                  onChange={(event) =>
+                                    handleProductChange(index, {
+                                      euroPricing: {
+                                        ...euroPricing,
+                                        sections: euroPricing.sections.map((entry) =>
+                                          entry.id === section.id
+                                            ? { ...entry, amount: event.target.value }
+                                            : entry
+                                        ),
+                                      },
+                                      euroPricingEnabled: true,
+                                    })
+                                  }
+                                  inputMode="decimal"
+                                  placeholder="0"
+                                  disabled={Boolean(legacyValues)}
+                                />
+                                {section.isMisc ? (
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() =>
+                                      handleProductChange(index, {
+                                        euroPricing: {
+                                          ...euroPricing,
+                                          sections: euroPricing.sections.filter(
+                                            (entry) => entry.id !== section.id
+                                          ),
+                                        },
+                                        euroPricingEnabled: true,
+                                      })
+                                    }
+                                    disabled={Boolean(legacyValues)}
+                                    aria-label="Remove misc field"
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() =>
+                              handleProductChange(index, {
+                                euroPricing: {
+                                  ...euroPricing,
+                                  sections: [
+                                    ...euroPricing.sections,
+                                    {
+                                      id: createId("euro-misc"),
+                                      label: "Misc",
+                                      amount: "",
+                                      isMisc: true,
+                                    },
+                                  ],
+                                },
+                                euroPricingEnabled: true,
+                              })
+                            }
+                            disabled={Boolean(legacyValues)}
+                          >
+                            <Plus className="h-4 w-4" />
+                            Add misc field
+                          </Button>
+                          <div className="text-xs text-muted-foreground">
+                            EUR subtotal: {formatCurrency(euroTotals.eurSubtotal)} | USD subtotal:{" "}
+                            {formatCurrency(euroTotals.usdSubtotal)}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
 
                     <div className="mt-3 space-y-3 rounded-lg border border-border/60 bg-background/80 p-3">
                       <div>

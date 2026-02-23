@@ -15,6 +15,66 @@ export type EstimateInfo = {
   prepared_by?: string;
 };
 
+export type EuroPricingSectionLine = {
+  id: string;
+  label: string;
+  amount: string;
+  isMisc?: boolean;
+};
+
+export type EuroPricing = {
+  liveRate: string;
+  fluff: string;
+  appliedRate: string;
+  sections: EuroPricingSectionLine[];
+  lastUpdatedOn?: string;
+};
+
+export const EURO_DEFAULT_FLUFF = 0.05;
+export const EURO_BASE_SECTION_LABELS = [
+  "Frames",
+  "Crating",
+  "Freight",
+  "Glass",
+  "Glass Crating",
+  "Stiffiners",
+  "Standard Thresholds",
+  "Nail Fin",
+  "Factory Glazing",
+  "Anchor Straps",
+  "Temporary Handles",
+  "Installation Assistance",
+] as const;
+export const EURO_DEFAULT_MISC_ROWS = 2;
+
+function createDefaultEuroSectionLine(
+  label: string,
+  isMisc = false
+): EuroPricingSectionLine {
+  return {
+    id: createId(isMisc ? "euro-misc" : "euro"),
+    label,
+    amount: "",
+    isMisc,
+  };
+}
+
+export function createDefaultEuroPricing(): EuroPricing {
+  const liveRate = 1;
+  const fluff = EURO_DEFAULT_FLUFF;
+  return {
+    liveRate: liveRate.toFixed(4),
+    fluff: fluff.toFixed(2),
+    appliedRate: (liveRate + fluff).toFixed(4),
+    sections: [
+      ...EURO_BASE_SECTION_LABELS.map((label) => createDefaultEuroSectionLine(label)),
+      ...Array.from({ length: EURO_DEFAULT_MISC_ROWS }, () =>
+        createDefaultEuroSectionLine("Misc", true)
+      ),
+    ],
+  };
+}
+
 export type ProductItem = {
   id: string;
   vendorId: string;
@@ -22,6 +82,8 @@ export type ProductItem = {
   price: string;
   markup: string;
   split_finish: boolean;
+  euroPricingEnabled: boolean;
+  euroPricing?: EuroPricing;
 } & ProductFeatureSelection;
 
 export function createDefaultProductItem(id = "product-1"): ProductItem {
@@ -32,6 +94,8 @@ export function createDefaultProductItem(id = "product-1"): ProductItem {
     price: "",
     markup: "0.5",
     split_finish: false,
+    euroPricingEnabled: false,
+    euroPricing: undefined,
     ...EMPTY_PRODUCT_FEATURE_SELECTION,
   };
 };
@@ -129,6 +193,31 @@ export type EstimateComputed = {
   pdfValues: Record<string, number | string>;
 };
 
+export function computeEuroPricingTotals(
+  pricing: EuroPricing | null | undefined
+): {
+  eurSubtotal: number;
+  appliedRate: number;
+  usdSubtotal: number;
+} {
+  const sections = Array.isArray(pricing?.sections) ? pricing.sections : [];
+  const eurSubtotal = sum(sections.map((section) => toNumber(section.amount)));
+  const appliedRate = toNumber(pricing?.appliedRate);
+  const usdSubtotal = eurSubtotal * appliedRate;
+  return {
+    eurSubtotal,
+    appliedRate,
+    usdSubtotal,
+  };
+}
+
+export function resolveProductBasePrice(item: ProductItem): number {
+  if (item.euroPricingEnabled && item.euroPricing) {
+    return computeEuroPricingTotals(item.euroPricing).usdSubtotal;
+  }
+  return toNumber(item.price);
+}
+
 export function computeEstimate(
   draft: EstimateDraft,
   panelTypes: PanelType[] = []
@@ -142,7 +231,7 @@ export function computeEstimate(
 
   const products = draft.products ?? [];
   const productTotals = products.map((item) => {
-    const price = toNumber(item.price);
+    const price = resolveProductBasePrice(item);
     const markup = item.markup.trim() ? toNumber(item.markup) : productMarkupDefault;
     return roundUp(price * (1 + markup));
   });
