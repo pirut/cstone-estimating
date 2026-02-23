@@ -30,7 +30,7 @@ export type EuroPricing = {
   lastUpdatedOn?: string;
 };
 
-export const EURO_DEFAULT_FLUFF = 0.05;
+export const EURO_DEFAULT_FLUFF = 0.07;
 export const EURO_BASE_SECTION_LABELS = [
   "Frames",
   "Crating",

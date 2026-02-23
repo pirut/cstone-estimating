@@ -1086,6 +1086,10 @@ export function EstimateBuilderCard({
                 const usesEuroPricing =
                   vendorSupportsEuroPricing(selectedVendorRecord) ||
                   item.euroPricingEnabled;
+                const pricePreview =
+                  usesEuroPricing || item.price.trim()
+                    ? formatCurrency(price)
+                    : "";
                 const euroPricing = item.euroPricing ?? createDefaultEuroPricing();
                 const euroTotals = computeEuroPricingTotals(euroPricing);
                 const rateStatus = exchangeRateStatusByProduct[item.id] ?? {
@@ -1193,6 +1197,11 @@ export function EstimateBuilderCard({
                           placeholder="0"
                           disabled={Boolean(legacyValues) || usesEuroPricing}
                         />
+                        {pricePreview ? (
+                          <p className="text-[11px] text-muted-foreground">
+                            {pricePreview}
+                          </p>
+                        ) : null}
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">Markup</label>
@@ -1272,7 +1281,7 @@ export function EstimateBuilderCard({
                           </div>
                           <div className="space-y-1">
                             <label className="text-xs text-muted-foreground">
-                              Fluff (default +0.05)
+                              Fluff (default +0.07)
                             </label>
                             <Input
                               className={inputSmClassName}
@@ -1378,6 +1387,11 @@ export function EstimateBuilderCard({
                                   placeholder="0"
                                   disabled={Boolean(legacyValues)}
                                 />
+                                {formatCurrencyPreview(section.amount, "EUR") ? (
+                                  <p className="text-[11px] text-muted-foreground md:col-start-2">
+                                    {formatCurrencyPreview(section.amount, "EUR")}
+                                  </p>
+                                ) : null}
                                 {section.isMisc ? (
                                   <Button
                                     variant="ghost"
@@ -1430,8 +1444,8 @@ export function EstimateBuilderCard({
                             Add misc field
                           </Button>
                           <div className="text-xs text-muted-foreground">
-                            EUR subtotal: {formatCurrency(euroTotals.eurSubtotal)} | USD subtotal:{" "}
-                            {formatCurrency(euroTotals.usdSubtotal)}
+                            EUR subtotal: {formatCurrency(euroTotals.eurSubtotal, "EUR")} | USD subtotal:{" "}
+                            {formatCurrency(euroTotals.usdSubtotal, "USD")}
                           </div>
                         </div>
                       </div>
@@ -1607,6 +1621,8 @@ export function EstimateBuilderCard({
                 value={draft.calculator.bucking_rate}
                 onChange={(value) => handleCalculatorChange("bucking_rate", value)}
                 disabled={Boolean(legacyValues)}
+                moneyCurrency="USD"
+                moneySuffix="/ft"
               />
               <RateField
                 label="Waterproofing $/ft"
@@ -1615,6 +1631,8 @@ export function EstimateBuilderCard({
                   handleCalculatorChange("waterproofing_rate", value)
                 }
                 disabled={Boolean(legacyValues)}
+                moneyCurrency="USD"
+                moneySuffix="/ft"
               />
               <RateField
                 label="Override bucking cost"
@@ -1624,6 +1642,7 @@ export function EstimateBuilderCard({
                 }
                 placeholder="Optional"
                 disabled={Boolean(legacyValues)}
+                moneyCurrency="USD"
               />
               <RateField
                 label="Override waterproof cost"
@@ -1633,6 +1652,7 @@ export function EstimateBuilderCard({
                 }
                 placeholder="Optional"
                 disabled={Boolean(legacyValues)}
+                moneyCurrency="USD"
               />
             </div>
 
@@ -1817,6 +1837,7 @@ export function EstimateBuilderCard({
                 onChange={(value) => handleCalculatorChange("rentals", value)}
                 placeholder="0"
                 disabled={Boolean(legacyValues)}
+                moneyCurrency="USD"
               />
               <RateField
                 label="Override total install"
@@ -1826,6 +1847,7 @@ export function EstimateBuilderCard({
                 }
                 placeholder="Optional"
                 disabled={Boolean(legacyValues)}
+                moneyCurrency="USD"
               />
             </div>
 
@@ -1968,13 +1990,18 @@ function RateField({
   onChange,
   placeholder,
   disabled,
+  moneyCurrency,
+  moneySuffix,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
+  moneyCurrency?: "USD" | "EUR";
+  moneySuffix?: string;
 }) {
+  const formattedPreview = formatCurrencyPreview(value, moneyCurrency);
   return (
     <div className="space-y-2">
       <label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
@@ -1988,13 +2015,32 @@ function RateField({
         placeholder={placeholder}
         disabled={disabled}
       />
+      {formattedPreview ? (
+        <p className="text-[11px] text-muted-foreground">
+          {formattedPreview}
+          {moneySuffix ? ` ${moneySuffix}` : ""}
+        </p>
+      ) : null}
     </div>
   );
 }
 
-function formatCurrency(value: number) {
-  return value.toLocaleString("en-US", {
+function formatCurrency(value: number, currency: "USD" | "EUR" = "USD") {
+  if (!Number.isFinite(value)) return "-";
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency,
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
-  });
+  }).format(value);
+}
+
+function formatCurrencyPreview(
+  value: string | number | null | undefined,
+  currency: "USD" | "EUR" = "USD"
+) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string" && !value.trim()) return "";
+  const amount = toNumber(value);
+  return formatCurrency(amount, currency);
 }
