@@ -3165,7 +3165,7 @@ export default function HomePage() {
   );
 
   return (
-    <main className="relative min-h-screen overflow-hidden">
+    <main className="relative min-h-screen overflow-x-hidden">
       <ConvexAuthSync
         onDomainError={setAuthError}
         onAuthError={setConvexSetupError}
@@ -3426,7 +3426,7 @@ export default function HomePage() {
             </Card>
 
             <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.42fr)_minmax(0,0.58fr)] 2xl:grid-cols-[minmax(360px,0.38fr)_minmax(0,0.62fr)]">
-              <Card className="h-fit rounded-3xl border-border/60 bg-card/80 shadow-elevated">
+              <Card className="h-fit rounded-3xl border-border/60 bg-card/80 shadow-elevated xl:sticky xl:top-6 xl:self-start">
                 <CardHeader className="space-y-4">
                   <div className="space-y-2">
                     <Badge variant="muted" className="bg-muted/80 text-[10px]">
@@ -3917,7 +3917,7 @@ export default function HomePage() {
           id="step-input"
           className="mt-12 grid gap-6 xl:grid-cols-[minmax(0,1.28fr)_minmax(360px,0.72fr)] 2xl:grid-cols-[minmax(0,1.38fr)_minmax(440px,0.62fr)]"
         >
-          <div className="space-y-6">
+          <div className="space-y-6 xl:sticky xl:top-6 xl:self-start">
             <EstimateBuilderCard
               values={estimateValues}
               onValuesChange={setEstimateValues}
