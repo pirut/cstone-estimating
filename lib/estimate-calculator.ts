@@ -185,6 +185,16 @@ export type EstimateComputed = {
     waterproofing_cost_base: number;
     rentals_markup: number;
   };
+  margins: {
+    product_margin: number;
+    install_margin: number;
+    project_margin: number;
+  };
+  marginChecks: {
+    product_margin_ok: boolean;
+    install_margin_ok: boolean;
+    project_margin_ok: boolean;
+  };
   panelCounts: Record<
     string,
     { total_qty: number; clerestory_qty: number; replacement_qty: number }
@@ -230,12 +240,17 @@ export function computeEstimate(
   const rentals = toNumber(draft.calculator.rentals);
 
   const products = draft.products ?? [];
-  const productTotals = products.map((item) => {
+  const productLineItems = products.map((item) => {
     const price = resolveProductBasePrice(item);
     const markup = item.markup.trim() ? toNumber(item.markup) : productMarkupDefault;
-    return roundUp(price * (1 + markup));
+    const total = roundUp(price * (1 + markup));
+    return {
+      basePrice: price,
+      total,
+    };
   });
-  const productPrice = sum(productTotals);
+  const productPrice = sum(productLineItems.map((item) => item.total));
+  const productCostBase = sum(productLineItems.map((item) => item.basePrice));
 
   const linealTotals = (draft.bucking ?? []).map((item) => {
     const qty = toNumber(item.qty);
@@ -304,8 +319,20 @@ export function computeEstimate(
   const punchPrice = roundUp(punchCostBase * (1 + installMarkup));
   const installationPrice = installPrice + coversPrice + punchPrice;
 
+  const installRevenue = buckingPrice + waterproofingPrice + installationPrice;
+  const installCostTotal =
+    buckingCostBase +
+    waterproofingCostBase +
+    installCostBase +
+    coversCostBase +
+    punchCostBase +
+    rentals;
   const totalContractPrice =
-    productPrice + buckingPrice + waterproofingPrice + installationPrice;
+    productPrice + installRevenue;
+  const projectCostTotal = productCostBase + installCostTotal;
+  const productMargin = calculateMargin(productPrice, productCostBase);
+  const installMargin = calculateMargin(installRevenue, installCostTotal);
+  const projectMargin = calculateMargin(totalContractPrice, projectCostTotal);
 
   const materialDraw1 = productPrice * 0.33333;
   const materialDraw2 = productPrice * 0.33333;
@@ -365,6 +392,16 @@ export function computeEstimate(
       bucking_cost_base: buckingCostBase,
       waterproofing_cost_base: waterproofingCostBase,
       rentals_markup: rentalsMarkup,
+    },
+    margins: {
+      product_margin: productMargin,
+      install_margin: installMargin,
+      project_margin: projectMargin,
+    },
+    marginChecks: {
+      product_margin_ok: productMargin > 0,
+      install_margin_ok: installMargin > 0,
+      project_margin_ok: projectMargin > 0,
     },
     panelCounts,
     panelTotals,
@@ -437,6 +474,12 @@ export function toNumber(value: string | number | undefined | null) {
   if (!cleaned) return 0;
   const parsed = Number(cleaned);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function calculateMargin(revenue: number, cost: number) {
+  if (!Number.isFinite(revenue) || revenue <= 0) return 0;
+  if (!Number.isFinite(cost)) return 0;
+  return (revenue - cost) / revenue;
 }
 
 export function createId(prefix: string) {

@@ -401,6 +401,8 @@ export function EstimateBuilderCard({
       totals: computed.totals,
       schedule: computed.schedule,
       breakdown: computed.breakdown,
+      margins: computed.margins,
+      marginChecks: computed.marginChecks,
     });
   }, [computed, draft, legacyValues, name, onEstimatePayloadChange, onValuesChange]);
 
@@ -811,6 +813,10 @@ export function EstimateBuilderCard({
     (item) => toNumber(item.qty) > 0 && toNumber(item.sqft) > 0
   );
   const installStepComplete = computed.totals.total_contract_price > 0;
+  const hasMarginRisk =
+    !computed.marginChecks.product_margin_ok ||
+    !computed.marginChecks.install_margin_ok ||
+    !computed.marginChecks.project_margin_ok;
 
   const stepProgress = [
     {
@@ -1991,6 +1997,53 @@ export function EstimateBuilderCard({
               ))}
             </div>
 
+            <div>
+              <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                Job margin checks
+              </p>
+              <div className="grid gap-2 md:grid-cols-3">
+                {[
+                  [
+                    "Product margin",
+                    computed.margins.product_margin,
+                    computed.marginChecks.product_margin_ok,
+                  ],
+                  [
+                    "Install margin",
+                    computed.margins.install_margin,
+                    computed.marginChecks.install_margin_ok,
+                  ],
+                  [
+                    "Overall project margin",
+                    computed.margins.project_margin,
+                    computed.marginChecks.project_margin_ok,
+                  ],
+                ].map(([label, value, ok]) => (
+                  <div
+                    key={String(label)}
+                    className="rounded-lg border border-border/60 bg-card/70 px-3 py-2"
+                  >
+                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
+                      {label}
+                    </p>
+                    <div className="mt-1 flex items-end justify-between gap-2">
+                      <span
+                        className={cn(
+                          "text-base font-semibold",
+                          ok ? "text-accent" : "text-destructive"
+                        )}
+                      >
+                        {formatMargin(value as number)}
+                      </span>
+                      <Badge variant={ok ? "accent" : "outline"} className="text-[10px]">
+                        {ok ? "Pass" : "Review"}
+                      </Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
             <Separator />
 
             <div>
@@ -2020,12 +2073,21 @@ export function EstimateBuilderCard({
               </div>
             </div>
 
-            <div className="rounded-xl border border-accent/30 bg-accent/10 px-3 py-3 text-sm text-foreground">
-              <div className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4 text-accent" />
-                Ready to generate. Your totals and schedule are ready to sync to PandaDoc.
+            {hasMarginRisk ? (
+              <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-3 text-sm text-foreground">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-destructive" />
+                  Review margin checks before generating.
+                </div>
               </div>
-            </div>
+            ) : (
+              <div className="rounded-xl border border-accent/30 bg-accent/10 px-3 py-3 text-sm text-foreground">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-4 w-4 text-accent" />
+                  Ready to generate. Your totals, schedule, and margins are ready to sync to PandaDoc.
+                </div>
+              </div>
+            )}
           </section>
         ) : null}
 
@@ -2322,6 +2384,11 @@ function formatCurrency(value: number, currency: "USD" | "EUR" = "USD") {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value);
+}
+
+function formatMargin(value: number) {
+  if (!Number.isFinite(value)) return "-";
+  return `${(value * 100).toFixed(2)}%`;
 }
 
 function MoneyInput({
