@@ -83,6 +83,7 @@ import {
   Save,
   Search,
   Tag,
+  Trash2,
   Workflow,
   X,
 } from "lucide-react";
@@ -730,6 +731,7 @@ export default function HomePage() {
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyActionId, setHistoryActionId] = useState<string | null>(null);
   const [movingEstimateId, setMovingEstimateId] = useState<string | null>(null);
+  const [deletingEstimateId, setDeletingEstimateId] = useState<string | null>(null);
   const [moveTargetByEstimateId, setMoveTargetByEstimateId] = useState<
     Record<string, string>
   >({});
@@ -2617,6 +2619,78 @@ export default function HomePage() {
     await handleMoveEstimateToProject(activeEditingEstimate, floatingDockMoveTargetId);
   }, [activeEditingEstimate, floatingDockMoveTargetId, handleMoveEstimateToProject]);
 
+  const handleDeleteTeamEstimate = useCallback(
+    async (estimate: any) => {
+      setError(null);
+      if (!convexAppUrl) {
+        setError("Convex is not configured yet.");
+        return;
+      }
+      if (!convexUser) {
+        setError("Sign in to delete estimates.");
+        return;
+      }
+      if (!activeTeam || !activeMembership) {
+        setError("Select a team workspace first.");
+        return;
+      }
+
+      const estimateId = String(estimate?.id ?? "").trim();
+      if (!estimateId) {
+        setError("Select an estimate to delete.");
+        return;
+      }
+      const ownerId = String(estimate?.owner?.id ?? "").trim();
+      const canDeleteEstimate = Boolean(
+        hasTeamAdminAccess || (ownerId && ownerId === convexUser.id)
+      );
+      if (!canDeleteEstimate) {
+        setError("You can only delete estimates you created.");
+        return;
+      }
+
+      const estimateTitle = String(estimate?.title ?? "").trim() || "Untitled Estimate";
+      if (!window.confirm(`Delete estimate "${estimateTitle}"?`)) return;
+
+      const sourceProjectId = String(estimate?.project?.id ?? "").trim();
+      setDeletingEstimateId(estimateId);
+      try {
+        const now = Date.now();
+        await db.transact([
+          db.tx.estimates[estimateId].delete(),
+          ...(sourceProjectId
+            ? [db.tx.projects[sourceProjectId].update({ updatedAt: now })]
+            : []),
+        ]);
+
+        if (editingEstimateId === estimateId) {
+          setEditingEstimateId(null);
+        }
+        setHistoryEstimateId((current) => (current === estimateId ? null : current));
+        setMoveTargetByEstimateId((previous) => {
+          if (!(estimateId in previous)) return previous;
+          const next = { ...previous };
+          delete next[estimateId];
+          return next;
+        });
+        setProjectActionNotice(`Deleted "${estimateTitle}".`);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error.";
+        setError(message);
+      } finally {
+        setDeletingEstimateId(null);
+      }
+    },
+    [
+      activeMembership,
+      activeTeam,
+      convexAppUrl,
+      convexUser,
+      editingEstimateId,
+      hasTeamAdminAccess,
+    ]
+  );
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
@@ -3829,6 +3903,16 @@ export default function HomePage() {
                             destinationProjects[0]?.id ??
                             "";
                           const isMovingEstimate = movingEstimateId === estimate.id;
+                          const isDeletingEstimate = deletingEstimateId === estimate.id;
+                          const estimateOwnerId = String(
+                            estimate?.owner?.id ?? ""
+                          ).trim();
+                          const canDeleteEstimate = Boolean(
+                            hasTeamAdminAccess ||
+                              (convexUser?.id &&
+                                estimateOwnerId &&
+                                estimateOwnerId === convexUser.id)
+                          );
                           return (
                             <div
                               key={estimate.id}
@@ -3883,52 +3967,78 @@ export default function HomePage() {
                                 </div>
                                 <div className="flex flex-wrap items-center justify-end gap-2">
                                   {destinationProjects.length ? (
-                                    <div className="flex items-center gap-1 rounded-lg border border-border/70 bg-background/80 p-1">
-                                      <Select
-                                        value={selectedMoveTarget || undefined}
-                                        onValueChange={(value) =>
-                                          setMoveTargetByEstimateId((previous) => ({
-                                            ...previous,
-                                            [estimate.id]: value,
-                                          }))
-                                        }
-                                      >
-                                        <SelectTrigger className="h-8 min-w-[170px] border-0 bg-transparent px-2 text-xs">
-                                          <SelectValue placeholder="Move to..." />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                          {destinationProjects.map((project) => (
-                                            <SelectItem
-                                              key={`${estimate.id}-${project.id}`}
-                                              value={project.id}
-                                            >
-                                              {project.name}
-                                            </SelectItem>
-                                          ))}
-                                        </SelectContent>
-                                      </Select>
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        className="h-8"
-                                        disabled={
-                                          isMovingEstimate || !selectedMoveTarget
-                                        }
-                                        onClick={() =>
-                                          void handleMoveEstimateToProject(
-                                            estimate,
-                                            selectedMoveTarget
-                                          )
-                                        }
-                                      >
-                                        {isMovingEstimate ? (
-                                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                        ) : (
-                                          <ArrowRightLeft className="h-3.5 w-3.5" />
-                                        )}
-                                        Move
-                                      </Button>
-                                    </div>
+                                    <Popover>
+                                      <PopoverTrigger asChild>
+                                        <Button
+                                          variant="outline"
+                                          size="sm"
+                                          disabled={isMovingEstimate || isDeletingEstimate}
+                                        >
+                                          {isMovingEstimate ? (
+                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                          ) : (
+                                            <ArrowRightLeft className="h-3.5 w-3.5" />
+                                          )}
+                                          Move
+                                        </Button>
+                                      </PopoverTrigger>
+                                      <PopoverContent align="end" className="w-72 space-y-3">
+                                        <div className="space-y-1">
+                                          <p className="text-sm font-semibold text-foreground">
+                                            Move estimate
+                                          </p>
+                                          <p className="text-xs text-muted-foreground">
+                                            Choose a destination project.
+                                          </p>
+                                        </div>
+                                        <Select
+                                          value={selectedMoveTarget || undefined}
+                                          onValueChange={(value) =>
+                                            setMoveTargetByEstimateId((previous) => ({
+                                              ...previous,
+                                              [estimate.id]: value,
+                                            }))
+                                          }
+                                        >
+                                          <SelectTrigger>
+                                            <SelectValue placeholder="Select destination project" />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {destinationProjects.map((project) => (
+                                              <SelectItem
+                                                key={`${estimate.id}-${project.id}`}
+                                                value={project.id}
+                                              >
+                                                {project.name}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                        <div className="flex justify-end">
+                                          <Button
+                                            size="sm"
+                                            disabled={
+                                              isMovingEstimate ||
+                                              isDeletingEstimate ||
+                                              !selectedMoveTarget
+                                            }
+                                            onClick={() =>
+                                              void handleMoveEstimateToProject(
+                                                estimate,
+                                                selectedMoveTarget
+                                              )
+                                            }
+                                          >
+                                            {isMovingEstimate ? (
+                                              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                            ) : (
+                                              <ArrowRightLeft className="h-3.5 w-3.5" />
+                                            )}
+                                            Move
+                                          </Button>
+                                        </div>
+                                      </PopoverContent>
+                                    </Popover>
                                   ) : (
                                     <span className="text-[11px] text-muted-foreground">
                                       Only project
@@ -3938,12 +4048,14 @@ export default function HomePage() {
                                     variant="secondary"
                                     size="sm"
                                     onClick={() => handleLoadTeamEstimate(estimate)}
+                                    disabled={isDeletingEstimate}
                                   >
                                     Load
                                   </Button>
                                   <Button
                                     variant={historyOpen ? "secondary" : "ghost"}
                                     size="sm"
+                                    disabled={isDeletingEstimate}
                                     onClick={() => {
                                       setHistoryError(null);
                                       setHistoryEstimateId((current) =>
@@ -3954,6 +4066,24 @@ export default function HomePage() {
                                     <History className="h-3.5 w-3.5" />
                                     {historyOpen ? "Hide history" : "History"}
                                   </Button>
+                                  {canDeleteEstimate ? (
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="text-destructive hover:text-destructive"
+                                      disabled={isDeletingEstimate}
+                                      onClick={() =>
+                                        void handleDeleteTeamEstimate(estimate)
+                                      }
+                                    >
+                                      {isDeletingEstimate ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      ) : (
+                                        <Trash2 className="h-3.5 w-3.5" />
+                                      )}
+                                      Delete
+                                    </Button>
+                                  ) : null}
                                 </div>
                               </div>
                             </div>

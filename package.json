@@ -1,6 +1,6 @@
 {
   "name": "cstone-estimating",
-  "version": "0.1.188",
+  "version": "0.1.190",
   "private": true,
   "scripts": {
     "dev": "next dev",
