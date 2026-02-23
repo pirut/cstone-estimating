@@ -85,6 +85,14 @@ function parseThresholdPercentInput(value: string) {
   return parsed / 100;
 }
 
+function hasSameSerializedValue(current: unknown, next: unknown) {
+  try {
+    return JSON.stringify(current) === JSON.stringify(next);
+  } catch {
+    return false;
+  }
+}
+
 type UnitTypeDraft = {
   id?: string;
   code: string;
@@ -484,11 +492,14 @@ export default function TeamAdminPage({ embedded = false }: TeamAdminDashboardPr
 
   useEffect(() => {
     const normalized = normalizeMarginThresholds(selectedTeam?.marginThresholds);
-    setTeamMarginDraft({
+    const nextDraft = {
       product: formatThresholdPercentInput(normalized.product_margin_min),
       install: formatThresholdPercentInput(normalized.install_margin_min),
       project: formatThresholdPercentInput(normalized.project_margin_min),
-    });
+    };
+    setTeamMarginDraft((previous) =>
+      hasSameSerializedValue(previous, nextDraft) ? previous : nextDraft
+    );
     setTeamMarginError(null);
     setTeamMarginStatus(null);
   }, [selectedTeam?.id, selectedTeam?.marginThresholds]);
@@ -506,7 +517,9 @@ export default function TeamAdminPage({ embedded = false }: TeamAdminDashboardPr
         (vendor.usesEuroPricing === undefined &&
           hasEuroLabel(String(vendor.name ?? ""))),
     }));
-    setVendorDrafts(next);
+    setVendorDrafts((previous) =>
+      hasSameSerializedValue(previous, next) ? previous : next
+    );
   }, [vendorRecords]);
 
   useEffect(() => {
@@ -522,7 +535,9 @@ export default function TeamAdminPage({ embedded = false }: TeamAdminDashboardPr
         typeof unit.sortOrder === "number" ? unit.sortOrder : index + 1,
       isActive: unit.isActive !== false,
     }));
-    setUnitTypeDrafts(next);
+    setUnitTypeDrafts((previous) =>
+      hasSameSerializedValue(previous, next) ? previous : next
+    );
   }, [unitTypeRecords]);
 
   useEffect(() => {
@@ -535,7 +550,9 @@ export default function TeamAdminPage({ embedded = false }: TeamAdminDashboardPr
           : index + 1,
       isActive: projectType.isActive !== false,
     }));
-    setProjectTypeDrafts(next);
+    setProjectTypeDrafts((previous) =>
+      hasSameSerializedValue(previous, next) ? previous : next
+    );
   }, [projectTypeRecords]);
 
   useEffect(() => {
@@ -551,7 +568,9 @@ export default function TeamAdminPage({ embedded = false }: TeamAdminDashboardPr
         typeof option.sortOrder === "number" ? option.sortOrder : index + 1,
       isActive: option.isActive !== false,
     }));
-    setProductFeatureOptionDrafts(next);
+    setProductFeatureOptionDrafts((previous) =>
+      hasSameSerializedValue(previous, next) ? previous : next
+    );
   }, [productFeatureOptionRecords]);
 
   useEffect(() => {
@@ -598,7 +617,9 @@ export default function TeamAdminPage({ embedded = false }: TeamAdminDashboardPr
           "Unknown owner",
       };
     });
-    setEstimateDrafts(next);
+    setEstimateDrafts((previous) =>
+      hasSameSerializedValue(previous, next) ? previous : next
+    );
     setEstimateError(null);
     setEstimateStatus(null);
     setEstimateSavingId(null);

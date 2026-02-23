@@ -132,6 +132,16 @@ function formatRelativeTime(timestamp: number | null | undefined) {
   return new Date(timestamp).toLocaleDateString();
 }
 
+function hasSameStringRecord(
+  current: Record<string, string>,
+  next: Record<string, string>
+) {
+  const currentKeys = Object.keys(current);
+  const nextKeys = Object.keys(next);
+  if (currentKeys.length !== nextKeys.length) return false;
+  return currentKeys.every((key) => current[key] === next[key]);
+}
+
 type AdminMappingDashboardProps = {
   embedded?: boolean;
 };
@@ -514,7 +524,7 @@ export default function AdminPage({ embedded = false }: AdminMappingDashboardPro
         next[projectId] =
           previous[projectId] ?? fallbackName;
       });
-      return next;
+      return hasSameStringRecord(previous, next) ? previous : next;
     });
   }, [managementProjects]);
 
@@ -529,7 +539,7 @@ export default function AdminPage({ embedded = false }: AdminMappingDashboardPro
         next[estimateId] =
           previous[estimateId] ?? fallbackTitle;
       });
-      return next;
+      return hasSameStringRecord(previous, next) ? previous : next;
     });
   }, [managementEstimates]);
 

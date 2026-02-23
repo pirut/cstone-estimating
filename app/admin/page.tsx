@@ -1,9 +1,80 @@
+"use client";
+
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import AdminMappingDashboard from "@/components/admin-mapping-dashboard";
 import TeamAdminDashboard from "@/components/team-admin-dashboard";
+import { SignInButton, clerkEnabled, useOptionalAuth } from "@/lib/clerk";
+import { Loader2 } from "lucide-react";
 
 export default function UnifiedAdminPage() {
+  const { isLoaded, isSignedIn } = useOptionalAuth();
+
+  if (!clerkEnabled) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background px-4 py-8">
+        <Card className="w-full max-w-lg border-border/60 bg-card/85 shadow-elevated">
+          <CardHeader>
+            <CardTitle className="text-2xl font-serif">Admin unavailable</CardTitle>
+            <CardDescription>
+              Configure Clerk to access the unified admin dashboard.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      </main>
+    );
+  }
+
+  if (!isLoaded) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background px-4 py-8">
+        <Card className="w-full max-w-lg border-border/60 bg-card/85 shadow-elevated">
+          <CardHeader>
+            <CardTitle className="text-2xl font-serif">Loading admin access</CardTitle>
+            <CardDescription>
+              Verifying your account before showing dashboard data.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Checking sign-in status...
+            </div>
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
+
+  if (!isSignedIn) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background px-4 py-8">
+        <Card className="w-full max-w-lg border-border/60 bg-card/85 shadow-elevated">
+          <CardHeader>
+            <CardTitle className="text-2xl font-serif">Sign in required</CardTitle>
+            <CardDescription>
+              Sign in to view and manage projects, estimates, and PandaDoc mappings.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <SignInButton mode="modal">
+              <Button variant="accent" size="sm">
+                Sign in with Microsoft
+              </Button>
+            </SignInButton>
+          </CardContent>
+        </Card>
+      </main>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <div className="sticky top-0 z-40 border-b border-border/60 bg-background/90 backdrop-blur">
