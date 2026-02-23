@@ -1019,18 +1019,33 @@ export default function AdminPage() {
                     return (
                       <div
                         key={rule.id}
-                        className="grid gap-2 rounded-lg border border-border/60 bg-background/70 p-3 md:grid-cols-[auto_1fr_1fr_1fr_1fr_auto]"
+                        className="grid gap-2 rounded-lg border border-border/60 bg-background/70 p-3 md:grid-cols-[0.7fr_1fr_1fr_1fr_1fr_auto]"
                       >
-                        <label className="flex items-center justify-center rounded-lg border border-border/60 bg-card/70 px-2">
-                          <Checkbox
-                            checked={rule.isActive !== false}
-                            onCheckedChange={(checked) =>
-                              updateTemplateRule(rule.id, {
-                                isActive: checked === true,
-                              })
-                            }
-                          />
-                        </label>
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                            Status
+                          </label>
+                          <label
+                            className={`flex h-10 cursor-pointer items-center gap-2 rounded-md border px-3 ${
+                              rule.isActive !== false
+                                ? "border-emerald-500/40 bg-emerald-500/10"
+                                : "border-border/60 bg-card/60"
+                            }`}
+                          >
+                            <Checkbox
+                              className="h-5 w-5"
+                              checked={rule.isActive !== false}
+                              onCheckedChange={(checked) =>
+                                updateTemplateRule(rule.id, {
+                                  isActive: checked === true,
+                                })
+                              }
+                            />
+                            <span className="text-sm font-medium text-foreground">
+                              Active
+                            </span>
+                          </label>
+                        </div>
                         <div className="space-y-1">
                           <label className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
                             Vendor
