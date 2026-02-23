@@ -683,7 +683,7 @@ export default function AdminPage() {
     );
   };
 
-  const handleSave = async () => {
+  const handleSave = async (scope: "routes" | "preset" = "preset") => {
     setSaveError(null);
     setSaveStatus(null);
 
@@ -772,7 +772,11 @@ export default function AdminPage() {
         throw new Error(data?.error || "Failed to save preset.");
       }
 
-      setSaveStatus("Preset saved. Home page generation will use these bindings.");
+      setSaveStatus(
+        scope === "routes"
+          ? "Template routes saved. The active preset now includes this routing."
+          : "Preset saved. Home page generation will use these bindings."
+      );
       setTemplateVersion((prev) => prev + 1);
       await loadActivePreset();
     } catch (err) {
@@ -1188,7 +1192,7 @@ export default function AdminPage() {
                 <Button
                   variant="accent"
                   size="sm"
-                  onClick={handleSave}
+                  onClick={() => void handleSave("routes")}
                   disabled={saveLoading}
                 >
                   {saveLoading ? (
@@ -1199,6 +1203,22 @@ export default function AdminPage() {
                   {saveLoading ? "Saving..." : "Save template routes"}
                 </Button>
               </div>
+              {saveError ? (
+                <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  {saveError}
+                </div>
+              ) : null}
+              {saveStatus ? (
+                <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+                  <div>{saveStatus}</div>
+                  {activePreset ? (
+                    <div className="mt-1 text-xs">
+                      Last saved preset: {activePreset.name} (
+                      {new Date(activePreset.uploadedAt).toLocaleString()})
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           </CardContent>
         </Card>
@@ -1438,7 +1458,11 @@ export default function AdminPage() {
             ) : null}
 
             <div className="flex flex-wrap items-center gap-3">
-              <Button variant="accent" onClick={handleSave} disabled={saveLoading}>
+              <Button
+                variant="accent"
+                onClick={() => void handleSave("preset")}
+                disabled={saveLoading}
+              >
                 {saveLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
