@@ -2378,21 +2378,16 @@ function PercentInput({
   disabled?: boolean;
 }) {
   return (
-    <div className="relative">
-      <Input
-        className={cn(className, "pr-10")}
-        value={formatPercentForInput(value)}
-        onChange={(event) =>
-          onValueChange(parsePercentToDecimalString(event.target.value))
-        }
-        inputMode="decimal"
-        placeholder={placeholder ?? "0"}
-        disabled={disabled}
-      />
-      <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">
-        %
-      </span>
-    </div>
+    <Input
+      className={className}
+      value={formatPercentForInput(value)}
+      onChange={(event) =>
+        onValueChange(parsePercentToDecimalString(event.target.value))
+      }
+      inputMode="decimal"
+      placeholder={placeholder ? `${placeholder}%` : "0%"}
+      disabled={disabled}
+    />
   );
 }
 
@@ -2432,7 +2427,7 @@ function formatPercentForInput(value: string | number | null | undefined) {
   const numeric = toNumber(value);
   if (!Number.isFinite(numeric)) return "";
   const percent = Math.round(numeric * 100 * 10000) / 10000;
-  return String(percent);
+  return `${percent}%`;
 }
 
 function formatMoneyForInput(value: string, currency: "USD" | "EUR") {
