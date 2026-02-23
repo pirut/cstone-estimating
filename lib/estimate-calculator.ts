@@ -433,7 +433,7 @@ export function toNumber(value: string | number | undefined | null) {
   if (value === null || value === undefined) return 0;
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value !== "string") return 0;
-  const cleaned = value.replace(/[$,]/g, "").trim();
+  const cleaned = value.replace(/[^\d.-]/g, "").trim();
   if (!cleaned) return 0;
   const parsed = Number(cleaned);
   return Number.isFinite(parsed) ? parsed : 0;

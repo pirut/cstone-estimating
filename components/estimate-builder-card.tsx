@@ -1086,10 +1086,6 @@ export function EstimateBuilderCard({
                 const usesEuroPricing =
                   vendorSupportsEuroPricing(selectedVendorRecord) ||
                   item.euroPricingEnabled;
-                const pricePreview =
-                  usesEuroPricing || item.price.trim()
-                    ? formatCurrency(price)
-                    : "";
                 const euroPricing = item.euroPricing ?? createDefaultEuroPricing();
                 const euroTotals = computeEuroPricingTotals(euroPricing);
                 const rateStatus = exchangeRateStatusByProduct[item.id] ?? {
@@ -1187,21 +1183,16 @@ export function EstimateBuilderCard({
                         <label className="text-xs text-muted-foreground">
                           {usesEuroPricing ? "Price (USD, auto)" : "Price"}
                         </label>
-                        <Input
+                        <MoneyInput
                           className={inputSmClassName}
                           value={usesEuroPricing ? (price > 0 ? price.toFixed(2) : "") : item.price}
-                          onChange={(event) =>
-                            handleProductChange(index, { price: event.target.value })
+                          onValueChange={(nextValue) =>
+                            handleProductChange(index, { price: nextValue })
                           }
-                          inputMode="decimal"
+                          currency="USD"
                           placeholder="0"
                           disabled={Boolean(legacyValues) || usesEuroPricing}
                         />
-                        {pricePreview ? (
-                          <p className="text-[11px] text-muted-foreground">
-                            {pricePreview}
-                          </p>
-                        ) : null}
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">Markup</label>
@@ -1367,31 +1358,26 @@ export function EstimateBuilderCard({
                                     {section.label}
                                   </div>
                                 )}
-                                <Input
+                                <MoneyInput
                                   className={inputSmClassName}
                                   value={section.amount}
-                                  onChange={(event) =>
+                                  onValueChange={(nextValue) =>
                                     handleProductChange(index, {
                                       euroPricing: {
                                         ...euroPricing,
                                         sections: euroPricing.sections.map((entry) =>
                                           entry.id === section.id
-                                            ? { ...entry, amount: event.target.value }
+                                            ? { ...entry, amount: nextValue }
                                             : entry
                                         ),
                                       },
                                       euroPricingEnabled: true,
                                     })
                                   }
-                                  inputMode="decimal"
+                                  currency="EUR"
                                   placeholder="0"
                                   disabled={Boolean(legacyValues)}
                                 />
-                                {formatCurrencyPreview(section.amount, "EUR") ? (
-                                  <p className="text-[11px] text-muted-foreground md:col-start-2">
-                                    {formatCurrencyPreview(section.amount, "EUR")}
-                                  </p>
-                                ) : null}
                                 {section.isMisc ? (
                                   <Button
                                     variant="ghost"
@@ -2001,26 +1987,31 @@ function RateField({
   moneyCurrency?: "USD" | "EUR";
   moneySuffix?: string;
 }) {
-  const formattedPreview = formatCurrencyPreview(value, moneyCurrency);
   return (
     <div className="space-y-2">
       <label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
         {label}
       </label>
-      <Input
-        className={inputClassName}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        inputMode="decimal"
-        placeholder={placeholder}
-        disabled={disabled}
-      />
-      {formattedPreview ? (
-        <p className="text-[11px] text-muted-foreground">
-          {formattedPreview}
-          {moneySuffix ? ` ${moneySuffix}` : ""}
-        </p>
-      ) : null}
+      {moneyCurrency ? (
+        <MoneyInput
+          className={inputClassName}
+          value={value}
+          onValueChange={onChange}
+          currency={moneyCurrency}
+          placeholder={placeholder}
+          disabled={disabled}
+          suffix={moneySuffix}
+        />
+      ) : (
+        <Input
+          className={inputClassName}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          inputMode="decimal"
+          placeholder={placeholder}
+          disabled={disabled}
+        />
+      )}
     </div>
   );
 }
@@ -2035,12 +2026,85 @@ function formatCurrency(value: number, currency: "USD" | "EUR" = "USD") {
   }).format(value);
 }
 
-function formatCurrencyPreview(
-  value: string | number | null | undefined,
-  currency: "USD" | "EUR" = "USD"
-) {
-  if (value === null || value === undefined) return "";
-  if (typeof value === "string" && !value.trim()) return "";
-  const amount = toNumber(value);
-  return formatCurrency(amount, currency);
+function MoneyInput({
+  className,
+  value,
+  onValueChange,
+  currency,
+  placeholder,
+  disabled,
+  suffix,
+}: {
+  className?: string;
+  value: string;
+  onValueChange: (value: string) => void;
+  currency: "USD" | "EUR";
+  placeholder?: string;
+  disabled?: boolean;
+  suffix?: string;
+}) {
+  const symbol = currency === "EUR" ? "€" : "$";
+  const normalizedValue = parseMoneyToModel(value);
+  const displayValue = formatMoneyForInput(normalizedValue, currency);
+  const suffixDisplay = suffix ? ` ${suffix}` : "";
+  return (
+    <div className="relative">
+      <Input
+        className={cn(className, suffix && "pr-14")}
+        value={displayValue}
+        onChange={(event) => onValueChange(parseMoneyToModel(event.target.value))}
+        inputMode="decimal"
+        placeholder={placeholder ? `${symbol}${placeholder}` : `${symbol}0`}
+        disabled={disabled}
+      />
+      {suffix ? (
+        <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">
+          {suffixDisplay}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function parseMoneyToModel(value: string) {
+  let result = "";
+  let hasDot = false;
+
+  for (const char of String(value ?? "")) {
+    if (char === "-" && !result.length) {
+      result += char;
+      continue;
+    }
+    if (char === "." && !hasDot) {
+      result += char;
+      hasDot = true;
+      continue;
+    }
+    if (char >= "0" && char <= "9") {
+      result += char;
+    }
+  }
+
+  return result;
+}
+
+function formatMoneyForInput(value: string, currency: "USD" | "EUR") {
+  if (!value) return "";
+  const symbol = currency === "EUR" ? "€" : "$";
+  const isNegative = value.startsWith("-");
+  const unsigned = isNegative ? value.slice(1) : value;
+  if (!unsigned || unsigned === ".") {
+    return `${isNegative ? "-" : ""}${symbol}${unsigned ? "0." : ""}`;
+  }
+
+  const [intRaw, decimalRaw] = unsigned.split(".");
+  const intDigits = intRaw.replace(/\D/g, "");
+  const intValue = intDigits ? Number(intDigits) : 0;
+  const intFormatted = Number.isFinite(intValue)
+    ? intValue.toLocaleString("en-US")
+    : "0";
+
+  return `${isNegative ? "-" : ""}${symbol}${intFormatted}${
+    decimalRaw !== undefined ? `.${decimalRaw}` : ""
+  }`;
 }
