@@ -1159,11 +1159,15 @@ export function EstimateBuilderCard({
                 </label>
                 <Input
                   className={inputClassName}
-                  value={draft.calculator.product_markup_default}
+                  value={formatPercentForInput(draft.calculator.product_markup_default)}
                   onChange={(event) =>
-                    handleCalculatorChange("product_markup_default", event.target.value)
+                    handleCalculatorChange(
+                      "product_markup_default",
+                      parsePercentToDecimalString(event.target.value)
+                    )
                   }
                   inputMode="decimal"
+                  placeholder="50"
                   disabled={Boolean(legacyValues)}
                 />
               </div>
@@ -1294,14 +1298,15 @@ export function EstimateBuilderCard({
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">Markup</label>
-                        <Input
+                        <PercentInput
                           className={inputSmClassName}
                           value={item.markup}
-                          onChange={(event) =>
-                            handleProductChange(index, { markup: event.target.value })
+                          onValueChange={(nextMarkup) =>
+                            handleProductChange(index, { markup: nextMarkup })
                           }
-                          inputMode="decimal"
-                          placeholder={draft.calculator.product_markup_default}
+                          placeholder={formatPercentForInput(
+                            draft.calculator.product_markup_default
+                          )}
                           disabled={Boolean(legacyValues)}
                         />
                       </div>
@@ -1908,6 +1913,7 @@ export function EstimateBuilderCard({
                 value={draft.calculator.install_markup}
                 onChange={(value) => handleCalculatorChange("install_markup", value)}
                 disabled={Boolean(legacyValues)}
+                percent
               />
               <RateField
                 label="Rentals"
@@ -2070,6 +2076,7 @@ function RateField({
   disabled,
   moneyCurrency,
   moneySuffix,
+  percent,
 }: {
   label: string;
   value: string;
@@ -2078,6 +2085,7 @@ function RateField({
   disabled?: boolean;
   moneyCurrency?: "USD" | "EUR";
   moneySuffix?: string;
+  percent?: boolean;
 }) {
   return (
     <div className="space-y-2">
@@ -2093,6 +2101,14 @@ function RateField({
           placeholder={placeholder}
           disabled={disabled}
           suffix={moneySuffix}
+        />
+      ) : percent ? (
+        <PercentInput
+          className={inputClassName}
+          value={value}
+          onValueChange={onChange}
+          placeholder={placeholder}
+          disabled={disabled}
         />
       ) : (
         <Input
@@ -2348,6 +2364,38 @@ function MoneyInput({
   );
 }
 
+function PercentInput({
+  className,
+  value,
+  onValueChange,
+  placeholder,
+  disabled,
+}: {
+  className?: string;
+  value: string;
+  onValueChange: (value: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="relative">
+      <Input
+        className={cn(className, "pr-10")}
+        value={formatPercentForInput(value)}
+        onChange={(event) =>
+          onValueChange(parsePercentToDecimalString(event.target.value))
+        }
+        inputMode="decimal"
+        placeholder={placeholder ?? "0"}
+        disabled={disabled}
+      />
+      <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs text-muted-foreground">
+        %
+      </span>
+    </div>
+  );
+}
+
 function parseMoneyToModel(value: string) {
   let result = "";
   let hasDot = false;
@@ -2368,6 +2416,23 @@ function parseMoneyToModel(value: string) {
   }
 
   return result;
+}
+
+function parsePercentToDecimalString(value: string) {
+  const cleaned = String(value ?? "").replace(/[^\d.-]/g, "").trim();
+  if (!cleaned) return "";
+  const numeric = Number(cleaned);
+  if (!Number.isFinite(numeric)) return "";
+  return String(numeric / 100);
+}
+
+function formatPercentForInput(value: string | number | null | undefined) {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string" && !value.trim()) return "";
+  const numeric = toNumber(value);
+  if (!Number.isFinite(numeric)) return "";
+  const percent = Math.round(numeric * 100 * 10000) / 10000;
+  return String(percent);
 }
 
 function formatMoneyForInput(value: string, currency: "USD" | "EUR") {
