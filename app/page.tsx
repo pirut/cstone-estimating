@@ -3716,14 +3716,14 @@ export default function HomePage() {
           <div className="relative flex flex-col items-end gap-2">
             <div
               className={cn(
-                "flex flex-col items-end gap-2 transition-all duration-250",
+                "flex flex-col items-center gap-2 transition-all duration-250",
                 floatingDockOpen
                   ? "translate-y-0 opacity-100"
                   : "pointer-events-none translate-y-3 opacity-0"
               )}
             >
-              <div className="group flex items-center gap-2">
-                <span className="pointer-events-none rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+              <div className="group relative flex h-11 w-11 items-center justify-center">
+                <span className="pointer-events-none absolute right-[calc(100%+0.6rem)] top-1/2 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
                   Save To Project
                 </span>
                 <Button
@@ -3737,8 +3737,8 @@ export default function HomePage() {
                 </Button>
               </div>
 
-              <div className="group flex items-center gap-2">
-                <span className="pointer-events-none rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+              <div className="group relative flex h-11 w-11 items-center justify-center">
+                <span className="pointer-events-none absolute right-[calc(100%+0.6rem)] top-1/2 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
                   Generate PandaDoc
                 </span>
                 <Button
@@ -3752,8 +3752,8 @@ export default function HomePage() {
                 </Button>
               </div>
 
-              <div className="group flex items-center gap-2">
-                <span className="pointer-events-none rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+              <div className="group relative flex h-11 w-11 items-center justify-center">
+                <span className="pointer-events-none absolute right-[calc(100%+0.6rem)] top-1/2 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
                   Move Loaded Estimate
                 </span>
                 <Button
@@ -3783,8 +3783,8 @@ export default function HomePage() {
                   if (open) openDockRenameEstimate();
                 }}
               >
-                <div className="group flex items-center gap-2">
-                  <span className="pointer-events-none rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                <div className="group relative flex h-11 w-11 items-center justify-center">
+                  <span className="pointer-events-none absolute right-[calc(100%+0.6rem)] top-1/2 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
                     Rename Estimate
                   </span>
                   <PopoverTrigger asChild>
@@ -3836,8 +3836,8 @@ export default function HomePage() {
                   if (open) openDockRenameProject();
                 }}
               >
-                <div className="group flex items-center gap-2">
-                  <span className="pointer-events-none rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                <div className="group relative flex h-11 w-11 items-center justify-center">
+                  <span className="pointer-events-none absolute right-[calc(100%+0.6rem)] top-1/2 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
                     Rename Project
                   </span>
                   <PopoverTrigger asChild>
@@ -3878,8 +3878,8 @@ export default function HomePage() {
                 </PopoverContent>
               </Popover>
 
-              <div className="group flex items-center gap-2">
-                <span className="pointer-events-none rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+              <div className="group relative flex h-11 w-11 items-center justify-center">
+                <span className="pointer-events-none absolute right-[calc(100%+0.6rem)] top-1/2 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
                   Open Version History
                 </span>
                 <Button
@@ -3893,8 +3893,8 @@ export default function HomePage() {
                 </Button>
               </div>
 
-              <div className="group flex items-center gap-2">
-                <span className="pointer-events-none rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+              <div className="group relative flex h-11 w-11 items-center justify-center">
+                <span className="pointer-events-none absolute right-[calc(100%+0.6rem)] top-1/2 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
                   New Estimate
                 </span>
                 <Button
@@ -3914,8 +3914,8 @@ export default function HomePage() {
                   if (open) openDockCreateProject();
                 }}
               >
-                <div className="group flex items-center gap-2">
-                  <span className="pointer-events-none rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:opacity-100 group-focus-within:opacity-100">
+                <div className="group relative flex h-11 w-11 items-center justify-center">
+                  <span className="pointer-events-none absolute right-[calc(100%+0.6rem)] top-1/2 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
                     Create Project
                   </span>
                   <PopoverTrigger asChild>
