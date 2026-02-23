@@ -8,6 +8,7 @@ import type {
   MasterTemplateSelectionConfig,
   PandaDocBindingTargetType,
   PandaDocTemplateBinding,
+  PandaDocTemplateRule,
   PandaDocTemplateConfig,
 } from "@/lib/types";
 
@@ -70,7 +71,15 @@ export async function POST(request: NextRequest) {
     const hasMasterTemplatePages =
       normalizedMasterTemplate.pages.length > 0;
     const hasPandaDocTemplate = Boolean(normalizedPandaDocTemplate?.templateUuid);
-    if (!hasTemplatePdf && !hasMasterTemplatePages && !hasPandaDocTemplate) {
+    const hasPandaDocRules = Boolean(
+      normalizedPandaDocTemplate?.rules?.length
+    );
+    if (
+      !hasTemplatePdf &&
+      !hasMasterTemplatePages &&
+      !hasPandaDocTemplate &&
+      !hasPandaDocRules
+    ) {
       return NextResponse.json(
         {
           error:
@@ -94,7 +103,7 @@ export async function POST(request: NextRequest) {
     const templateVersion = normalizeTemplateVersion(body.templateVersion);
     const id = slugify(name);
     const config: TemplateConfig = {
-      version: hasPandaDocTemplate ? 3 : hasMasterTemplatePages ? 2 : 1,
+      version: hasPandaDocTemplate || hasPandaDocRules ? 3 : hasMasterTemplatePages ? 2 : 1,
       id,
       name,
       templateVersion,
@@ -228,8 +237,9 @@ function normalizePandaDocTemplate(value: unknown): PandaDocTemplateConfig | und
   const templateName = String(source.templateName ?? "").trim();
   const recipientRole = String(source.recipientRole ?? "").trim();
   const bindings = normalizePandaDocBindings(source.bindings);
+  const rules = normalizePandaDocRules(source.rules);
 
-  if (!templateUuid && !bindings.length && !recipientRole) {
+  if (!templateUuid && !bindings.length && !recipientRole && !rules.length) {
     return undefined;
   }
 
@@ -238,6 +248,7 @@ function normalizePandaDocTemplate(value: unknown): PandaDocTemplateConfig | und
     templateName: templateName || undefined,
     recipientRole: recipientRole || undefined,
     bindings,
+    rules: rules.length ? rules : undefined,
   };
 }
 
@@ -265,6 +276,37 @@ function normalizePandaDocBindings(value: unknown): PandaDocTemplateBinding[] {
       targetName,
       targetFieldType,
       role,
+    });
+  });
+
+  return normalized;
+}
+
+function normalizePandaDocRules(value: unknown): PandaDocTemplateRule[] {
+  if (!Array.isArray(value)) return [];
+  const normalized: PandaDocTemplateRule[] = [];
+  const seen = new Set<string>();
+
+  value.forEach((entry, index) => {
+    if (!entry || typeof entry !== "object") return;
+    const rule = entry as Record<string, unknown>;
+    const templateUuid = String(rule.templateUuid ?? "").trim();
+    if (!templateUuid) return;
+    const vendorId = String(rule.vendorId ?? "").trim() || undefined;
+    const vendorName = String(rule.vendorName ?? "").trim() || undefined;
+    const projectType = String(rule.projectType ?? "").trim() || undefined;
+    const dedupeKey = `${vendorId ?? ""}|${vendorName ?? ""}|${projectType ?? ""}|${templateUuid}`;
+    if (seen.has(dedupeKey)) return;
+    seen.add(dedupeKey);
+    normalized.push({
+      id: String(rule.id ?? `rule-${index + 1}`).trim() || `rule-${index + 1}`,
+      vendorId,
+      vendorName,
+      projectType,
+      templateUuid,
+      templateName: String(rule.templateName ?? "").trim() || undefined,
+      recipientRole: String(rule.recipientRole ?? "").trim() || undefined,
+      isActive: rule.isActive !== false,
     });
   });
 

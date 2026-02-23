@@ -17,7 +17,11 @@ import {
   getOrganizationScopedTeams,
   pickOrganizationTeam,
 } from "@/lib/org-teams";
-import type { PandaDocTemplateBinding, TemplateConfig } from "@/lib/types";
+import type {
+  PandaDocTemplateBinding,
+  PandaDocTemplateRule,
+  TemplateConfig,
+} from "@/lib/types";
 import {
   Card,
   CardContent,
@@ -61,6 +65,8 @@ type PandaDocTemplateDetails = {
 };
 
 const STATIC_SOURCE_KEYS = getSourceFieldKeys();
+const ANY_VENDOR_VALUE = "__any_vendor__";
+const ANY_PROJECT_TYPE_VALUE = "__any_project_type__";
 
 function normalizedKey(value: string) {
   return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -102,6 +108,7 @@ export default function AdminPage() {
   const [templateVersion, setTemplateVersion] = useState(1);
   const [recipientRole, setRecipientRole] = useState("Client");
   const [bindings, setBindings] = useState<PandaDocTemplateBinding[]>([]);
+  const [templateRules, setTemplateRules] = useState<PandaDocTemplateRule[]>([]);
 
   const [search, setSearch] = useState("");
   const [templates, setTemplates] = useState<PandaDocTemplateListItem[]>([]);
@@ -155,6 +162,8 @@ export default function AdminPage() {
           },
           memberships: { user: {} },
           estimates: {},
+          vendors: {},
+          projectTypes: {},
         },
       }
     : {
@@ -162,6 +171,8 @@ export default function AdminPage() {
           $: { where: { domain: "__none__" } },
           memberships: { user: {} },
           estimates: {},
+          vendors: {},
+          projectTypes: {},
         },
       };
 
@@ -189,6 +200,49 @@ export default function AdminPage() {
     );
   }, [convexUser?.id, orgScopedTeams]);
   const catalogTeam = orgTeam ?? orgMemberTeams[0] ?? allMemberTeams[0] ?? null;
+  const vendorOptions = useMemo(() => {
+    const source = Array.isArray(catalogTeam?.vendors) ? catalogTeam.vendors : [];
+    const list = source
+      .filter((vendor) => vendor?.isActive !== false)
+      .map((vendor, index) => ({
+        id: String(vendor?.id ?? ""),
+        name: String(vendor?.name ?? "").trim(),
+        sortOrder:
+          typeof vendor?.sortOrder === "number" ? vendor.sortOrder : index + 1,
+      }))
+      .filter((vendor) => vendor.id && vendor.name);
+    return list.sort((a, b) => {
+      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+      return a.name.localeCompare(b.name);
+    });
+  }, [catalogTeam?.vendors]);
+  const projectTypeOptions = useMemo(() => {
+    const source = Array.isArray(catalogTeam?.projectTypes)
+      ? catalogTeam.projectTypes
+      : [];
+    const seen = new Set<string>();
+    const list = source
+      .filter((projectType) => projectType?.isActive !== false)
+      .map((projectType, index) => ({
+        label: String(projectType?.label ?? "").trim(),
+        sortOrder:
+          typeof projectType?.sortOrder === "number"
+            ? projectType.sortOrder
+            : index + 1,
+      }))
+      .filter((projectType) => projectType.label)
+      .sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+        return a.label.localeCompare(b.label);
+      })
+      .filter((projectType) => {
+        const key = projectType.label.toLowerCase();
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    return list.map((projectType) => projectType.label);
+  }, [catalogTeam?.projectTypes]);
 
   const templateNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -398,6 +452,9 @@ export default function AdminPage() {
       const configBindings = Array.isArray(config.pandadoc?.bindings)
         ? config.pandadoc.bindings
         : [];
+      const configRules = Array.isArray(config.pandadoc?.rules)
+        ? config.pandadoc.rules
+        : [];
       setConfigName(config.name || "Team PandaDoc Mapping");
       setTemplateVersion(
         Number.isFinite(Number(config.templateVersion)) &&
@@ -407,6 +464,20 @@ export default function AdminPage() {
       );
       setRecipientRole(config.pandadoc?.recipientRole ?? "Client");
       setBindings(configBindings);
+      setTemplateRules(
+        configRules.map((rule, index) => ({
+          id:
+            String(rule.id ?? "").trim() ||
+            `rule-${Date.now()}-${index + 1}`,
+          vendorId: String(rule.vendorId ?? "").trim() || undefined,
+          vendorName: String(rule.vendorName ?? "").trim() || undefined,
+          projectType: String(rule.projectType ?? "").trim() || undefined,
+          templateUuid: String(rule.templateUuid ?? "").trim(),
+          templateName: String(rule.templateName ?? "").trim() || undefined,
+          recipientRole: String(rule.recipientRole ?? "").trim() || undefined,
+          isActive: rule.isActive !== false,
+        }))
+      );
 
       const presetTemplateId = String(config.pandadoc?.templateUuid ?? "").trim();
       if (presetTemplateId) {
@@ -465,6 +536,55 @@ export default function AdminPage() {
 
   const addBinding = () => {
     setBindings((prev) => [...prev, createBinding(templateDetails, sourceKeyOptions)]);
+  };
+
+  const updateTemplateRule = (
+    ruleId: string,
+    patch: Partial<PandaDocTemplateRule>
+  ) => {
+    setTemplateRules((prev) =>
+      prev.map((rule) => {
+        if (rule.id !== ruleId) return rule;
+        const next = { ...rule, ...patch };
+        const templateUuid = String(next.templateUuid ?? "").trim();
+        const templateName =
+          templateNameById.get(templateUuid) ||
+          String(next.templateName ?? "").trim() ||
+          undefined;
+        return {
+          ...next,
+          templateUuid,
+          templateName,
+          vendorId: String(next.vendorId ?? "").trim() || undefined,
+          vendorName: String(next.vendorName ?? "").trim() || undefined,
+          projectType: String(next.projectType ?? "").trim() || undefined,
+          recipientRole: String(next.recipientRole ?? "").trim() || undefined,
+          isActive: next.isActive !== false,
+        };
+      })
+    );
+  };
+
+  const removeTemplateRule = (ruleId: string) => {
+    setTemplateRules((prev) => prev.filter((rule) => rule.id !== ruleId));
+  };
+
+  const addTemplateRule = () => {
+    const defaultTemplateUuid =
+      selectedTemplateId.trim() ||
+      (templates[0]?.id ? String(templates[0].id).trim() : "");
+    const defaultTemplateName =
+      templateNameById.get(defaultTemplateUuid) ||
+      (templates[0]?.name ? String(templates[0].name).trim() : undefined);
+    setTemplateRules((prev) => [
+      ...prev,
+      {
+        id: `rule-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        templateUuid: defaultTemplateUuid,
+        templateName: defaultTemplateName,
+        isActive: true,
+      },
+    ]);
   };
 
   const handleAutoMap = () => {
@@ -572,12 +692,6 @@ export default function AdminPage() {
       return;
     }
 
-    const templateUuid = selectedTemplateId.trim();
-    if (!templateUuid) {
-      setSaveError("Select a PandaDoc template before saving.");
-      return;
-    }
-
     const cleanedBindings = bindings
       .map((binding, index) => {
         const sourceKey = String(binding.sourceKey ?? "").trim();
@@ -599,6 +713,37 @@ export default function AdminPage() {
         return next;
       })
       .filter((binding): binding is PandaDocTemplateBinding => Boolean(binding));
+    const cleanedRules = templateRules
+      .map((rule, index) => {
+        const templateUuid = String(rule.templateUuid ?? "").trim();
+        if (!templateUuid) return null;
+        const vendorId = String(rule.vendorId ?? "").trim();
+        const vendorName =
+          vendorOptions.find((vendor) => vendor.id === vendorId)?.name ||
+          String(rule.vendorName ?? "").trim();
+        const projectType = String(rule.projectType ?? "").trim();
+        return {
+          id: String(rule.id ?? `rule-${index + 1}`).trim() || `rule-${index + 1}`,
+          vendorId: vendorId || undefined,
+          vendorName: vendorName || undefined,
+          projectType: projectType || undefined,
+          templateUuid,
+          templateName:
+            templateNameById.get(templateUuid) ||
+            String(rule.templateName ?? "").trim() ||
+            undefined,
+          recipientRole: String(rule.recipientRole ?? "").trim() || undefined,
+          isActive: rule.isActive !== false,
+        } satisfies PandaDocTemplateRule;
+      })
+      .filter((rule): rule is PandaDocTemplateRule => Boolean(rule));
+    const templateUuid = selectedTemplateId.trim();
+    if (!templateUuid && !cleanedRules.length) {
+      setSaveError(
+        "Select a default PandaDoc template or add at least one routing rule."
+      );
+      return;
+    }
 
     setSaveLoading(true);
     try {
@@ -616,6 +761,7 @@ export default function AdminPage() {
               templateNameById.get(templateUuid) || templateDetails?.name || undefined,
             recipientRole: recipientRole.trim() || undefined,
             bindings: cleanedBindings,
+            rules: cleanedRules,
           },
         }),
       });
@@ -842,6 +988,182 @@ export default function AdminPage() {
                 </>
               ) : (
                 "Select a PandaDoc template to load roles, tokens, and fields."
+              )}
+            </div>
+
+            <Separator />
+
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">
+                    Template Routing Rules
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Route PandaDoc template by vendor + project type. First exact
+                    match wins, then less specific matches.
+                  </p>
+                </div>
+                <Button variant="outline" size="sm" onClick={addTemplateRule}>
+                  <Plus className="h-4 w-4" />
+                  Add rule
+                </Button>
+              </div>
+              {templateRules.length ? (
+                <div className="space-y-2">
+                  {templateRules.map((rule) => {
+                    const activeVendorId = String(rule.vendorId ?? "").trim();
+                    const activeProjectType = String(rule.projectType ?? "").trim();
+                    const activeTemplateId = String(rule.templateUuid ?? "").trim();
+                    return (
+                      <div
+                        key={rule.id}
+                        className="grid gap-2 rounded-lg border border-border/60 bg-background/70 p-3 md:grid-cols-[auto_1fr_1fr_1fr_1fr_auto]"
+                      >
+                        <label className="flex items-center justify-center rounded-lg border border-border/60 bg-card/70 px-2">
+                          <Checkbox
+                            checked={rule.isActive !== false}
+                            onCheckedChange={(checked) =>
+                              updateTemplateRule(rule.id, {
+                                isActive: checked === true,
+                              })
+                            }
+                          />
+                        </label>
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                            Vendor
+                          </label>
+                          <Select
+                            value={activeVendorId || ANY_VENDOR_VALUE}
+                            onValueChange={(value) => {
+                              if (value === ANY_VENDOR_VALUE) {
+                                updateTemplateRule(rule.id, {
+                                  vendorId: undefined,
+                                  vendorName: undefined,
+                                });
+                                return;
+                              }
+                              const vendor =
+                                vendorOptions.find((entry) => entry.id === value) ??
+                                null;
+                              updateTemplateRule(rule.id, {
+                                vendorId: vendor?.id,
+                                vendorName: vendor?.name,
+                              });
+                            }}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Any vendor" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={ANY_VENDOR_VALUE}>
+                                Any vendor
+                              </SelectItem>
+                              {vendorOptions.map((vendor) => (
+                                <SelectItem key={vendor.id} value={vendor.id}>
+                                  {vendor.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                            Project type
+                          </label>
+                          <Select
+                            value={activeProjectType || ANY_PROJECT_TYPE_VALUE}
+                            onValueChange={(value) =>
+                              updateTemplateRule(rule.id, {
+                                projectType:
+                                  value === ANY_PROJECT_TYPE_VALUE
+                                    ? undefined
+                                    : value,
+                              })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Any project type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value={ANY_PROJECT_TYPE_VALUE}>
+                                Any project type
+                              </SelectItem>
+                              {projectTypeOptions.map((projectType) => (
+                                <SelectItem key={projectType} value={projectType}>
+                                  {projectType}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                            PandaDoc template
+                          </label>
+                          <Select
+                            value={activeTemplateId || "__none__"}
+                            onValueChange={(value) =>
+                              updateTemplateRule(rule.id, {
+                                templateUuid: value === "__none__" ? "" : value,
+                              })
+                            }
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select PandaDoc template" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none__">
+                                Select PandaDoc template
+                              </SelectItem>
+                              {templates.map((template) => (
+                                <SelectItem key={template.id} value={template.id}>
+                                  {template.name}
+                                </SelectItem>
+                              ))}
+                              {activeTemplateId &&
+                              !templates.some(
+                                (template) => template.id === activeTemplateId
+                              ) ? (
+                                <SelectItem value={activeTemplateId}>
+                                  {templateNameById.get(activeTemplateId) ||
+                                    activeTemplateId}
+                                </SelectItem>
+                              ) : null}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                            Recipient role (optional)
+                          </label>
+                          <Input
+                            value={String(rule.recipientRole ?? "")}
+                            onChange={(event) =>
+                              updateTemplateRule(rule.id, {
+                                recipientRole: event.target.value,
+                              })
+                            }
+                            placeholder="Use default role"
+                          />
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => removeTemplateRule(rule.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">
+                  No routing rules yet. Add rules to map vendor/project type to
+                  specific PandaDoc templates.
+                </p>
               )}
             </div>
           </CardContent>

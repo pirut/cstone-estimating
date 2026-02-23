@@ -39,6 +39,7 @@ import type {
   LibraryItem,
   LibraryState,
   LibraryType,
+  PandaDocTemplateConfig,
   TemplateConfig,
   UploadedFile,
 } from "@/lib/types";
@@ -241,6 +242,133 @@ function getEstimateProjectType(estimate: any) {
   const valuesProjectType = String(estimate?.payload?.values?.project_type ?? "").trim();
   if (valuesProjectType) return valuesProjectType;
   return "";
+}
+
+function normalizeTemplateMatchKey(value: unknown) {
+  return String(value ?? "").trim().toLowerCase();
+}
+
+function collectEstimateVendorKeys(
+  estimatePayload: Record<string, any> | null,
+  estimateValues: Record<string, string | number>
+) {
+  const vendorIds = new Set<string>();
+  const vendorNames = new Set<string>();
+  const addVendorId = (value: unknown) => {
+    const normalized = normalizeTemplateMatchKey(value);
+    if (!normalized) return;
+    vendorIds.add(normalized);
+  };
+  const addVendorName = (value: unknown) => {
+    const normalized = normalizeTemplateMatchKey(value);
+    if (!normalized) return;
+    vendorNames.add(normalized);
+  };
+
+  if (estimatePayload && typeof estimatePayload === "object") {
+    const products = Array.isArray(estimatePayload.products)
+      ? estimatePayload.products
+      : [];
+    products.forEach((item) => {
+      if (!item || typeof item !== "object") return;
+      addVendorId((item as Record<string, unknown>).vendorId);
+      addVendorName((item as Record<string, unknown>).name);
+    });
+    const changeOrder =
+      estimatePayload.changeOrder && typeof estimatePayload.changeOrder === "object"
+        ? (estimatePayload.changeOrder as Record<string, unknown>)
+        : null;
+    addVendorId(changeOrder?.vendorId);
+    addVendorName(changeOrder?.vendorName);
+    const values =
+      estimatePayload.values &&
+      typeof estimatePayload.values === "object" &&
+      !Array.isArray(estimatePayload.values)
+        ? (estimatePayload.values as Record<string, unknown>)
+        : null;
+    addVendorName(values?.change_order_vendor);
+  }
+
+  addVendorName(estimateValues.change_order_vendor);
+
+  return { vendorIds, vendorNames };
+}
+
+function resolvePandaDocTemplateConfigForEstimate(
+  pandadocConfig: PandaDocTemplateConfig | undefined,
+  estimatePayload: Record<string, any> | null,
+  estimateValues: Record<string, string | number>
+) {
+  const defaultTemplateUuid = String(pandadocConfig?.templateUuid ?? "").trim();
+  const defaultTemplateName = String(pandadocConfig?.templateName ?? "").trim();
+  const defaultRecipientRole = String(pandadocConfig?.recipientRole ?? "").trim();
+  const rules = Array.isArray(pandadocConfig?.rules)
+    ? pandadocConfig.rules.filter((rule) => rule?.isActive !== false)
+    : [];
+  if (!rules.length) {
+    return {
+      templateUuid: defaultTemplateUuid,
+      templateName: defaultTemplateName || undefined,
+      recipientRole: defaultRecipientRole || undefined,
+      matchedRuleId: null as string | null,
+    };
+  }
+
+  const projectType =
+    normalizeTemplateMatchKey(estimatePayload?.info?.project_type) ||
+    normalizeTemplateMatchKey(estimatePayload?.values?.project_type) ||
+    normalizeTemplateMatchKey(estimateValues.project_type);
+  const { vendorIds, vendorNames } = collectEstimateVendorKeys(
+    estimatePayload,
+    estimateValues
+  );
+
+  const scoredRules = rules
+    .map((rule, index) => {
+      const ruleVendorId = normalizeTemplateMatchKey(rule.vendorId);
+      const ruleVendorName = normalizeTemplateMatchKey(rule.vendorName);
+      const ruleProjectType = normalizeTemplateMatchKey(rule.projectType);
+
+      if (ruleVendorId && !vendorIds.has(ruleVendorId)) return null;
+      if (ruleVendorName && !vendorNames.has(ruleVendorName)) return null;
+      if (ruleProjectType && ruleProjectType !== projectType) return null;
+
+      const specificity =
+        (ruleVendorId ? 1 : 0) +
+        (ruleVendorName ? 1 : 0) +
+        (ruleProjectType ? 1 : 0);
+      return { rule, index, specificity };
+    })
+    .filter((entry): entry is { rule: any; index: number; specificity: number } =>
+      Boolean(entry)
+    )
+    .sort((a, b) => {
+      if (a.specificity !== b.specificity) return b.specificity - a.specificity;
+      return a.index - b.index;
+    });
+
+  const matched = scoredRules[0]?.rule;
+  if (!matched) {
+    return {
+      templateUuid: defaultTemplateUuid,
+      templateName: defaultTemplateName || undefined,
+      recipientRole: defaultRecipientRole || undefined,
+      matchedRuleId: null as string | null,
+    };
+  }
+
+  const matchedTemplateUuid = String(matched.templateUuid ?? "").trim();
+  const matchedTemplateName = String(matched.templateName ?? "").trim();
+  const matchedRecipientRole = String(matched.recipientRole ?? "").trim();
+
+  return {
+    templateUuid: matchedTemplateUuid || defaultTemplateUuid,
+    templateName:
+      matchedTemplateName || defaultTemplateName || undefined,
+    recipientRole:
+      matchedRecipientRole || defaultRecipientRole || undefined,
+    matchedRuleId: String(matched.id ?? "").trim() || null,
+  };
 }
 
 function formatRelativeTime(timestamp: number | null | undefined) {
@@ -1749,10 +1877,21 @@ export default function HomePage() {
     const templateBindings = Array.isArray(templatePandaDocConfig?.bindings)
       ? templatePandaDocConfig.bindings
       : [];
+    const resolvedPandaDocTemplate = resolvePandaDocTemplateConfigForEstimate(
+      templatePandaDocConfig,
+      estimatePayload,
+      estimateValues
+    );
     const templateRecipientRole = String(
-      templatePandaDocConfig?.recipientRole ?? ""
+      resolvedPandaDocTemplate.recipientRole ??
+        templatePandaDocConfig?.recipientRole ??
+        ""
     ).trim();
-    const templateUuid = String(templatePandaDocConfig?.templateUuid ?? "").trim();
+    const templateUuid = String(
+      resolvedPandaDocTemplate.templateUuid ??
+        templatePandaDocConfig?.templateUuid ??
+        ""
+    ).trim();
     const trackedDocumentId = String(
       activeTrackedPandaDocDocument?.documentId ?? ""
     ).trim();

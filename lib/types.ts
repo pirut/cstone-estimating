@@ -96,11 +96,23 @@ export type PandaDocTemplateBinding = {
   role?: string;
 };
 
+export type PandaDocTemplateRule = {
+  id: string;
+  vendorId?: string;
+  vendorName?: string;
+  projectType?: string;
+  templateUuid: string;
+  templateName?: string;
+  recipientRole?: string;
+  isActive?: boolean;
+};
+
 export type PandaDocTemplateConfig = {
   templateUuid: string;
   templateName?: string;
   recipientRole?: string;
   bindings: PandaDocTemplateBinding[];
+  rules?: PandaDocTemplateRule[];
 };
 
 export type TemplateConfig = {
