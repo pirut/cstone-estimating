@@ -39,35 +39,6 @@ function toPositiveInteger(value: unknown, fallback: number) {
   return rounded > 0 ? rounded : fallback;
 }
 
-function toDocumentValueAmount(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  const raw = String(value ?? "").trim();
-  if (!raw) return undefined;
-  const normalized = raw.replace(/[()]/g, "").replace(/[^0-9.-]/g, "");
-  if (!normalized || normalized === "." || normalized === "-" || normalized === "-.") {
-    return undefined;
-  }
-  const parsed = Number(normalized);
-  if (!Number.isFinite(parsed)) return undefined;
-  return raw.includes("(") && raw.includes(")") ? -Math.abs(parsed) : parsed;
-}
-
-function resolveFallbackDocumentValueAmount(candidates: unknown[]) {
-  let firstFinite: number | undefined;
-  for (const candidate of candidates) {
-    const parsed = toDocumentValueAmount(candidate);
-    if (typeof parsed === "number" && Number.isFinite(parsed)) {
-      if (firstFinite === undefined) {
-        firstFinite = parsed;
-      }
-      if (parsed > 0) {
-        return parsed;
-      }
-    }
-  }
-  return firstFinite;
-}
-
 function normalizePandaDocRecipient(
   value: unknown
 ): PandaDocRecipientInput | undefined {
@@ -200,29 +171,6 @@ export async function POST(request: NextRequest) {
       sourceValues,
       mappingConfig
     );
-    const fallbackDocumentValueCandidates: unknown[] = [
-      sourceValues.total_contract_price,
-      sourceValues.final_payment,
-      sourceValues.change_order_total,
-      estimatePayload?.totals?.total_contract_price,
-      estimatePayload?.totals?.final_payment,
-      estimatePayload?.totals?.change_order_total,
-      estimatePayload?.values?.total_contract_price,
-      estimatePayload?.values?.final_payment,
-      estimatePayload?.values?.change_order_total,
-      estimateData?.totals?.total_contract_price,
-      estimateData?.totals?.final_payment,
-      estimateData?.totals?.change_order_total,
-      estimateData?.values?.total_contract_price,
-      estimateData?.values?.final_payment,
-      estimateData?.values?.change_order_total,
-      fieldValues.total_contract_price,
-      fieldValues.final_payment,
-      fieldValues.change_order_total,
-    ];
-    const desiredDocumentValueAmount = resolveFallbackDocumentValueAmount(
-      fallbackDocumentValueCandidates
-    );
 
     const updateDraftPayload = buildPandaDocDraft({
       fieldValues,
@@ -283,7 +231,6 @@ export async function POST(request: NextRequest) {
       sessionLifetimeSeconds,
       recipientEmail: updateRecipientEmail || createRecipientEmail,
       sendOptions: sendConfig,
-      documentValueAmount: desiredDocumentValueAmount,
     };
     const generationCreateCommon = {
       draft: createDraftPayload,
@@ -292,7 +239,6 @@ export async function POST(request: NextRequest) {
       sessionLifetimeSeconds,
       recipientEmail: createRecipientEmail,
       sendOptions: sendConfig,
-      documentValueAmount: desiredDocumentValueAmount,
     };
     const canFallbackCreate =
       allowCreateFallback && Boolean(createDraftPayload.templateUuid);

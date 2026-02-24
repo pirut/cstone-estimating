@@ -1134,23 +1134,8 @@ export default function HomePage() {
     linkedDocumentLive?.id === activeTrackedDocumentId
       ? linkedDocumentLive?.status
       : undefined;
-  const activeTrackedDocumentValue =
-    linkedDocumentLive?.id === activeTrackedDocumentId
-      ? formatPandaDocDocumentValue({
-          valueAmount: linkedDocumentLive?.valueAmount,
-          valueCurrency: linkedDocumentLive?.valueCurrency,
-          valueFormatted: linkedDocumentLive?.valueFormatted,
-        })
-      : null;
   const resolvedTrackedDocumentStatus =
     activeTrackedDocumentStatus ?? activeTrackedPandaDocDocument?.status;
-  const resolvedTrackedDocumentValue =
-    activeTrackedDocumentValue ??
-    formatPandaDocDocumentValue({
-      valueAmount: activeTrackedPandaDocDocument?.valueAmount,
-      valueCurrency: activeTrackedPandaDocDocument?.valueCurrency,
-      valueFormatted: activeTrackedPandaDocDocument?.valueFormatted,
-    });
   const trackedDocumentIsArchived = Boolean(
     activeTrackedDocumentId &&
       resolvedTrackedDocumentStatus === "document.archived"
@@ -4605,15 +4590,6 @@ export default function HomePage() {
                       </span>
                     </div>
                   ) : null}
-                  {activeTrackedPandaDocDocument?.documentId &&
-                  resolvedTrackedDocumentValue ? (
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-muted-foreground">Document value</span>
-                      <span className="text-right font-medium text-foreground">
-                        {resolvedTrackedDocumentValue}
-                      </span>
-                    </div>
-                  ) : null}
                 </div>
                 <Separator />
                 {activeTrackedPandaDocDocument?.documentId &&
@@ -4707,20 +4683,6 @@ export default function HomePage() {
                         ? ` · Business Central sync: ${lastGeneration.businessCentralSync.status}`
                         : ""}
                     </p>
-                    {formatPandaDocDocumentValue({
-                      valueAmount: lastGeneration.document.valueAmount,
-                      valueCurrency: lastGeneration.document.valueCurrency,
-                      valueFormatted: lastGeneration.document.valueFormatted,
-                    }) ? (
-                      <p className="text-xs text-muted-foreground">
-                        Document value:{" "}
-                        {formatPandaDocDocumentValue({
-                          valueAmount: lastGeneration.document.valueAmount,
-                          valueCurrency: lastGeneration.document.valueCurrency,
-                          valueFormatted: lastGeneration.document.valueFormatted,
-                        })}
-                      </p>
-                    ) : null}
                     <div className="flex flex-wrap gap-2">
                       {lastGeneration.session?.url ? (
                         <Button asChild size="sm" variant="outline">

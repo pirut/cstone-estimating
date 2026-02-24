@@ -9,10 +9,6 @@ const DEFAULT_READY_POLL_INTERVAL_MS = 1_200;
 const UPLOADED_STATUS = "document.uploaded";
 const ERROR_STATUS = "document.error";
 const DRAFT_STATUS = "document.draft";
-const DOCUMENT_VALUE_ADJUSTMENT_KEY = "cstone_total_adjustment";
-const DOCUMENT_VALUE_SYNC_TOLERANCE = 0.01;
-const DOCUMENT_VALUE_SYNC_ATTEMPTS = 6;
-const DOCUMENT_VALUE_SYNC_DELAY_MS = 700;
 
 export type PandaDocRecipientInput = {
   email?: string;
@@ -76,7 +72,6 @@ export type CreatePandaDocDocumentOptions = {
   sessionLifetimeSeconds: number;
   recipientEmail?: string;
   sendOptions?: PandaDocSendOptions;
-  documentValueAmount?: number;
 };
 
 export type UpdatePandaDocDocumentOptions = {
@@ -87,7 +82,6 @@ export type UpdatePandaDocDocumentOptions = {
   sessionLifetimeSeconds: number;
   recipientEmail?: string;
   sendOptions?: PandaDocSendOptions;
-  documentValueAmount?: number;
 };
 
 export type PandaDocCreateResult = {
@@ -165,35 +159,9 @@ type PandaDocGrandTotal = {
   currency?: string;
 };
 
-type PandaDocQuoteAdjustment = {
-  type?: string;
-  value?: string | number;
-};
-
-type PandaDocQuoteSummary = {
-  subtotal?: string;
-  total?: string;
-  discounts?: Record<string, PandaDocQuoteAdjustment>;
-  fees?: Record<string, PandaDocQuoteAdjustment>;
-  taxes?: Record<string, PandaDocQuoteAdjustment>;
-};
-
-type PandaDocQuoteDetails = {
-  id?: string;
-  currency?: string;
-  total?: string;
-  summary?: PandaDocQuoteSummary;
-  settings?: {
-    selected?: boolean;
-  };
-};
-
 type PandaDocDetailsResponse = {
   recipients?: PandaDocRecipientDetails[];
   grand_total?: PandaDocGrandTotal;
-  pricing?: {
-    quotes?: PandaDocQuoteDetails[];
-  };
 };
 
 type PandaDocTemplateListResponse = {
@@ -267,10 +235,6 @@ function toPositiveInteger(value: unknown, fallback: number) {
   return rounded > 0 ? rounded : fallback;
 }
 
-function roundCurrencyAmount(value: number) {
-  return Math.round(value * 100) / 100;
-}
-
 function toNumericAmount(value: unknown) {
   const raw = coerceString(value);
   if (!raw) return undefined;
@@ -281,40 +245,6 @@ function toNumericAmount(value: unknown) {
   const parsed = Number(normalized);
   if (!Number.isFinite(parsed)) return undefined;
   return raw.includes("(") && raw.includes(")") ? -Math.abs(parsed) : parsed;
-}
-
-function normalizeAdjustmentType(value: unknown): "flat" | "percent" {
-  return coerceString(value).toLowerCase() === "percent" ? "percent" : "flat";
-}
-
-function toAdjustmentPayload(
-  source: Record<string, PandaDocQuoteAdjustment> | undefined
-) {
-  const payload: Record<string, { type: "flat" | "percent"; value: number }> = {};
-  if (!source || typeof source !== "object") return payload;
-  Object.entries(source).forEach(([key, entry]) => {
-    const name = coerceString(key);
-    const amount = toNumericAmount(entry?.value);
-    if (!name || amount === undefined) return;
-    payload[name] = {
-      type: normalizeAdjustmentType(entry?.type),
-      value: roundCurrencyAmount(Math.abs(amount)),
-    };
-  });
-  return payload;
-}
-
-function pickQuoteToAdjust(quotes: PandaDocQuoteDetails[] | undefined) {
-  if (!Array.isArray(quotes) || quotes.length === 0) return undefined;
-  return (
-    quotes.find(
-      (quote) => Boolean(quote?.settings?.selected) && Boolean(coerceString(quote?.id))
-    ) ?? quotes.find((quote) => Boolean(coerceString(quote?.id)))
-  );
-}
-
-function quoteTotalAmount(quote: PandaDocQuoteDetails | undefined) {
-  return toNumericAmount(quote?.summary?.total) ?? toNumericAmount(quote?.total);
 }
 
 function normalizeCurrencyCode(value: unknown) {
@@ -795,125 +725,15 @@ async function createPandaDocSession(
 
 async function getPandaDocMatchedRecipient(
   documentId: string,
-  recipientEmail?: string,
-  documentValueAmount?: number
+  recipientEmail?: string
 ) {
-  const fetchDetails = () =>
-    pandadocRequest<PandaDocDetailsResponse>(
-      `/documents/${encodeURIComponent(documentId)}/details`,
-      {
-        method: "GET",
-        expectedStatus: 200,
-      }
-    );
-
-  let detailsResponse = await fetchDetails();
-  const desiredDocumentValue =
-    typeof documentValueAmount === "number" &&
-    Number.isFinite(documentValueAmount) &&
-    documentValueAmount > 0
-      ? roundCurrencyAmount(documentValueAmount)
-      : undefined;
-
-  if (desiredDocumentValue !== undefined) {
-    const quote = pickQuoteToAdjust(detailsResponse.pricing?.quotes);
-    const quoteId = coerceString(quote?.id);
-    if (!quoteId) {
-      throw new Error(
-        "Unable to set PandaDoc document value because no quote was found on the document. Ensure the template has a pricing table/quote."
-      );
+  const detailsResponse = await pandadocRequest<PandaDocDetailsResponse>(
+    `/documents/${encodeURIComponent(documentId)}/details`,
+    {
+      method: "GET",
+      expectedStatus: 200,
     }
-
-    const initialQuoteTotal = quoteTotalAmount(quote);
-    if (initialQuoteTotal === undefined) {
-      throw new Error(
-        `Unable to set PandaDoc document value because quote ${quoteId} has no total.`
-      );
-    }
-
-    const delta = roundCurrencyAmount(desiredDocumentValue - initialQuoteTotal);
-    if (Math.abs(delta) >= DOCUMENT_VALUE_SYNC_TOLERANCE) {
-      const fees = toAdjustmentPayload(quote?.summary?.fees);
-      const discounts = toAdjustmentPayload(quote?.summary?.discounts);
-      const taxes = toAdjustmentPayload(quote?.summary?.taxes);
-
-      delete fees[DOCUMENT_VALUE_ADJUSTMENT_KEY];
-      delete discounts[DOCUMENT_VALUE_ADJUSTMENT_KEY];
-
-      if (delta > 0) {
-        fees[DOCUMENT_VALUE_ADJUSTMENT_KEY] = {
-          type: "flat",
-          value: roundCurrencyAmount(Math.abs(delta)),
-        };
-      } else {
-        discounts[DOCUMENT_VALUE_ADJUSTMENT_KEY] = {
-          type: "flat",
-          value: roundCurrencyAmount(Math.abs(delta)),
-        };
-      }
-
-      const summaryPayload: Record<string, unknown> = {};
-      if (Object.keys(discounts).length > 0) {
-        summaryPayload.discounts = discounts;
-      }
-      if (Object.keys(fees).length > 0) {
-        summaryPayload.fees = fees;
-      }
-      if (Object.keys(taxes).length > 0) {
-        summaryPayload.taxes = taxes;
-      }
-
-      await pandadocRequest<Record<string, unknown>>(
-        `/documents/${encodeURIComponent(documentId)}/quotes/${encodeURIComponent(quoteId)}`,
-        {
-          method: "PUT",
-          expectedStatus: 200,
-          body: {
-            currency: coerceString(quote?.currency) || "USD",
-            summary: summaryPayload,
-          },
-        }
-      );
-    }
-
-    let latestGrandTotal = toDocumentValue(detailsResponse.grand_total)?.amount;
-    let latestQuoteTotal = initialQuoteTotal;
-    for (let attempt = 0; attempt < DOCUMENT_VALUE_SYNC_ATTEMPTS; attempt += 1) {
-      if (attempt > 0) {
-        await new Promise((resolve) =>
-          setTimeout(resolve, DOCUMENT_VALUE_SYNC_DELAY_MS)
-        );
-      }
-      detailsResponse = await fetchDetails();
-      const refreshedQuote =
-        (detailsResponse.pricing?.quotes ?? []).find(
-          (entry) => coerceString(entry?.id) === quoteId
-        ) ?? pickQuoteToAdjust(detailsResponse.pricing?.quotes);
-      latestQuoteTotal = quoteTotalAmount(refreshedQuote) ?? latestQuoteTotal;
-      latestGrandTotal = toDocumentValue(detailsResponse.grand_total)?.amount;
-      if (
-        typeof latestGrandTotal === "number" &&
-        Math.abs(latestGrandTotal - desiredDocumentValue) < DOCUMENT_VALUE_SYNC_TOLERANCE
-      ) {
-        break;
-      }
-    }
-
-    if (
-      typeof latestGrandTotal !== "number" ||
-      Math.abs(latestGrandTotal - desiredDocumentValue) >= DOCUMENT_VALUE_SYNC_TOLERANCE
-    ) {
-      const observedGrandTotal =
-        typeof latestGrandTotal === "number"
-          ? latestGrandTotal.toFixed(2)
-          : "unknown";
-      const observedQuoteTotal =
-        typeof latestQuoteTotal === "number" ? latestQuoteTotal.toFixed(2) : "unknown";
-      throw new Error(
-        `PandaDoc document value did not sync to ${desiredDocumentValue.toFixed(2)}. Observed grand_total=${observedGrandTotal}, quote_total=${observedQuoteTotal}.`
-      );
-    }
-  }
+  );
 
   return {
     matchedRecipient: extractRecipientByEmail(
@@ -941,7 +761,6 @@ export async function createPandaDocDocument(
     sessionLifetimeSeconds,
     recipientEmail,
     sendOptions,
-    documentValueAmount,
   } = options;
 
   const createPayload: Record<string, unknown> = {
@@ -990,11 +809,7 @@ export async function createPandaDocDocument(
     );
   }
 
-  const detailsSummary = await getPandaDocMatchedRecipient(
-    documentId,
-    recipientEmail,
-    documentValueAmount
-  );
+  const detailsSummary = await getPandaDocMatchedRecipient(documentId, recipientEmail);
   const matchedRecipient = detailsSummary.matchedRecipient;
   const value = detailsSummary.value;
 
@@ -1039,7 +854,6 @@ export async function updatePandaDocDocument(
     sessionLifetimeSeconds,
     recipientEmail,
     sendOptions,
-    documentValueAmount,
   } = options;
 
   const normalizedDocumentId = coerceString(documentId);
@@ -1105,8 +919,7 @@ export async function updatePandaDocDocument(
 
   const detailsSummary = await getPandaDocMatchedRecipient(
     normalizedDocumentId,
-    recipientEmail,
-    documentValueAmount
+    recipientEmail
   );
   const matchedRecipient = detailsSummary.matchedRecipient;
   const value = detailsSummary.value;
