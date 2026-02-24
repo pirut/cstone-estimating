@@ -1,4 +1,9 @@
 import type { PandaDocTemplateBinding } from "@/lib/types";
+import {
+  type PandaDocRecipientInput,
+  toBoolean,
+  toPositiveInteger,
+} from "@/lib/server/pandadoc-input";
 
 const REQUIRED_PANDADOC_ENV_VARS = ["PANDADOC_API_KEY"] as const;
 const DEFAULT_RECIPIENT_ROLE = "Client";
@@ -10,12 +15,7 @@ const UPLOADED_STATUS = "document.uploaded";
 const ERROR_STATUS = "document.error";
 const DRAFT_STATUS = "document.draft";
 
-export type PandaDocRecipientInput = {
-  email?: string;
-  firstName?: string;
-  lastName?: string;
-  role?: string;
-};
+export type { PandaDocRecipientInput };
 
 export type PandaDocDraft = {
   name: string;
@@ -216,23 +216,6 @@ export type PandaDocDocumentSummary = {
 
 function coerceString(value: unknown) {
   return String(value ?? "").trim();
-}
-
-function toBoolean(value: unknown, fallback: boolean) {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    if (["1", "true", "yes", "on"].includes(normalized)) return true;
-    if (["0", "false", "no", "off"].includes(normalized)) return false;
-  }
-  return fallback;
-}
-
-function toPositiveInteger(value: unknown, fallback: number) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  const rounded = Math.trunc(parsed);
-  return rounded > 0 ? rounded : fallback;
 }
 
 function toNumericAmount(value: unknown) {

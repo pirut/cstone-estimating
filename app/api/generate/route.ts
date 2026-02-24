@@ -6,12 +6,18 @@ import {
   createPandaDocDocument,
   getPandaDocMissingEnvVars,
   updatePandaDocDocument,
-  type PandaDocRecipientInput,
 } from "@/lib/server/pandadoc";
 import { buildBusinessCentralSyncPreview } from "@/lib/server/business-central-sync";
-import { formatValue } from "@/lib/formatting";
-import { computeEstimate, DEFAULT_DRAFT } from "@/lib/estimate-calculator";
-import type { PandaDocTemplateBinding } from "@/lib/types";
+import {
+  buildFieldValuesFromSourceValues,
+  extractEstimateValues,
+} from "@/lib/server/estimate-values";
+import {
+  normalizePandaDocBindings,
+  normalizePandaDocRecipient,
+  toBoolean,
+  toPositiveInteger,
+} from "@/lib/server/pandadoc-input";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -21,60 +27,6 @@ const DEFAULT_SEND_DOCUMENT = true;
 const DEFAULT_CREATE_SESSION = true;
 const DEFAULT_SESSION_LIFETIME_SECONDS = 900;
 const DEFAULT_ALLOW_CREATE_FALLBACK = true;
-
-function toBoolean(value: unknown, fallback: boolean) {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    if (["1", "true", "yes", "on"].includes(normalized)) return true;
-    if (["0", "false", "no", "off"].includes(normalized)) return false;
-  }
-  return fallback;
-}
-
-function toPositiveInteger(value: unknown, fallback: number) {
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) return fallback;
-  const rounded = Math.trunc(parsed);
-  return rounded > 0 ? rounded : fallback;
-}
-
-function normalizePandaDocRecipient(
-  value: unknown
-): PandaDocRecipientInput | undefined {
-  if (!value || typeof value !== "object") return undefined;
-  const recipient = value as Record<string, unknown>;
-  return {
-    email: String(recipient.email ?? "").trim() || undefined,
-    firstName: String(recipient.firstName ?? "").trim() || undefined,
-    lastName: String(recipient.lastName ?? "").trim() || undefined,
-    role: String(recipient.role ?? "").trim() || undefined,
-  };
-}
-
-function normalizePandaDocBindings(value: unknown): PandaDocTemplateBinding[] {
-  if (!Array.isArray(value)) return [];
-  const normalized: PandaDocTemplateBinding[] = [];
-  value.forEach((entry, index) => {
-    if (!entry || typeof entry !== "object") return;
-    const binding = entry as Record<string, unknown>;
-    const sourceKey = String(binding.sourceKey ?? "").trim();
-    const targetName = String(binding.targetName ?? "").trim();
-    if (!sourceKey || !targetName) return;
-    normalized.push({
-      id: String(binding.id ?? `binding-${index + 1}`).trim() || `binding-${index + 1}`,
-      sourceKey,
-      targetType:
-        String(binding.targetType ?? "").trim().toLowerCase() === "field"
-          ? "field"
-          : "token",
-      targetName,
-      targetFieldType: String(binding.targetFieldType ?? "").trim() || undefined,
-      role: String(binding.role ?? "").trim() || undefined,
-    });
-  });
-  return normalized;
-}
 
 function isRecoverablePandaDocUpdateError(message: string) {
   const normalized = message.toLowerCase();
@@ -297,77 +249,4 @@ export async function POST(request: NextRequest) {
     const message = error instanceof Error ? error.message : "Unknown error.";
     return NextResponse.json({ error: message }, { status: 500 });
   }
-}
-
-function buildFieldValuesFromSourceValues(
-  sourceValues: Record<string, unknown>,
-  mappingConfig: any
-) {
-  const missingValue = mappingConfig.missing_value ?? "";
-  const preparedByMap = mappingConfig.prepared_by_map ?? {};
-  const fieldSpecs = (mappingConfig.fields ?? {}) as Record<
-    string,
-    { sheet?: string; cell?: string; format?: string }
-  >;
-
-  const values: Record<string, string> = {};
-
-  for (const [fieldName, spec] of Object.entries(fieldSpecs)) {
-    const format = String(spec.format || "text");
-    const raw = sourceValues[fieldName];
-    values[fieldName] = formatValue(raw, format, preparedByMap, missingValue);
-  }
-
-  const planSetDate = values.plan_set_date;
-  values.plan_set_date_line =
-    planSetDate && planSetDate !== missingValue ? planSetDate : missingValue;
-
-  for (const [sourceKey, rawValue] of Object.entries(sourceValues)) {
-    if (!sourceKey || sourceKey in values) continue;
-    values[sourceKey] = formatValue(rawValue, "text", preparedByMap, missingValue);
-  }
-
-  return values;
-}
-
-function extractEstimateValues(estimateData: any) {
-  if (!estimateData || typeof estimateData !== "object") return {};
-  if (estimateData.values && typeof estimateData.values === "object") {
-    return estimateData.values as Record<string, unknown>;
-  }
-
-  if (
-    estimateData.info ||
-    estimateData.products ||
-    estimateData.bucking ||
-    estimateData.calculator ||
-    estimateData.changeOrder
-  ) {
-    const changeOrderSource =
-      estimateData.changeOrder && typeof estimateData.changeOrder === "object"
-        ? estimateData.changeOrder
-        : {};
-    const computed = computeEstimate({
-      info: estimateData.info ?? {},
-      products:
-        Array.isArray(estimateData.products) && estimateData.products.length
-          ? estimateData.products
-          : DEFAULT_DRAFT.products,
-      bucking:
-        Array.isArray(estimateData.bucking) && estimateData.bucking.length
-          ? estimateData.bucking
-          : DEFAULT_DRAFT.bucking,
-      calculator: {
-        ...DEFAULT_DRAFT.calculator,
-        ...(estimateData.calculator ?? {}),
-      },
-      changeOrder: {
-        ...DEFAULT_DRAFT.changeOrder,
-        ...(changeOrderSource as Record<string, unknown>),
-      },
-    });
-    return computed.pdfValues as Record<string, unknown>;
-  }
-
-  return estimateData as Record<string, unknown>;
 }
