@@ -1644,11 +1644,13 @@ export default function HomePage() {
       typeof linkedDocumentLive.valueAmount === "number" &&
       Number.isFinite(linkedDocumentLive.valueAmount)
         ? linkedDocumentLive.valueAmount
-        : undefined;
+        : existingDocument.valueAmount;
     const nextValueCurrency =
-      String(linkedDocumentLive.valueCurrency ?? "").trim() || undefined;
+      String(linkedDocumentLive.valueCurrency ?? "").trim() ||
+      existingDocument.valueCurrency;
     const nextValueFormatted =
-      String(linkedDocumentLive.valueFormatted ?? "").trim() || undefined;
+      String(linkedDocumentLive.valueFormatted ?? "").trim() ||
+      existingDocument.valueFormatted;
 
     const hasDocumentChanges =
       nextName !== existingDocument.name ||

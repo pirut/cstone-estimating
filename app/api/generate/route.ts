@@ -21,6 +21,7 @@ const DEFAULT_SEND_DOCUMENT = true;
 const DEFAULT_CREATE_SESSION = true;
 const DEFAULT_SESSION_LIFETIME_SECONDS = 900;
 const DEFAULT_ALLOW_CREATE_FALLBACK = true;
+const DEFAULT_DOCUMENT_VALUE_CURRENCY = "USD";
 
 function toBoolean(value: unknown, fallback: boolean) {
   if (typeof value === "boolean") return value;
@@ -37,6 +38,68 @@ function toPositiveInteger(value: unknown, fallback: number) {
   if (!Number.isFinite(parsed)) return fallback;
   const rounded = Math.trunc(parsed);
   return rounded > 0 ? rounded : fallback;
+}
+
+function toDocumentValueAmount(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const raw = String(value ?? "").trim();
+  if (!raw) return undefined;
+  const normalized = raw.replace(/[()]/g, "").replace(/[^0-9.-]/g, "");
+  if (!normalized || normalized === "." || normalized === "-" || normalized === "-.") {
+    return undefined;
+  }
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed)) return undefined;
+  return raw.includes("(") && raw.includes(")") ? -Math.abs(parsed) : parsed;
+}
+
+function formatDocumentValue(amount: number, currency?: string) {
+  if (currency) {
+    try {
+      return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency,
+      }).format(amount);
+    } catch {
+      return `${currency} ${amount.toFixed(2)}`;
+    }
+  }
+  return amount.toFixed(2);
+}
+
+function withFallbackDocumentValue(
+  document: {
+    id: string;
+    name: string;
+    status: string;
+    appUrl: string;
+    apiUrl: string;
+    sharedLink?: string;
+    valueAmount?: number;
+    valueCurrency?: string;
+    valueFormatted?: string;
+  },
+  fieldValues: Record<string, string>
+) {
+  const fallbackAmount = toDocumentValueAmount(fieldValues.total_contract_price);
+  const hasDocumentAmount =
+    typeof document.valueAmount === "number" && Number.isFinite(document.valueAmount);
+  const valueAmount = hasDocumentAmount ? document.valueAmount : fallbackAmount;
+  const valueCurrency =
+    String(document.valueCurrency ?? "").trim() ||
+    (valueAmount !== undefined ? DEFAULT_DOCUMENT_VALUE_CURRENCY : undefined);
+  const valueFormatted =
+    String(document.valueFormatted ?? "").trim() ||
+    (valueAmount !== undefined
+      ? formatDocumentValue(valueAmount, valueCurrency)
+      : undefined);
+
+  return {
+    ...document,
+    valueAmount,
+    valueCurrency,
+    valueFormatted,
+  };
 }
 
 function normalizePandaDocRecipient(
@@ -284,7 +347,7 @@ export async function POST(request: NextRequest) {
         revisedDocumentId,
         fallbackFromDocumentId,
         revision: generation.revision,
-        document: generation.document,
+        document: withFallbackDocumentValue(generation.document, fieldValues),
         recipient: generation.recipient,
         sendResult: generation.sendResult,
         session: generation.session,
