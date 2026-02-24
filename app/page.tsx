@@ -3595,31 +3595,35 @@ export default function HomePage() {
                           placeholder="Search projects..."
                         />
                       </div>
-                      <Popover
-                        open={projectCreatePopoverOpen}
-                        onOpenChange={(open) => {
-                          setProjectCreatePopoverOpen(open);
-                          if (open && !newProjectName.trim()) {
-                            setNewProjectName(
-                              estimateName.trim() ||
-                                activeProject?.name ||
-                                "New Project"
-                            );
-                          }
-                        }}
-                      >
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="accent"
-                            size="icon"
-                            className="h-11 w-11 shrink-0 rounded-full border border-accent/40 shadow-md transition-transform duration-150 hover:scale-105 disabled:hover:scale-100"
-                            disabled={!isSignedIn || !teamReady}
-                          >
-                            <Plus className="h-5 w-5" />
-                            <span className="sr-only">Create project</span>
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent align="end" className="w-80 space-y-3">
+                      <div className="group relative">
+                        <span className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md border border-border/60 bg-card/95 px-2 py-1 text-xs font-medium text-foreground opacity-0 shadow-md transition-all duration-150 group-hover:-translate-y-1 group-hover:opacity-100 group-focus-within:-translate-y-1 group-focus-within:opacity-100">
+                          Create project
+                        </span>
+                        <Popover
+                          open={projectCreatePopoverOpen}
+                          onOpenChange={(open) => {
+                            setProjectCreatePopoverOpen(open);
+                            if (open && !newProjectName.trim()) {
+                              setNewProjectName(
+                                estimateName.trim() ||
+                                  activeProject?.name ||
+                                  "New Project"
+                              );
+                            }
+                          }}
+                        >
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="accent"
+                              size="icon"
+                              className="h-11 w-11 shrink-0 rounded-full border border-accent/40 shadow-md transition-transform duration-150 hover:scale-105 disabled:hover:scale-100"
+                              disabled={!isSignedIn || !teamReady}
+                            >
+                              <Plus className="h-5 w-5" />
+                              <span className="sr-only">Create project</span>
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent align="end" className="w-80 space-y-3">
                         <div className="space-y-1">
                           <p className="text-sm font-semibold text-foreground">
                             New project
@@ -3671,8 +3675,9 @@ export default function HomePage() {
                               Create
                             </Button>
                           </div>
-                        </PopoverContent>
-                      </Popover>
+                          </PopoverContent>
+                        </Popover>
+                      </div>
                     </div>
                     {filteredProjectLibraryItems.length ? (
                       <ScrollArea className="h-60 rounded-xl border border-border/60 bg-background/70">
