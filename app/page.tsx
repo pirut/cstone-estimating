@@ -489,6 +489,12 @@ function getManualEstimateProgress(
     const bucking = Array.isArray(estimatePayload.bucking)
       ? (estimatePayload.bucking as Array<Record<string, unknown>>)
       : null;
+    const calculator =
+      estimatePayload.calculator &&
+      typeof estimatePayload.calculator === "object" &&
+      !Array.isArray(estimatePayload.calculator)
+        ? (estimatePayload.calculator as Record<string, unknown>)
+        : null;
     const values =
       estimatePayload.values &&
       typeof estimatePayload.values === "object" &&
@@ -509,7 +515,7 @@ function getManualEstimateProgress(
       const projectStepComplete = REQUIRED_MANUAL_INFO_FIELDS.every((field) =>
         String(info?.[field] ?? "").trim()
       );
-      const installStepComplete =
+      const totalContractReady =
         toFiniteNumber(estimatePayload?.totals?.total_contract_price) > 0;
       if (changeOrderMode) {
         const changeOrderStepComplete = evaluateChangeOrderStep({
@@ -517,9 +523,9 @@ function getManualEstimateProgress(
           ...(changeOrder ?? {}),
         });
         return {
-          started: projectStepComplete || changeOrderStepComplete || installStepComplete,
+          started: projectStepComplete || changeOrderStepComplete || totalContractReady,
           complete:
-            projectStepComplete && changeOrderStepComplete && installStepComplete,
+            projectStepComplete && changeOrderStepComplete && totalContractReady,
         };
       }
 
@@ -528,11 +534,19 @@ function getManualEstimateProgress(
         const price = toFiniteNumber(item?.price);
         return Boolean(name) && price > 0;
       });
-      const buckingStepComplete = (bucking ?? []).some((item) => {
+      const hasBuckingLineItems = (bucking ?? []).some((item) => {
         const qty = toFiniteNumber(item?.qty);
         const sqft = toFiniteNumber(item?.sqft);
         return qty > 0 && sqft > 0;
       });
+      const hasBuckingOverrides =
+        toFiniteNumber(calculator?.override_bucking_cost) > 0 &&
+        toFiniteNumber(calculator?.override_waterproofing_cost) > 0;
+      const hasInstallOverride =
+        toFiniteNumber(calculator?.override_install_total) > 0;
+      const buckingStepComplete = hasBuckingLineItems || hasBuckingOverrides;
+      const installStepComplete =
+        totalContractReady && (hasBuckingLineItems || hasInstallOverride);
 
       return {
         started:

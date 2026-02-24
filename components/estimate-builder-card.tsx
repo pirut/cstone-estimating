@@ -900,10 +900,18 @@ export function EstimateBuilderCard({
     Boolean(draft.changeOrder.vendorName.trim()) &&
     toNumber(draft.changeOrder.vendorCost) > 0 &&
     toNumber(draft.changeOrder.laborCost) > 0;
-  const buckingStepComplete = draft.bucking.some(
+  const hasBuckingLineItems = draft.bucking.some(
     (item) => toNumber(item.qty) > 0 && toNumber(item.sqft) > 0
   );
-  const installStepComplete = computed.totals.total_contract_price > 0;
+  const hasBuckingOverrides =
+    toNumber(draft.calculator.override_bucking_cost) > 0 &&
+    toNumber(draft.calculator.override_waterproofing_cost) > 0;
+  const hasInstallOverride = toNumber(draft.calculator.override_install_total) > 0;
+  const buckingStepComplete = hasBuckingLineItems || hasBuckingOverrides;
+  const installInputsComplete = hasBuckingLineItems || hasInstallOverride;
+  const installStepComplete = isChangeOrderMode
+    ? computed.totals.total_contract_price > 0
+    : computed.totals.total_contract_price > 0 && installInputsComplete;
   const hasMarginRisk =
     !computed.marginChecks.product_margin_ok ||
     !computed.marginChecks.install_margin_ok ||
