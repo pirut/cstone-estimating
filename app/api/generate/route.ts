@@ -92,9 +92,16 @@ function withFallbackDocumentValue(
   fallbackCandidates: unknown[]
 ) {
   const fallbackAmount = resolveFallbackDocumentValueAmount(fallbackCandidates);
-  const hasDocumentAmount =
-    typeof document.valueAmount === "number" && Number.isFinite(document.valueAmount);
-  const valueAmount = hasDocumentAmount ? document.valueAmount : fallbackAmount;
+  const documentAmount =
+    typeof document.valueAmount === "number" && Number.isFinite(document.valueAmount)
+      ? document.valueAmount
+      : undefined;
+  const shouldUseFallbackAmount =
+    typeof fallbackAmount === "number" &&
+    Number.isFinite(fallbackAmount) &&
+    (documentAmount === undefined ||
+      (fallbackAmount > 0 && documentAmount <= 0));
+  const valueAmount = shouldUseFallbackAmount ? fallbackAmount : documentAmount;
   const valueCurrency =
     String(document.valueCurrency ?? "").trim() ||
     (valueAmount !== undefined ? DEFAULT_DOCUMENT_VALUE_CURRENCY : undefined);
