@@ -3610,12 +3610,12 @@ export default function HomePage() {
                       >
                         <PopoverTrigger asChild>
                           <Button
-                            variant="secondary"
+                            variant="accent"
                             size="icon"
-                            className="h-10 w-10 shrink-0"
+                            className="h-11 w-11 shrink-0 rounded-full border border-accent/40 shadow-md transition-transform duration-150 hover:scale-105 disabled:hover:scale-100"
                             disabled={!isSignedIn || !teamReady}
                           >
-                            <Plus className="h-4 w-4" />
+                            <Plus className="h-5 w-5" />
                             <span className="sr-only">Create project</span>
                           </Button>
                         </PopoverTrigger>
