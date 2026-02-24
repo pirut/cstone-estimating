@@ -457,7 +457,6 @@ const PANDADOC_DOCUMENT_VALUE_AMOUNT_KEY = "pandadoc_document_value_amount";
 const PANDADOC_DOCUMENT_VALUE_CURRENCY_KEY = "pandadoc_document_value_currency";
 const PANDADOC_DOCUMENT_VALUE_FORMATTED_KEY = "pandadoc_document_value_formatted";
 const LINKED_DOCUMENT_POLL_INTERVAL_MS = 20_000;
-const AUTO_SAVE_DEBOUNCE_MS = 1_500;
 
 function normalizePandaDocDocumentValue(input: {
   valueAmount?: unknown;
@@ -758,8 +757,6 @@ export default function HomePage() {
   const [deleteEstimateDialog, setDeleteEstimateDialog] =
     useState<DeleteEstimateDialogState | null>(null);
   const [hasBidFlowStarted, setHasBidFlowStarted] = useState(false);
-  const [isAutoSaving, setIsAutoSaving] = useState(false);
-  const [lastAutoSavedAt, setLastAutoSavedAt] = useState<number | null>(null);
   const [moveTargetByEstimateId, setMoveTargetByEstimateId] = useState<
     Record<string, string>
   >({});
@@ -783,9 +780,6 @@ export default function HomePage() {
   const [estimateTags, setEstimateTags] = useState<string[]>([]);
   const [estimateTagInput, setEstimateTagInput] = useState("");
   const progressResetTimeoutRef = useRef<number | null>(null);
-  const autoSaveTimeoutRef = useRef<number | null>(null);
-  const autoSaveInFlightRef = useRef(false);
-  const lastAutoSaveSignatureRef = useRef<string | null>(null);
   const draftRestoredRef = useRef(false);
   const [library, setLibrary] = useState<LibraryState>({
     workbook: { items: [], loading: false, error: null },
@@ -2428,8 +2422,7 @@ export default function HomePage() {
     }
   };
 
-  const handleSaveEstimateToDb = async (options?: { silent?: boolean }) => {
-    const silent = options?.silent ?? false;
+  const handleSaveEstimateToDb = async () => {
     setError(null);
     if (!convexAppUrl) {
       setError("Convex is not configured yet.");
@@ -2518,9 +2511,7 @@ export default function HomePage() {
             }),
           db.tx.projects[targetProjectId].update({ updatedAt: now }),
         ]);
-        if (!silent) {
-          setProjectActionNotice(`Updated "${title}" in the active project.`);
-        }
+        setProjectActionNotice(`Updated "${title}" in the active project.`);
         return true;
       }
 
@@ -2563,9 +2554,7 @@ export default function HomePage() {
         db.tx.projects[targetProjectId].update({ updatedAt: now }),
       ]);
       setEditingEstimateId(estimateId);
-      if (!silent) {
-        setProjectActionNotice(`Saved "${title}" to the active project.`);
-      }
+      setProjectActionNotice(`Saved "${title}" to the active project.`);
       return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
@@ -2822,91 +2811,6 @@ export default function HomePage() {
     deleteEstimateDialog,
     editingEstimateId,
   ]);
-
-  const autoSaveSignature = useMemo(() => {
-    if (!bidFlowStarted) return null;
-    if (!clerkEnabled || !isSignedIn) return null;
-    if (!convexAppUrl || !convexUser || !activeTeam || !activeMembership) return null;
-    if (!hasSelectedProject) return null;
-    if (!estimatePayload && !Object.keys(estimateValues).length) return null;
-
-    const payload = estimatePayload ?? { values: estimateValues };
-    const totals =
-      payload.totals && typeof payload.totals === "object" ? payload.totals : null;
-    const title = estimateName.trim() || "Untitled Estimate";
-    const tags = normalizeEstimateTags(estimateTags);
-    const templateName = templateConfig?.name;
-    const existingEstimate = editingEstimateId
-      ? findTeamEstimateById(editingEstimateId)
-      : null;
-    const targetProjectId = resolveEstimateProjectId(existingEstimate);
-    if (!targetProjectId) return null;
-
-    return JSON.stringify(
-      normalizeForComparison({
-        editingEstimateId: editingEstimateId ?? null,
-        projectId: targetProjectId,
-        title,
-        payload,
-        totals,
-        tags,
-        templateName,
-      })
-    );
-  }, [
-    activeMembership,
-    activeTeam,
-    bidFlowStarted,
-    clerkEnabled,
-    convexAppUrl,
-    convexUser,
-    editingEstimateId,
-    estimateName,
-    estimatePayload,
-    estimateTags,
-    estimateValues,
-    findTeamEstimateById,
-    hasSelectedProject,
-    isSignedIn,
-    resolveEstimateProjectId,
-    templateConfig?.name,
-  ]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (autoSaveTimeoutRef.current !== null) {
-      window.clearTimeout(autoSaveTimeoutRef.current);
-      autoSaveTimeoutRef.current = null;
-    }
-    if (!autoSaveSignature || autoSaveSignature === lastAutoSaveSignatureRef.current) {
-      return;
-    }
-
-    autoSaveTimeoutRef.current = window.setTimeout(() => {
-      autoSaveTimeoutRef.current = null;
-      if (autoSaveInFlightRef.current) return;
-      autoSaveInFlightRef.current = true;
-      setIsAutoSaving(true);
-      void handleSaveEstimateToDb({ silent: true })
-        .then((saved) => {
-          if (saved) {
-            lastAutoSaveSignatureRef.current = autoSaveSignature;
-            setLastAutoSavedAt(Date.now());
-          }
-        })
-        .finally(() => {
-          autoSaveInFlightRef.current = false;
-          setIsAutoSaving(false);
-        });
-    }, AUTO_SAVE_DEBOUNCE_MS);
-
-    return () => {
-      if (autoSaveTimeoutRef.current !== null) {
-        window.clearTimeout(autoSaveTimeoutRef.current);
-        autoSaveTimeoutRef.current = null;
-      }
-    };
-  }, [autoSaveSignature, handleSaveEstimateToDb]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -4419,43 +4323,6 @@ export default function HomePage() {
                 )}
               </CardContent>
             </Card>
-            <div className="mt-4 rounded-xl border border-border/60 bg-background/60 px-3 py-2">
-              <p className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                Autosave
-              </p>
-              {!clerkEnabled ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Configure Clerk + Convex to enable autosave.
-                </p>
-              ) : !activeMembership ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Select a team to enable autosave.
-                </p>
-              ) : !hasSelectedProject ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Select or create a project to enable autosave.
-                </p>
-              ) : isAutoSaving ? (
-                <p className="mt-1 text-xs text-foreground">Saving changes...</p>
-              ) : lastAutoSavedAt ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Last saved{" "}
-                  {new Date(lastAutoSavedAt).toLocaleTimeString([], {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                  .
-                </p>
-              ) : hasEstimateInput ? (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Changes save automatically.
-                </p>
-              ) : (
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Autosave starts after estimate input.
-                </p>
-              )}
-            </div>
           </div>
 
           <div className="space-y-6">
@@ -4692,6 +4559,15 @@ export default function HomePage() {
                   </p>
                 ) : null}
                 <div className="flex flex-col gap-3">
+                  <Button
+                    variant="secondary"
+                    size="lg"
+                    onClick={() => void handleSaveEstimateToDb()}
+                    disabled={!isSignedIn || !teamReady || !hasSelectedProject}
+                  >
+                    <Save className="h-4 w-4" />
+                    Save to project
+                  </Button>
                   <Button
                     variant="accent"
                     size="lg"
