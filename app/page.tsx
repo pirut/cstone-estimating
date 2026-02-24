@@ -749,6 +749,7 @@ export default function HomePage() {
   const [deletingEstimateId, setDeletingEstimateId] = useState<string | null>(null);
   const [deleteEstimateDialog, setDeleteEstimateDialog] =
     useState<DeleteEstimateDialogState | null>(null);
+  const [hasBidFlowStarted, setHasBidFlowStarted] = useState(false);
   const [moveTargetByEstimateId, setMoveTargetByEstimateId] = useState<
     Record<string, string>
   >({});
@@ -1263,6 +1264,15 @@ export default function HomePage() {
   );
   const hasEstimateValues = manualEstimateProgress.complete;
   const hasEstimateInput = manualEstimateProgress.started;
+  const hasDraftedBidWorkspace = Boolean(
+    editingEstimateId ||
+      loadedEstimatePayload ||
+      estimatePayload ||
+      estimateName.trim() ||
+      estimateTags.length ||
+      Object.keys(estimateValues).length
+  );
+  const bidFlowStarted = hasBidFlowStarted || hasDraftedBidWorkspace;
   const canGenerate = Boolean(hasEstimateValues);
   const canDownloadPlanningLines = Boolean(
     estimatePayload || Object.keys(estimateValues).length
@@ -1437,6 +1447,7 @@ export default function HomePage() {
         Boolean(restoredEditingEstimateId);
       if (!hasRestoredData) return;
 
+      setHasBidFlowStarted(true);
       setEstimateName(restoredName);
       setEstimateValues(restoredValues);
       setEstimatePayload(restoredPayload);
@@ -1943,6 +1954,7 @@ export default function HomePage() {
     templateConfig?.name,
   ]);
   const resetEstimateWorkspace = useCallback(() => {
+    setHasBidFlowStarted(true);
     setLoadedEstimatePayload(null);
     setSelectedEstimate(null);
     setEditingEstimateId(null);
@@ -3053,6 +3065,7 @@ export default function HomePage() {
   };
 
   const handleLoadTeamEstimate = (estimate: any) => {
+    setHasBidFlowStarted(true);
     setError(null);
     setHistoryError(null);
     setEstimateName(estimate?.title ?? "");
@@ -3152,6 +3165,7 @@ export default function HomePage() {
       setLoadedEstimatePayload(revision.payload);
       setEstimateTags(normalizeEstimateTags(estimate?.tags));
       setEstimateTagInput("");
+      setHasBidFlowStarted(true);
       setActiveProjectId(targetProjectId ?? UNASSIGNED_PROJECT_KEY);
       setEditingEstimateId(estimate.id);
       setHistoryEstimateId(estimate.id);
@@ -3819,6 +3833,12 @@ export default function HomePage() {
                       {projectActionNotice}
                     </div>
                   ) : null}
+                  {!bidFlowStarted ? (
+                    <div className="rounded-xl border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-foreground">
+                      Load an existing bid or click New estimate to unlock the
+                      builder and generation steps.
+                    </div>
+                  ) : null}
                   <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/70 px-3 py-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
@@ -4156,10 +4176,11 @@ export default function HomePage() {
           </section>
         ) : null}
 
-        <section
-          id="step-input"
-          className="mt-12 grid gap-6 xl:grid-cols-[minmax(0,1.28fr)_minmax(360px,0.72fr)] 2xl:grid-cols-[minmax(0,1.38fr)_minmax(440px,0.62fr)]"
-        >
+        {bidFlowStarted ? (
+          <section
+            id="step-input"
+            className="mt-12 grid gap-6 xl:grid-cols-[minmax(0,1.28fr)_minmax(360px,0.72fr)] 2xl:grid-cols-[minmax(0,1.38fr)_minmax(440px,0.62fr)]"
+          >
           <div className="space-y-6">
             <EstimateBuilderCard
               values={estimateValues}
@@ -4602,12 +4623,39 @@ export default function HomePage() {
               </CardContent>
             </Card>
           </div>
-        </section>
+          </section>
+        ) : (
+          <section className="mt-12">
+            <Card className="rounded-3xl border-border/60 bg-card/80 shadow-elevated">
+              <CardHeader className="space-y-2">
+                <Badge variant="muted" className="w-fit bg-muted/80 text-[10px]">
+                  Next step
+                </Badge>
+                <CardTitle className="text-2xl font-serif">
+                  Select or create a bid
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4 text-sm text-muted-foreground">
+                <p>
+                  Choose a project in Project Management, then load an existing bid
+                  from Estimates &amp; History or start a new bid.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="accent" onClick={resetEstimateWorkspace}>
+                    <Plus className="h-4 w-4" />
+                    Start new bid
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+        )}
 
           </>
         )}
 
-        <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
+        {bidFlowStarted ? (
+          <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
           <div className="relative flex flex-col items-end gap-2">
             <div
               className={cn(
@@ -4864,7 +4912,8 @@ export default function HomePage() {
               )}
             </Button>
           </div>
-        </div>
+          </div>
+        ) : null}
 
         <AlertDialog
           open={Boolean(deleteEstimateDialog)}
