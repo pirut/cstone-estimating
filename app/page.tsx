@@ -252,6 +252,13 @@ function toFiniteNumber(value: unknown) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function toOptionalFiniteNumber(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return undefined;
+  const parsed = Number(value.replace(/[$,]/g, "").trim());
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
 function hasAnyManualInput(values: Record<string, unknown>) {
   return Object.entries(values).some(([key, value]) => {
     if (key === "prepared_by") return false;
@@ -1638,19 +1645,43 @@ export default function HomePage() {
     const existingDocument = existingEntry.pandadoc ?? {
       documentId: activeTrackedDocumentId,
     };
+    const currentTotals =
+      estimate.totals && typeof estimate.totals === "object"
+        ? (estimate.totals as Record<string, any>)
+        : null;
+    const fallbackValueFromTotals =
+      toOptionalFiniteNumber(
+        currentTotals?.[PANDADOC_DOCUMENT_VALUE_AMOUNT_KEY]
+      ) ??
+      toOptionalFiniteNumber(currentTotals?.total_contract_price) ??
+      toOptionalFiniteNumber(estimate?.payload?.totals?.total_contract_price) ??
+      toOptionalFiniteNumber(estimate?.payload?.values?.total_contract_price);
+    const fallbackValueCurrency =
+      String(currentTotals?.[PANDADOC_DOCUMENT_VALUE_CURRENCY_KEY] ?? "").trim() ||
+      (fallbackValueFromTotals !== undefined ? "USD" : undefined);
+    const fallbackValueFormatted =
+      String(currentTotals?.[PANDADOC_DOCUMENT_VALUE_FORMATTED_KEY] ?? "").trim() ||
+      (fallbackValueFromTotals !== undefined
+        ? formatPandaDocDocumentValue({
+            valueAmount: fallbackValueFromTotals,
+            valueCurrency: fallbackValueCurrency,
+          }) ?? undefined
+        : undefined);
     const nextName = String(linkedDocumentLive.name ?? "").trim() || undefined;
     const nextStatus = String(linkedDocumentLive.status ?? "").trim() || undefined;
     const nextValueAmount =
       typeof linkedDocumentLive.valueAmount === "number" &&
       Number.isFinite(linkedDocumentLive.valueAmount)
         ? linkedDocumentLive.valueAmount
-        : existingDocument.valueAmount;
+        : existingDocument.valueAmount ?? fallbackValueFromTotals;
     const nextValueCurrency =
       String(linkedDocumentLive.valueCurrency ?? "").trim() ||
-      existingDocument.valueCurrency;
+      existingDocument.valueCurrency ||
+      (nextValueAmount !== undefined ? fallbackValueCurrency : undefined);
     const nextValueFormatted =
       String(linkedDocumentLive.valueFormatted ?? "").trim() ||
-      existingDocument.valueFormatted;
+      existingDocument.valueFormatted ||
+      (nextValueAmount !== undefined ? fallbackValueFormatted : undefined);
 
     const hasDocumentChanges =
       nextName !== existingDocument.name ||
@@ -1659,10 +1690,6 @@ export default function HomePage() {
       nextValueCurrency !== existingDocument.valueCurrency ||
       nextValueFormatted !== existingDocument.valueFormatted;
 
-    const currentTotals =
-      estimate.totals && typeof estimate.totals === "object"
-        ? (estimate.totals as Record<string, any>)
-        : null;
     const nextTotals = applyPandaDocValueToTotals(currentTotals, {
       valueAmount: nextValueAmount,
       valueCurrency: nextValueCurrency,

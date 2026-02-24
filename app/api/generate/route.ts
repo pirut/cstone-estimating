@@ -67,6 +67,16 @@ function formatDocumentValue(amount: number, currency?: string) {
   return amount.toFixed(2);
 }
 
+function resolveFallbackDocumentValueAmount(candidates: unknown[]) {
+  for (const candidate of candidates) {
+    const parsed = toDocumentValueAmount(candidate);
+    if (typeof parsed === "number" && Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return undefined;
+}
+
 function withFallbackDocumentValue(
   document: {
     id: string;
@@ -79,9 +89,9 @@ function withFallbackDocumentValue(
     valueCurrency?: string;
     valueFormatted?: string;
   },
-  fieldValues: Record<string, string>
+  fallbackCandidates: unknown[]
 ) {
-  const fallbackAmount = toDocumentValueAmount(fieldValues.total_contract_price);
+  const fallbackAmount = resolveFallbackDocumentValueAmount(fallbackCandidates);
   const hasDocumentAmount =
     typeof document.valueAmount === "number" && Number.isFinite(document.valueAmount);
   const valueAmount = hasDocumentAmount ? document.valueAmount : fallbackAmount;
@@ -226,14 +236,34 @@ export async function POST(request: NextRequest) {
     const estimateData = estimatePayload
       ? estimatePayload
       : await downloadJson(estimateUrl, "Estimate JSON", {
-        baseUrl: request.nextUrl.origin,
-        timeoutMs: DOWNLOAD_TIMEOUT_MS,
-      });
+          baseUrl: request.nextUrl.origin,
+          timeoutMs: DOWNLOAD_TIMEOUT_MS,
+        });
     const sourceValues = extractEstimateValues(estimateData);
     const fieldValues = buildFieldValuesFromSourceValues(
       sourceValues,
       mappingConfig
     );
+    const fallbackDocumentValueCandidates: unknown[] = [
+      sourceValues.total_contract_price,
+      sourceValues.final_payment,
+      sourceValues.change_order_total,
+      estimatePayload?.totals?.total_contract_price,
+      estimatePayload?.totals?.final_payment,
+      estimatePayload?.totals?.change_order_total,
+      estimatePayload?.values?.total_contract_price,
+      estimatePayload?.values?.final_payment,
+      estimatePayload?.values?.change_order_total,
+      estimateData?.totals?.total_contract_price,
+      estimateData?.totals?.final_payment,
+      estimateData?.totals?.change_order_total,
+      estimateData?.values?.total_contract_price,
+      estimateData?.values?.final_payment,
+      estimateData?.values?.change_order_total,
+      fieldValues.total_contract_price,
+      fieldValues.final_payment,
+      fieldValues.change_order_total,
+    ];
 
     const updateDraftPayload = buildPandaDocDraft({
       fieldValues,
@@ -347,7 +377,10 @@ export async function POST(request: NextRequest) {
         revisedDocumentId,
         fallbackFromDocumentId,
         revision: generation.revision,
-        document: withFallbackDocumentValue(generation.document, fieldValues),
+        document: withFallbackDocumentValue(
+          generation.document,
+          fallbackDocumentValueCandidates
+        ),
         recipient: generation.recipient,
         sendResult: generation.sendResult,
         session: generation.session,
