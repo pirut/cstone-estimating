@@ -2357,26 +2357,64 @@ export default function HomePage() {
         throw new Error(message);
       }
 
-      const data = (await response.json()) as PandaDocGenerationResponse;
+      const rawData = (await response.json()) as PandaDocGenerationResponse;
+      const fallbackDocumentValueAmount =
+        toOptionalFiniteNumber(estimatePayload?.totals?.total_contract_price) ??
+        toOptionalFiniteNumber(estimatePayload?.values?.total_contract_price) ??
+        toOptionalFiniteNumber(estimateValues.total_contract_price);
+      const responseDocument = rawData.document;
+      const responseValueAmount =
+        typeof responseDocument?.valueAmount === "number" &&
+        Number.isFinite(responseDocument.valueAmount)
+          ? responseDocument.valueAmount
+          : typeof responseDocument?.valueAmount === "string"
+            ? (() => {
+                const parsed = Number(responseDocument.valueAmount);
+                return Number.isFinite(parsed) ? parsed : undefined;
+              })()
+            : undefined;
+      const applyValueFallback =
+        typeof fallbackDocumentValueAmount === "number" &&
+        fallbackDocumentValueAmount > 0 &&
+        (responseValueAmount === undefined || responseValueAmount <= 0);
+      const normalizedValueAmount = applyValueFallback
+        ? fallbackDocumentValueAmount
+        : responseValueAmount;
+      const normalizedValueCurrency =
+        String(responseDocument?.valueCurrency ?? "").trim() ||
+        (normalizedValueAmount !== undefined ? "USD" : undefined);
+      const normalizedValueFormatted =
+        String(responseDocument?.valueFormatted ?? "").trim() ||
+        (normalizedValueAmount !== undefined
+          ? formatPandaDocDocumentValue({
+              valueAmount: normalizedValueAmount,
+              valueCurrency: normalizedValueCurrency,
+            }) ?? undefined
+          : undefined);
+      const data: PandaDocGenerationResponse =
+        responseDocument && typeof responseDocument === "object"
+          ? {
+              ...rawData,
+              document: {
+                ...responseDocument,
+                valueAmount: normalizedValueAmount,
+                valueCurrency: normalizedValueCurrency,
+                valueFormatted: normalizedValueFormatted,
+              },
+            }
+          : rawData;
+
       setLastGeneration(data);
       if (data.document?.id) {
-        const valueAmountRaw =
-          typeof data.document.valueAmount === "number"
-            ? data.document.valueAmount
-            : typeof data.document.valueAmount === "string"
-              ? Number(data.document.valueAmount)
-              : NaN;
         setLinkedDocumentLive({
           id: data.document.id,
           name: data.document.name,
           status: data.document.status,
-          valueAmount: Number.isFinite(valueAmountRaw)
-            ? valueAmountRaw
-            : undefined,
+          valueAmount: normalizedValueAmount,
           valueCurrency:
-            String(data.document.valueCurrency ?? "").trim() || undefined,
+            normalizedValueCurrency,
           valueFormatted:
-            String(data.document.valueFormatted ?? "").trim() || undefined,
+            normalizedValueFormatted,
           loading: false,
           error: null,
         });
