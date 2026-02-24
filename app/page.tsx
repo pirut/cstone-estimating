@@ -128,9 +128,6 @@ type PandaDocGenerationResponse = {
     status?: string;
     appUrl?: string;
     sharedLink?: string;
-    valueAmount?: number;
-    valueCurrency?: string;
-    valueFormatted?: string;
   };
   session?: {
     id?: string;
@@ -177,15 +174,6 @@ function toPandaDocVersionDocument(
     appUrl: String(generation?.document?.appUrl ?? "").trim() || undefined,
     sharedLink:
       String(generation?.document?.sharedLink ?? "").trim() || undefined,
-    valueAmount:
-      typeof generation?.document?.valueAmount === "number" &&
-      Number.isFinite(generation.document.valueAmount)
-        ? generation.document.valueAmount
-        : undefined,
-    valueCurrency:
-      String(generation?.document?.valueCurrency ?? "").trim() || undefined,
-    valueFormatted:
-      String(generation?.document?.valueFormatted ?? "").trim() || undefined,
     recipientEmail: String(generation?.recipient?.email ?? "").trim() || undefined,
     recipientFirstName:
       String(generation?.recipient?.firstName ?? "").trim() || undefined,
@@ -227,9 +215,10 @@ function toComparableEstimateSnapshot(
     snapshot.totals && typeof snapshot.totals === "object"
       ? (() => {
           const clone = { ...(snapshot.totals as Record<string, any>) };
-          delete clone[PANDADOC_DOCUMENT_VALUE_AMOUNT_KEY];
-          delete clone[PANDADOC_DOCUMENT_VALUE_CURRENCY_KEY];
-          delete clone[PANDADOC_DOCUMENT_VALUE_FORMATTED_KEY];
+          // Ignore legacy PandaDoc value fields from older saved estimates.
+          delete clone.pandadoc_document_value_amount;
+          delete clone.pandadoc_document_value_currency;
+          delete clone.pandadoc_document_value_formatted;
           return normalizeForComparison(clone) as Record<string, any>;
         })()
       : null;
@@ -250,13 +239,6 @@ function toFiniteNumber(value: unknown) {
   if (typeof value !== "string") return 0;
   const parsed = Number(value.replace(/[$,]/g, "").trim());
   return Number.isFinite(parsed) ? parsed : 0;
-}
-
-function toOptionalFiniteNumber(value: unknown) {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value !== "string") return undefined;
-  const parsed = Number(value.replace(/[$,]/g, "").trim());
-  return Number.isFinite(parsed) ? parsed : undefined;
 }
 
 function hasAnyManualInput(values: Record<string, unknown>) {
@@ -453,80 +435,7 @@ function formatTemplateDisplayName(name: string, templateVersion?: number) {
   return baseName;
 }
 
-const PANDADOC_DOCUMENT_VALUE_AMOUNT_KEY = "pandadoc_document_value_amount";
-const PANDADOC_DOCUMENT_VALUE_CURRENCY_KEY = "pandadoc_document_value_currency";
-const PANDADOC_DOCUMENT_VALUE_FORMATTED_KEY = "pandadoc_document_value_formatted";
 const LINKED_DOCUMENT_POLL_INTERVAL_MS = 20_000;
-
-function normalizePandaDocDocumentValue(input: {
-  valueAmount?: unknown;
-  valueCurrency?: unknown;
-  valueFormatted?: unknown;
-}) {
-  const amountRaw =
-    typeof input.valueAmount === "number"
-      ? input.valueAmount
-      : typeof input.valueAmount === "string"
-        ? Number(input.valueAmount)
-        : NaN;
-  const amount = Number.isFinite(amountRaw) ? amountRaw : undefined;
-  const currency = String(input.valueCurrency ?? "").trim() || undefined;
-  const formatted = String(input.valueFormatted ?? "").trim() || undefined;
-  if (amount === undefined && !currency && !formatted) return null;
-  return {
-    amount,
-    currency,
-    formatted,
-  };
-}
-
-function applyPandaDocValueToTotals(
-  totals: Record<string, any> | null | undefined,
-  valueInput: {
-    valueAmount?: unknown;
-    valueCurrency?: unknown;
-    valueFormatted?: unknown;
-  }
-) {
-  const value = normalizePandaDocDocumentValue(valueInput);
-  if (!value) {
-    return totals && typeof totals === "object" ? totals : null;
-  }
-  const base =
-    totals && typeof totals === "object" ? { ...totals } : ({} as Record<string, any>);
-  if (value.amount !== undefined) {
-    base[PANDADOC_DOCUMENT_VALUE_AMOUNT_KEY] = value.amount;
-  }
-  if (value.currency) {
-    base[PANDADOC_DOCUMENT_VALUE_CURRENCY_KEY] = value.currency;
-  }
-  if (value.formatted) {
-    base[PANDADOC_DOCUMENT_VALUE_FORMATTED_KEY] = value.formatted;
-  }
-  return base;
-}
-
-function formatPandaDocDocumentValue(input: {
-  valueAmount?: unknown;
-  valueCurrency?: unknown;
-  valueFormatted?: unknown;
-}) {
-  const normalized = normalizePandaDocDocumentValue(input);
-  if (!normalized) return null;
-  if (normalized.formatted) return normalized.formatted;
-  if (normalized.amount === undefined) return null;
-  if (normalized.currency) {
-    try {
-      return new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency: normalized.currency,
-      }).format(normalized.amount);
-    } catch {
-      return `${normalized.currency} ${normalized.amount.toFixed(2)}`;
-    }
-  }
-  return normalized.amount.toFixed(2);
-}
 
 const UNASSIGNED_PROJECT_KEY = "__unassigned__";
 const LOCAL_DRAFT_STORAGE_KEY = "cstone:manual-estimate:draft:v1";
@@ -724,9 +633,6 @@ export default function HomePage() {
     id: string;
     name?: string;
     status?: string;
-    valueAmount?: number;
-    valueCurrency?: string;
-    valueFormatted?: string;
     loading: boolean;
     error: string | null;
   } | null>(null);
@@ -1509,18 +1415,6 @@ export default function HomePage() {
         previous?.id === activeTrackedDocumentId
           ? previous.status
           : activeTrackedPandaDocDocument?.status,
-      valueAmount:
-        previous?.id === activeTrackedDocumentId
-          ? previous.valueAmount
-          : activeTrackedPandaDocDocument?.valueAmount,
-      valueCurrency:
-        previous?.id === activeTrackedDocumentId
-          ? previous.valueCurrency
-          : activeTrackedPandaDocDocument?.valueCurrency,
-      valueFormatted:
-        previous?.id === activeTrackedDocumentId
-          ? previous.valueFormatted
-          : activeTrackedPandaDocDocument?.valueFormatted,
       loading: true,
       error: null,
     }));
@@ -1538,64 +1432,12 @@ export default function HomePage() {
           throw new Error(data?.error || "Failed to load PandaDoc status.");
         }
         if (cancelled) return;
-        const valueAmountRaw =
-          typeof data?.document?.valueAmount === "number"
-            ? data.document.valueAmount
-            : typeof data?.document?.valueAmount === "string"
-              ? Number(data.document.valueAmount)
-              : NaN;
-        setLinkedDocumentLive((previous) => {
-          const previousForDoc =
-            previous?.id === activeTrackedDocumentId ? previous : null;
-          const previousValueAmount =
-            previousForDoc &&
-            typeof previousForDoc.valueAmount === "number" &&
-            Number.isFinite(previousForDoc.valueAmount)
-              ? previousForDoc.valueAmount
-              : typeof activeTrackedPandaDocDocument?.valueAmount === "number" &&
-                  Number.isFinite(activeTrackedPandaDocDocument.valueAmount)
-                ? activeTrackedPandaDocDocument.valueAmount
-                : undefined;
-          const responseValueAmount = Number.isFinite(valueAmountRaw)
-            ? valueAmountRaw
-            : undefined;
-          const shouldKeepPreviousValue =
-            typeof previousValueAmount === "number" &&
-            previousValueAmount > 0 &&
-            (responseValueAmount === undefined || responseValueAmount <= 0);
-          const nextValueAmount = shouldKeepPreviousValue
-            ? previousValueAmount
-            : responseValueAmount;
-          const responseValueCurrency =
-            String(data?.document?.valueCurrency ?? "").trim() || undefined;
-          const nextValueCurrency =
-            shouldKeepPreviousValue || !responseValueCurrency
-              ? previousForDoc?.valueCurrency ??
-                activeTrackedPandaDocDocument?.valueCurrency ??
-                (nextValueAmount !== undefined ? "USD" : undefined)
-              : responseValueCurrency;
-          const responseValueFormatted =
-            String(data?.document?.valueFormatted ?? "").trim() || undefined;
-          const nextValueFormatted =
-            shouldKeepPreviousValue || !responseValueFormatted
-              ? formatPandaDocDocumentValue({
-                  valueAmount: nextValueAmount,
-                  valueCurrency: nextValueCurrency,
-                }) ??
-                previousForDoc?.valueFormatted ??
-                activeTrackedPandaDocDocument?.valueFormatted
-              : responseValueFormatted;
-
-          return {
-            id: activeTrackedDocumentId,
-            name: String(data?.document?.name ?? "").trim() || undefined,
-            status: String(data?.document?.status ?? "").trim() || undefined,
-            valueAmount: nextValueAmount,
-            valueCurrency: nextValueCurrency,
-            valueFormatted: nextValueFormatted,
-            loading: false,
-            error: null,
-          };
+        setLinkedDocumentLive({
+          id: activeTrackedDocumentId,
+          name: String(data?.document?.name ?? "").trim() || undefined,
+          status: String(data?.document?.status ?? "").trim() || undefined,
+          loading: false,
+          error: null,
         });
       } catch (err) {
         if (cancelled) return;
@@ -1610,18 +1452,6 @@ export default function HomePage() {
             previous?.id === activeTrackedDocumentId
               ? previous.status
               : activeTrackedPandaDocDocument?.status,
-          valueAmount:
-            previous?.id === activeTrackedDocumentId
-              ? previous.valueAmount
-              : activeTrackedPandaDocDocument?.valueAmount,
-          valueCurrency:
-            previous?.id === activeTrackedDocumentId
-              ? previous.valueCurrency
-              : activeTrackedPandaDocDocument?.valueCurrency,
-          valueFormatted:
-            previous?.id === activeTrackedDocumentId
-              ? previous.valueFormatted
-              : activeTrackedPandaDocDocument?.valueFormatted,
           loading: false,
           error: message,
         }));
@@ -1641,9 +1471,6 @@ export default function HomePage() {
     activeTrackedDocumentId,
     activeTrackedPandaDocDocument?.name,
     activeTrackedPandaDocDocument?.status,
-    activeTrackedPandaDocDocument?.valueAmount,
-    activeTrackedPandaDocDocument?.valueCurrency,
-    activeTrackedPandaDocDocument?.valueFormatted,
   ]);
 
   useEffect(() => {
@@ -1669,74 +1496,14 @@ export default function HomePage() {
     const existingDocument = existingEntry.pandadoc ?? {
       documentId: activeTrackedDocumentId,
     };
-    const currentTotals =
-      estimate.totals && typeof estimate.totals === "object"
-        ? (estimate.totals as Record<string, any>)
-        : null;
-    const fallbackValueFromTotals =
-      toOptionalFiniteNumber(
-        currentTotals?.[PANDADOC_DOCUMENT_VALUE_AMOUNT_KEY]
-      ) ??
-      toOptionalFiniteNumber(currentTotals?.total_contract_price) ??
-      toOptionalFiniteNumber(estimate?.payload?.totals?.total_contract_price) ??
-      toOptionalFiniteNumber(estimate?.payload?.values?.total_contract_price);
-    const fallbackValueCurrency =
-      String(currentTotals?.[PANDADOC_DOCUMENT_VALUE_CURRENCY_KEY] ?? "").trim() ||
-      (fallbackValueFromTotals !== undefined ? "USD" : undefined);
-    const fallbackValueFormatted =
-      String(currentTotals?.[PANDADOC_DOCUMENT_VALUE_FORMATTED_KEY] ?? "").trim() ||
-      (fallbackValueFromTotals !== undefined
-        ? formatPandaDocDocumentValue({
-            valueAmount: fallbackValueFromTotals,
-            valueCurrency: fallbackValueCurrency,
-          }) ?? undefined
-        : undefined);
     const nextName = String(linkedDocumentLive.name ?? "").trim() || undefined;
     const nextStatus = String(linkedDocumentLive.status ?? "").trim() || undefined;
-    const liveValueAmount =
-      typeof linkedDocumentLive.valueAmount === "number" &&
-      Number.isFinite(linkedDocumentLive.valueAmount)
-        ? linkedDocumentLive.valueAmount
-        : undefined;
-    const existingValueAmount =
-      typeof existingDocument.valueAmount === "number" &&
-      Number.isFinite(existingDocument.valueAmount)
-        ? existingDocument.valueAmount
-        : undefined;
-    const nextValueAmount =
-      liveValueAmount !== undefined &&
-      !(liveValueAmount <= 0 && (fallbackValueFromTotals ?? 0) > 0)
-        ? liveValueAmount
-        : existingValueAmount !== undefined &&
-            !(existingValueAmount <= 0 && (fallbackValueFromTotals ?? 0) > 0)
-          ? existingValueAmount
-          : fallbackValueFromTotals;
-    const nextValueCurrency =
-      String(linkedDocumentLive.valueCurrency ?? "").trim() ||
-      existingDocument.valueCurrency ||
-      (nextValueAmount !== undefined ? fallbackValueCurrency : undefined);
-    const nextValueFormatted =
-      String(linkedDocumentLive.valueFormatted ?? "").trim() ||
-      existingDocument.valueFormatted ||
-      (nextValueAmount !== undefined ? fallbackValueFormatted : undefined);
 
     const hasDocumentChanges =
       nextName !== existingDocument.name ||
-      nextStatus !== existingDocument.status ||
-      nextValueAmount !== existingDocument.valueAmount ||
-      nextValueCurrency !== existingDocument.valueCurrency ||
-      nextValueFormatted !== existingDocument.valueFormatted;
+      nextStatus !== existingDocument.status;
 
-    const nextTotals = applyPandaDocValueToTotals(currentTotals, {
-      valueAmount: nextValueAmount,
-      valueCurrency: nextValueCurrency,
-      valueFormatted: nextValueFormatted,
-    });
-    const totalsChanged =
-      JSON.stringify(normalizeForComparison(currentTotals)) !==
-      JSON.stringify(normalizeForComparison(nextTotals));
-
-    if (!hasDocumentChanges && !totalsChanged) return;
+    if (!hasDocumentChanges) return;
 
     const now = Date.now();
     const nextHistory = [...history];
@@ -1747,9 +1514,6 @@ export default function HomePage() {
         documentId: activeTrackedDocumentId,
         name: nextName,
         status: nextStatus,
-        valueAmount: nextValueAmount,
-        valueCurrency: nextValueCurrency,
-        valueFormatted: nextValueFormatted,
         updatedAt: now,
       },
     };
@@ -1759,7 +1523,6 @@ export default function HomePage() {
         db.tx.estimates[editingEstimateId].update({
           updatedAt: now,
           versionHistory: nextHistory,
-          ...(totalsChanged ? { totals: nextTotals } : {}),
         }),
       ])
       .catch(() => {});
@@ -2043,11 +1806,6 @@ export default function HomePage() {
       const now = Date.now();
       const tags = normalizeEstimateTags(estimateTags);
       const pandadocDocument = toPandaDocVersionDocument(generation, now);
-      const totalsWithPandaDocValue = applyPandaDocValueToTotals(snapshot.totals, {
-        valueAmount: pandadocDocument?.valueAmount,
-        valueCurrency: pandadocDocument?.valueCurrency,
-        valueFormatted: pandadocDocument?.valueFormatted,
-      });
       if (editingEstimateId) {
         const existingEstimate = findTeamEstimateById(editingEstimateId);
         const targetProjectId = resolveEstimateProjectId(existingEstimate);
@@ -2068,15 +1826,6 @@ export default function HomePage() {
           hasEstimateSnapshotChanges(existingEstimate, snapshot) ||
           hasTrackedDocumentChanged;
         if (!shouldCreateNewVersion) {
-          const existingTotals =
-            existingEstimate?.totals && typeof existingEstimate.totals === "object"
-              ? (existingEstimate.totals as Record<string, any>)
-              : null;
-          const refreshedTotals = applyPandaDocValueToTotals(existingTotals, {
-            valueAmount: pandadocDocument?.valueAmount,
-            valueCurrency: pandadocDocument?.valueCurrency,
-            valueFormatted: pandadocDocument?.valueFormatted,
-          });
           const operations = [
             db.tx.estimates[editingEstimateId]
               .update({
@@ -2085,7 +1834,6 @@ export default function HomePage() {
                 lastGeneratedAt: now,
                 templateName: snapshot.templateName,
                 templateUrl: snapshot.templateUrl,
-                totals: refreshedTotals,
                 tags,
               })
               .link(estimateLinks),
@@ -2104,7 +1852,7 @@ export default function HomePage() {
           createdAt: now,
           title: snapshot.title,
           payload: snapshot.payload,
-          totals: totalsWithPandaDocValue,
+          totals: snapshot.totals,
           templateName: snapshot.templateName,
           templateUrl: snapshot.templateUrl,
           createdByUserId: convexUser.id,
@@ -2382,54 +2130,7 @@ export default function HomePage() {
       }
 
       const rawData = (await response.json()) as PandaDocGenerationResponse;
-      const fallbackDocumentValueAmount =
-        toOptionalFiniteNumber(estimatePayload?.totals?.total_contract_price) ??
-        toOptionalFiniteNumber(estimatePayload?.values?.total_contract_price) ??
-        toOptionalFiniteNumber(estimateValues.total_contract_price);
-      const responseDocument = rawData.document;
-      const responseValueAmount =
-        typeof responseDocument?.valueAmount === "number" &&
-        Number.isFinite(responseDocument.valueAmount)
-          ? responseDocument.valueAmount
-          : typeof responseDocument?.valueAmount === "string"
-            ? (() => {
-                const parsed = Number(responseDocument.valueAmount);
-                return Number.isFinite(parsed) ? parsed : undefined;
-              })()
-            : undefined;
-      const applyValueFallback =
-        typeof fallbackDocumentValueAmount === "number" &&
-        fallbackDocumentValueAmount > 0 &&
-        (responseValueAmount === undefined || responseValueAmount <= 0);
-      const normalizedValueAmount = applyValueFallback
-        ? fallbackDocumentValueAmount
-        : responseValueAmount;
-      const normalizedValueCurrency =
-        String(responseDocument?.valueCurrency ?? "").trim() ||
-        (normalizedValueAmount !== undefined ? "USD" : undefined);
-      const formattedFromResponse =
-        String(responseDocument?.valueFormatted ?? "").trim() || undefined;
-      const normalizedValueFormatted =
-        applyValueFallback || !formattedFromResponse
-          ? normalizedValueAmount !== undefined
-            ? formatPandaDocDocumentValue({
-                valueAmount: normalizedValueAmount,
-                valueCurrency: normalizedValueCurrency,
-              }) ?? undefined
-            : undefined
-          : formattedFromResponse;
-      const data: PandaDocGenerationResponse =
-        responseDocument && typeof responseDocument === "object"
-          ? {
-              ...rawData,
-              document: {
-                ...responseDocument,
-                valueAmount: normalizedValueAmount,
-                valueCurrency: normalizedValueCurrency,
-                valueFormatted: normalizedValueFormatted,
-              },
-            }
-          : rawData;
+      const data: PandaDocGenerationResponse = rawData;
 
       setLastGeneration(data);
       if (data.document?.id) {
@@ -2437,11 +2138,6 @@ export default function HomePage() {
           id: data.document.id,
           name: data.document.name,
           status: data.document.status,
-          valueAmount: normalizedValueAmount,
-          valueCurrency:
-            normalizedValueCurrency,
-          valueFormatted:
-            normalizedValueFormatted,
           loading: false,
           error: null,
         });
