@@ -1559,19 +1559,58 @@ export default function HomePage() {
             : typeof data?.document?.valueAmount === "string"
               ? Number(data.document.valueAmount)
               : NaN;
-        setLinkedDocumentLive({
-          id: activeTrackedDocumentId,
-          name: String(data?.document?.name ?? "").trim() || undefined,
-          status: String(data?.document?.status ?? "").trim() || undefined,
-          valueAmount: Number.isFinite(valueAmountRaw)
+        setLinkedDocumentLive((previous) => {
+          const previousForDoc =
+            previous?.id === activeTrackedDocumentId ? previous : null;
+          const previousValueAmount =
+            previousForDoc &&
+            typeof previousForDoc.valueAmount === "number" &&
+            Number.isFinite(previousForDoc.valueAmount)
+              ? previousForDoc.valueAmount
+              : typeof activeTrackedPandaDocDocument?.valueAmount === "number" &&
+                  Number.isFinite(activeTrackedPandaDocDocument.valueAmount)
+                ? activeTrackedPandaDocDocument.valueAmount
+                : undefined;
+          const responseValueAmount = Number.isFinite(valueAmountRaw)
             ? valueAmountRaw
-            : undefined,
-          valueCurrency:
-            String(data?.document?.valueCurrency ?? "").trim() || undefined,
-          valueFormatted:
-            String(data?.document?.valueFormatted ?? "").trim() || undefined,
-          loading: false,
-          error: null,
+            : undefined;
+          const shouldKeepPreviousValue =
+            typeof previousValueAmount === "number" &&
+            previousValueAmount > 0 &&
+            (responseValueAmount === undefined || responseValueAmount <= 0);
+          const nextValueAmount = shouldKeepPreviousValue
+            ? previousValueAmount
+            : responseValueAmount;
+          const responseValueCurrency =
+            String(data?.document?.valueCurrency ?? "").trim() || undefined;
+          const nextValueCurrency =
+            shouldKeepPreviousValue || !responseValueCurrency
+              ? previousForDoc?.valueCurrency ??
+                activeTrackedPandaDocDocument?.valueCurrency ??
+                (nextValueAmount !== undefined ? "USD" : undefined)
+              : responseValueCurrency;
+          const responseValueFormatted =
+            String(data?.document?.valueFormatted ?? "").trim() || undefined;
+          const nextValueFormatted =
+            shouldKeepPreviousValue || !responseValueFormatted
+              ? formatPandaDocDocumentValue({
+                  valueAmount: nextValueAmount,
+                  valueCurrency: nextValueCurrency,
+                }) ??
+                previousForDoc?.valueFormatted ??
+                activeTrackedPandaDocDocument?.valueFormatted
+              : responseValueFormatted;
+
+          return {
+            id: activeTrackedDocumentId,
+            name: String(data?.document?.name ?? "").trim() || undefined,
+            status: String(data?.document?.status ?? "").trim() || undefined,
+            valueAmount: nextValueAmount,
+            valueCurrency: nextValueCurrency,
+            valueFormatted: nextValueFormatted,
+            loading: false,
+            error: null,
+          };
         });
       } catch (err) {
         if (cancelled) return;
