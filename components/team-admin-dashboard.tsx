@@ -1,7 +1,6 @@
-// @ts-nocheck
 "use client";
 
-import { useEffect, useMemo, useState, type DragEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ConvexAuthSync } from "@/components/convex-auth-sync";
 import { Badge } from "@/components/ui/badge";
@@ -50,86 +49,27 @@ import {
 } from "@/lib/clerk";
 import { id } from "@/lib/convex";
 import { GripVertical, Loader2, Plus, Save, Trash2 } from "lucide-react";
-
-type VendorDraft = {
-  id?: string;
-  name: string;
-  sortOrder: number;
-  isActive: boolean;
-  allowsSplitFinish: boolean;
-  usesEuroPricing: boolean;
-};
-
-function hasEuroLabel(name: string) {
-  const normalized = String(name ?? "").trim().toLowerCase();
-  return /\b(eur|euro)\b/.test(normalized) || normalized.includes("€");
-}
-
-function formatThresholdPercentInput(value: number) {
-  if (!Number.isFinite(value)) return "";
-  const percent = value * 100;
-  const rounded = Math.round(percent * 100) / 100;
-  if (Math.abs(rounded % 1) < 0.000001) {
-    return String(Math.trunc(rounded));
-  }
-  return rounded.toFixed(2);
-}
-
-function parseThresholdPercentInput(value: string) {
-  const cleaned = String(value ?? "").replace(/[^\d.-]/g, "").trim();
-  if (!cleaned) return null;
-  const parsed = Number(cleaned);
-  if (!Number.isFinite(parsed)) return null;
-  if (parsed < 0 || parsed > 100) return null;
-  return parsed / 100;
-}
-
-function hasSameSerializedValue(current: unknown, next: unknown) {
-  try {
-    return JSON.stringify(current) === JSON.stringify(next);
-  } catch {
-    return false;
-  }
-}
-
-type UnitTypeDraft = {
-  id?: string;
-  code: string;
-  label: string;
-  price: string;
-  sortOrder: number;
-  isActive: boolean;
-};
-
-type ProductFeatureOptionDraft = {
-  id?: string;
-  category: string;
-  vendorId: string;
-  label: string;
-  sortOrder: number;
-  isActive: boolean;
-};
-
-type ProjectTypeDraft = {
-  id?: string;
-  label: string;
-  sortOrder: number;
-  isActive: boolean;
-};
-
-const FEATURE_SCOPE_ALL_PRODUCTS = "__all_products__";
-const CATALOG_SCOPE_ALL_TEAMS = "__all_teams__";
-
-type EstimateAdminDraft = {
-  id: string;
-  title: string;
-  status: string;
-  version: number | null;
-  createdAt: number | null;
-  updatedAt: number | null;
-  lastGeneratedAt: number | null;
-  ownerLabel: string;
-};
+import {
+  CATALOG_SCOPE_ALL_TEAMS,
+  FEATURE_SCOPE_ALL_PRODUCTS,
+  formatDateTime,
+  formatThresholdPercentInput,
+  getInsertionIndexFromDrag,
+  hasSameSerializedValue,
+  parseThresholdPercentInput,
+  reorderDraftListByInsertion,
+  toEstimateAdminDrafts,
+  toProductFeatureOptionDrafts,
+  toProjectTypeDrafts,
+  toUnitTypeDrafts,
+  toVendorDrafts,
+  type EstimateAdminDraft,
+  type ProductFeatureOptionDraft,
+  type ProjectTypeDraft,
+  type UnitTypeDraft,
+  type VendorDraft,
+} from "@/components/team-admin-dashboard.helpers";
+import type { TeamRecord } from "@/lib/team-records";
 
 type TeamAdminDashboardProps = {
   embedded?: boolean;
@@ -156,6 +96,7 @@ export default function TeamAdminPage({
   const { user } = useOptionalUser();
   const { isLoading: convexLoading, user: convexUser, error: convexAuthError } =
     db.useAuth();
+  const tx = db.tx as any;
   const [convexSetupError, setConvexSetupError] = useState<string | null>(null);
   const [subTeamName, setSubTeamName] = useState("");
   const [teamError, setTeamError] = useState<string | null>(null);
@@ -226,7 +167,7 @@ export default function TeamAdminPage({
       };
 
   const { data: teamData } = db.useQuery(teamQuery);
-  const teams = (teamData?.teams ?? []) as Array<any>;
+  const teams = (teamData?.teams ?? []) as TeamRecord[];
   const orgTeam = useMemo(
     () => pickOrganizationTeam(teams, normalizedOrgTeamName),
     [teams, normalizedOrgTeamName]
@@ -386,39 +327,6 @@ export default function TeamAdminPage({
       .map((part) => part[0]?.toUpperCase())
       .join("") || "U";
 
-  const reorderDraftListByInsertion = <T extends { sortOrder: number }>(
-    list: T[],
-    fromIndex: number,
-    insertionIndex: number
-  ) => {
-    if (
-      fromIndex < 0 ||
-      fromIndex >= list.length ||
-      insertionIndex < 0 ||
-      insertionIndex > list.length ||
-      insertionIndex === fromIndex ||
-      insertionIndex === fromIndex + 1
-    ) {
-      return list;
-    }
-    const next = list.slice();
-    const [moved] = next.splice(fromIndex, 1);
-    const targetIndex =
-      insertionIndex > fromIndex ? insertionIndex - 1 : insertionIndex;
-    next.splice(targetIndex, 0, moved);
-    return next.map((item, index) => ({ ...item, sortOrder: index + 1 }));
-  };
-
-  const getInsertionIndexFromDrag = (
-    event: DragEvent<HTMLElement>,
-    rowIndex: number
-  ) => {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const offsetY = event.clientY - rect.top;
-    const isAfter = offsetY > rect.height / 2;
-    return isAfter ? rowIndex + 1 : rowIndex;
-  };
-
   useEffect(() => {
     if (!orgScopedTeams.length) {
       setSelectedTeamId(null);
@@ -520,69 +428,28 @@ export default function TeamAdminPage({
   }, [selectedTeam?.id, selectedTeam?.marginThresholds]);
 
   useEffect(() => {
-    const next = vendorRecords.map((vendor, index) => ({
-      id: vendor.id,
-      name: vendor.name ?? "",
-      sortOrder:
-        typeof vendor.sortOrder === "number" ? vendor.sortOrder : index + 1,
-      isActive: vendor.isActive !== false,
-      allowsSplitFinish: vendor.allowsSplitFinish === true,
-      usesEuroPricing:
-        vendor.usesEuroPricing === true ||
-        (vendor.usesEuroPricing === undefined &&
-          hasEuroLabel(String(vendor.name ?? ""))),
-    }));
+    const next = toVendorDrafts(vendorRecords);
     setVendorDrafts((previous) =>
       hasSameSerializedValue(previous, next) ? previous : next
     );
   }, [vendorRecords]);
 
   useEffect(() => {
-    const next = unitTypeRecords.map((unit, index) => ({
-      id: unit.id,
-      code: unit.code ?? "",
-      label: unit.label ?? "",
-      price:
-        typeof unit.price === "number" && Number.isFinite(unit.price)
-          ? unit.price.toString()
-          : "",
-      sortOrder:
-        typeof unit.sortOrder === "number" ? unit.sortOrder : index + 1,
-      isActive: unit.isActive !== false,
-    }));
+    const next = toUnitTypeDrafts(unitTypeRecords);
     setUnitTypeDrafts((previous) =>
       hasSameSerializedValue(previous, next) ? previous : next
     );
   }, [unitTypeRecords]);
 
   useEffect(() => {
-    const next = projectTypeRecords.map((projectType, index) => ({
-      id: projectType.id,
-      label: String(projectType.label ?? ""),
-      sortOrder:
-        typeof projectType.sortOrder === "number"
-          ? projectType.sortOrder
-          : index + 1,
-      isActive: projectType.isActive !== false,
-    }));
+    const next = toProjectTypeDrafts(projectTypeRecords);
     setProjectTypeDrafts((previous) =>
       hasSameSerializedValue(previous, next) ? previous : next
     );
   }, [projectTypeRecords]);
 
   useEffect(() => {
-    const next = productFeatureOptionRecords.map((option, index) => ({
-      id: option.id,
-      category: String(option.category ?? ""),
-      vendorId:
-        typeof option.vendorId === "string" && option.vendorId.trim()
-          ? option.vendorId
-          : "",
-      label: String(option.label ?? ""),
-      sortOrder:
-        typeof option.sortOrder === "number" ? option.sortOrder : index + 1,
-      isActive: option.isActive !== false,
-    }));
+    const next = toProductFeatureOptionDrafts(productFeatureOptionRecords);
     setProductFeatureOptionDrafts((previous) =>
       hasSameSerializedValue(previous, next) ? previous : next
     );
@@ -604,34 +471,17 @@ export default function TeamAdminPage({
   }, [selectedTeam?.estimates]);
 
   const estimateSourceById = useMemo(
-    () => new Map(estimateRecords.map((estimate) => [estimate.id, estimate])),
+    () =>
+      new Map(
+        estimateRecords
+          .filter((estimate) => Boolean(estimate.id))
+          .map((estimate) => [String(estimate.id), estimate])
+      ),
     [estimateRecords]
   );
 
   useEffect(() => {
-    const next = estimateRecords.map((estimate) => {
-      const ownerName = String(estimate.owner?.name ?? "").trim();
-      const ownerEmail = String(estimate.owner?.email ?? "").trim();
-      return {
-        id: estimate.id,
-        title: String(estimate.title ?? ""),
-        status: String(estimate.status ?? "active"),
-        version: typeof estimate.version === "number" ? estimate.version : null,
-        createdAt:
-          typeof estimate.createdAt === "number" ? estimate.createdAt : null,
-        updatedAt:
-          typeof estimate.updatedAt === "number" ? estimate.updatedAt : null,
-        lastGeneratedAt:
-          typeof estimate.lastGeneratedAt === "number"
-            ? estimate.lastGeneratedAt
-            : null,
-        ownerLabel:
-          ownerName ||
-          ownerEmail ||
-          String(estimate.owner?.id ?? "").trim() ||
-          "Unknown owner",
-      };
-    });
+    const next = toEstimateAdminDrafts(estimateRecords);
     setEstimateDrafts((previous) =>
       hasSameSerializedValue(previous, next) ? previous : next
     );
@@ -665,7 +515,7 @@ export default function TeamAdminPage({
     setTeamSaving(true);
     try {
       await db.transact([
-        db.tx.teams[teamId].create({
+        tx.teams[teamId].create({
           name: subTeamName.trim(),
           domain: teamDomain,
           createdAt: now,
@@ -674,7 +524,7 @@ export default function TeamAdminPage({
           ownerId: convexUser.id,
           marginThresholds: DEFAULT_MARGIN_THRESHOLDS,
         }),
-        db.tx.memberships[membershipId]
+        tx.memberships[membershipId]
           .create({ role: "owner", createdAt: now })
           .link({ team: teamId, user: convexUser.id }),
       ]);
@@ -702,7 +552,7 @@ export default function TeamAdminPage({
     if (trimmed === selectedTeam.name) return;
     setTeamNameSaving(true);
     try {
-      await db.transact(db.tx.teams[selectedTeam.id].update({ name: trimmed }));
+      await db.transact(tx.teams[selectedTeam.id].update({ name: trimmed }));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setTeamNameError(message);
@@ -738,7 +588,7 @@ export default function TeamAdminPage({
     setTeamMarginSaving(true);
     try {
       await db.transact(
-        db.tx.teams[selectedTeam.id].update({
+        tx.teams[selectedTeam.id].update({
           marginThresholds: normalizeMarginThresholds({
             product_margin_min: productMarginMin,
             install_margin_min: installMarginMin,
@@ -771,7 +621,7 @@ export default function TeamAdminPage({
     }
     setTeamDeleteLoading(true);
     try {
-      await db.transact(db.tx.teams[selectedTeam.id].delete());
+      await db.transact(tx.teams[selectedTeam.id].delete());
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setTeamDeleteError(message);
@@ -792,7 +642,7 @@ export default function TeamAdminPage({
     setMemberActionLoading(true);
     try {
       await db.transact(
-        db.tx.memberships[membershipId]
+        tx.memberships[membershipId]
           .create({ role: "member", createdAt: now })
           .link({ team: selectedTeam.id, user: selectedMemberId })
       );
@@ -820,7 +670,7 @@ export default function TeamAdminPage({
     }
     setMemberActionLoading(true);
     try {
-      await db.transact(db.tx.memberships[membershipId].delete());
+      await db.transact(tx.memberships[membershipId].delete());
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setMemberActionError(message);
@@ -840,11 +690,11 @@ export default function TeamAdminPage({
       (membership) => membership.user?.id === selectedTeam.ownerId
     );
     const updates = [
-      db.tx.memberships[membershipId].update({ role: "owner" }),
+      tx.memberships[membershipId].update({ role: "owner" }),
       ...(previousOwner && previousOwner.id !== membershipId
-        ? [db.tx.memberships[previousOwner.id].update({ role: "member" })]
+        ? [tx.memberships[previousOwner.id].update({ role: "member" })]
         : []),
-      db.tx.teams[selectedTeam.id].update({ ownerId: memberId }),
+      tx.teams[selectedTeam.id].update({ ownerId: memberId }),
     ];
     setMemberActionLoading(true);
     try {
@@ -869,7 +719,7 @@ export default function TeamAdminPage({
     if (!membershipId || !role || !selectedTeam) return;
     setMemberActionLoading(true);
     try {
-      await db.transact(db.tx.memberships[membershipId].update({ role }));
+      await db.transact(tx.memberships[membershipId].update({ role }));
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setMemberActionError(message);
@@ -1019,10 +869,10 @@ export default function TeamAdminPage({
         updatedAt: now,
       };
       if (vendor.id) {
-        return db.tx.vendors[vendor.id].update(payload);
+        return tx.vendors[vendor.id].update(payload);
       }
       const vendorId = id();
-      return db.tx.vendors[vendorId]
+      return tx.vendors[vendorId]
         .create({ ...payload, createdAt: now })
         .link({ team: catalogTeam.id });
     });
@@ -1049,7 +899,7 @@ export default function TeamAdminPage({
     if (!window.confirm(`Delete vendor "${vendor.name}"?`)) return;
     setVendorSaving(true);
     try {
-      await db.transact(db.tx.vendors[vendor.id].delete());
+      await db.transact(tx.vendors[vendor.id].delete());
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setVendorError(message);
@@ -1076,7 +926,7 @@ export default function TeamAdminPage({
     const now = Date.now();
     const txs = DEFAULT_VENDORS.map((vendor) => {
       const vendorId = id();
-      return db.tx.vendors[vendorId]
+      return tx.vendors[vendorId]
         .create({
           name: vendor.name,
           sortOrder: vendor.sortOrder,
@@ -1191,10 +1041,10 @@ export default function TeamAdminPage({
         updatedAt: now,
       };
       if (unit.id) {
-        return db.tx.unitTypes[unit.id].update(payload);
+        return tx.unitTypes[unit.id].update(payload);
       }
       const unitId = id();
-      return db.tx.unitTypes[unitId]
+      return tx.unitTypes[unitId]
         .create({ ...payload, createdAt: now })
         .link({ team: catalogTeam.id });
     });
@@ -1221,7 +1071,7 @@ export default function TeamAdminPage({
     if (!window.confirm(`Delete unit type "${unit.code}"?`)) return;
     setUnitTypeSaving(true);
     try {
-      await db.transact(db.tx.unitTypes[unit.id].delete());
+      await db.transact(tx.unitTypes[unit.id].delete());
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setUnitTypeError(message);
@@ -1250,7 +1100,7 @@ export default function TeamAdminPage({
     const now = Date.now();
     const txs = DEFAULT_UNIT_TYPES.map((unit) => {
       const unitId = id();
-      return db.tx.unitTypes[unitId]
+      return tx.unitTypes[unitId]
         .create({
           code: unit.code,
           label: unit.label,
@@ -1353,10 +1203,10 @@ export default function TeamAdminPage({
         updatedAt: now,
       };
       if (projectType.id) {
-        return db.tx.projectTypes[projectType.id].update(payload);
+        return tx.projectTypes[projectType.id].update(payload);
       }
       const projectTypeId = id();
-      return db.tx.projectTypes[projectTypeId]
+      return tx.projectTypes[projectTypeId]
         .create({ ...payload, createdAt: now })
         .link({ team: catalogTeam.id });
     });
@@ -1383,7 +1233,7 @@ export default function TeamAdminPage({
     if (!window.confirm(`Delete project type "${projectType.label}"?`)) return;
     setProjectTypeSaving(true);
     try {
-      await db.transact(db.tx.projectTypes[projectType.id].delete());
+      await db.transact(tx.projectTypes[projectType.id].delete());
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setProjectTypeError(message);
@@ -1414,7 +1264,7 @@ export default function TeamAdminPage({
     const now = Date.now();
     const txs = DEFAULT_PROJECT_TYPES.map((projectType) => {
       const projectTypeId = id();
-      return db.tx.projectTypes[projectTypeId]
+      return tx.projectTypes[projectTypeId]
         .create({
           label: projectType.label,
           sortOrder: projectType.sortOrder,
@@ -1643,10 +1493,10 @@ export default function TeamAdminPage({
         updatedAt: now,
       };
       if (option.id) {
-        return db.tx.productFeatureOptions[option.id].update(payload);
+        return tx.productFeatureOptions[option.id].update(payload);
       }
       const optionId = id();
-      return db.tx.productFeatureOptions[optionId]
+      return tx.productFeatureOptions[optionId]
         .create({ ...payload, createdAt: now })
         .link({ team: catalogTeam.id });
     });
@@ -1677,7 +1527,7 @@ export default function TeamAdminPage({
     if (!window.confirm(`Delete feature option "${option.label}"?`)) return;
     setProductFeatureOptionSaving(true);
     try {
-      await db.transact(db.tx.productFeatureOptions[option.id].delete());
+      await db.transact(tx.productFeatureOptions[option.id].delete());
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
       setProductFeatureOptionError(message);
@@ -1718,7 +1568,7 @@ export default function TeamAdminPage({
     setEstimateSavingId(estimate.id);
     try {
       await db.transact(
-        db.tx.estimates[estimate.id].update({
+        tx.estimates[estimate.id].update({
           title,
           updatedAt: now,
         })
@@ -1749,7 +1599,7 @@ export default function TeamAdminPage({
     }
     setEstimateSavingId(estimate.id);
     try {
-      await db.transact(db.tx.estimates[estimate.id].delete());
+      await db.transact(tx.estimates[estimate.id].delete());
       setEstimateDrafts((prev) => prev.filter((entry) => entry.id !== estimate.id));
       setEstimateStatus(
         `Deleted "${estimate.title || "Untitled Estimate"}".`
@@ -1760,14 +1610,6 @@ export default function TeamAdminPage({
     } finally {
       setEstimateSavingId(null);
     }
-  };
-
-  const formatDateTime = (timestamp: number | null) => {
-    if (typeof timestamp !== "number") return "Not available";
-    return new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(timestamp));
   };
 
   const renderAuthGate = () => {

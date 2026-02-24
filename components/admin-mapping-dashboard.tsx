@@ -1,4 +1,3 @@
-// @ts-nocheck
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -52,94 +51,23 @@ import {
   Trash2,
   WandSparkles,
 } from "lucide-react";
-
-type LibraryItem = {
-  key: string;
-  name: string;
-  uploadedAt: number;
-  url: string;
-};
-
-type PandaDocTemplateListItem = {
-  id: string;
-  name: string;
-  dateModified?: string;
-  dateCreated?: string;
-  version?: string;
-};
-
-type PandaDocTemplateDetails = {
-  id: string;
-  name: string;
-  roles: Array<{ id: string; name: string; signingOrder?: string }>;
-  tokens: Array<{ name: string }>;
-  fields: Array<{ name: string; mergeField?: string; type?: string }>;
-};
+import {
+  ALL_PROJECT_FILTER_VALUE,
+  ANY_PROJECT_TYPE_VALUE,
+  ANY_VENDOR_VALUE,
+  UNASSIGNED_PROJECT_FILTER_VALUE,
+  collectKeysFromEstimatePayload,
+  createBinding,
+  formatRelativeTime,
+  hasSameStringRecord,
+  normalizedKey,
+  type LibraryItem,
+  type PandaDocTemplateDetails,
+  type PandaDocTemplateListItem,
+} from "@/components/admin-mapping-dashboard.helpers";
+import type { EstimateRecord, ProjectRecord, TeamRecord } from "@/lib/team-records";
 
 const STATIC_SOURCE_KEYS = getSourceFieldKeys();
-const ANY_VENDOR_VALUE = "__any_vendor__";
-const ANY_PROJECT_TYPE_VALUE = "__any_project_type__";
-const ALL_PROJECT_FILTER_VALUE = "__all_projects__";
-const UNASSIGNED_PROJECT_FILTER_VALUE = "__unassigned_projects__";
-
-function normalizedKey(value: string) {
-  return value.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
-}
-
-function createBinding(
-  details: PandaDocTemplateDetails | null,
-  sourceKeys: string[],
-  sourceKey = sourceKeys[0] ?? ""
-): PandaDocTemplateBinding {
-  const firstToken = details?.tokens[0]?.name ?? "";
-  return {
-    id: `binding-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-    sourceKey,
-    targetType: "token",
-    targetName: firstToken,
-  };
-}
-
-function addFlatKeys(value: unknown, keys: Set<string>) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return;
-  Object.keys(value as Record<string, unknown>).forEach((key) => {
-    const normalized = key.trim();
-    if (!normalized) return;
-    keys.add(normalized);
-  });
-}
-
-function collectKeysFromEstimatePayload(value: unknown, keys: Set<string>) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return;
-  const payload = value as Record<string, unknown>;
-  addFlatKeys(payload, keys);
-  addFlatKeys(payload.values, keys);
-  addFlatKeys(payload.info, keys);
-}
-
-function formatRelativeTime(timestamp: number | null | undefined) {
-  if (!timestamp || !Number.isFinite(timestamp)) return "No timestamp";
-  const diffMs = Date.now() - timestamp;
-  if (diffMs < 60_000) return "Just now";
-  if (diffMs < 3_600_000) return `${Math.max(1, Math.floor(diffMs / 60_000))}m ago`;
-  if (diffMs < 86_400_000) {
-    return `${Math.max(1, Math.floor(diffMs / 3_600_000))}h ago`;
-  }
-  if (diffMs < 604_800_000) {
-    return `${Math.max(1, Math.floor(diffMs / 86_400_000))}d ago`;
-  }
-  return new Date(timestamp).toLocaleDateString();
-}
-
-function hasSameStringRecord(
-  current: Record<string, string>,
-  next: Record<string, string>
-) {
-  const currentKeys = Object.keys(current);
-  const nextKeys = Object.keys(next);
-  if (currentKeys.length !== nextKeys.length) return false;
-  return currentKeys.every((key) => current[key] === next[key]);
-}
 
 type AdminMappingDashboardProps = {
   embedded?: boolean;
@@ -194,6 +122,7 @@ export default function AdminPage({
     user: convexUser,
     error: convexAuthError,
   } = db.useAuth();
+  const tx = db.tx as any;
 
   const emailAddress = user?.primaryEmailAddress?.emailAddress?.toLowerCase() ?? "";
   const emailDomain = emailAddress.split("@")[1] ?? "";
@@ -236,7 +165,7 @@ export default function AdminPage({
 
   const { data: teamData, error: teamQueryError, isLoading: teamLoading } =
     db.useQuery(teamQuery);
-  const teams = (teamData?.teams ?? []) as Array<any>;
+  const teams = (teamData?.teams ?? []) as TeamRecord[];
   const orgTeam = useMemo(
     () => pickOrganizationTeam(teams, normalizedOrgTeamName),
     [teams, normalizedOrgTeamName]
@@ -616,6 +545,7 @@ export default function AdminPage({
   const handleCreateManagementProject = async () => {
     clearManagementMessages();
     if (!ensureManagementWritable()) return;
+    if (!managementTeam || !convexUser) return;
     const name = newProjectName.trim();
     if (!name) {
       setManagementActionError("Project name is required.");
@@ -626,7 +556,7 @@ export default function AdminPage({
       const now = Date.now();
       const projectId = id();
       await db.transact(
-        db.tx.projects[projectId]
+        tx.projects[projectId]
           .create({
             id: projectId,
             name,
@@ -646,7 +576,7 @@ export default function AdminPage({
       setManagementActionLoadingId(null);
     }
   };
-  const handleRenameProject = async (project: any) => {
+  const handleRenameProject = async (project: ProjectRecord) => {
     clearManagementMessages();
     if (!ensureManagementWritable()) return;
     const projectId = String(project?.id ?? "").trim();
@@ -662,7 +592,7 @@ export default function AdminPage({
     setManagementActionLoadingId(`project:rename:${projectId}`);
     try {
       await db.transact(
-        db.tx.projects[projectId].update({
+        tx.projects[projectId].update({
           name: nextName,
           updatedAt: Date.now(),
         })
@@ -676,7 +606,7 @@ export default function AdminPage({
       setManagementActionLoadingId(null);
     }
   };
-  const handleDeleteProject = async (project: any) => {
+  const handleDeleteProject = async (project: ProjectRecord) => {
     clearManagementMessages();
     if (!ensureManagementWritable()) return;
     const projectId = String(project?.id ?? "").trim();
@@ -691,7 +621,7 @@ export default function AdminPage({
     }
     setManagementActionLoadingId(`project:delete:${projectId}`);
     try {
-      await db.transact(db.tx.projects[projectId].delete());
+      await db.transact(tx.projects[projectId].delete());
       setManagementActionStatus(`Deleted project "${projectName}".`);
     } catch (err) {
       setManagementActionError(
@@ -701,7 +631,7 @@ export default function AdminPage({
       setManagementActionLoadingId(null);
     }
   };
-  const handleRenameEstimate = async (estimate: any) => {
+  const handleRenameEstimate = async (estimate: EstimateRecord) => {
     clearManagementMessages();
     if (!ensureManagementWritable()) return;
     const estimateId = String(estimate?.id ?? "").trim();
@@ -719,7 +649,7 @@ export default function AdminPage({
     setManagementActionLoadingId(`estimate:rename:${estimateId}`);
     try {
       await db.transact(
-        db.tx.estimates[estimateId].update({
+        tx.estimates[estimateId].update({
           title: nextTitle,
           updatedAt: Date.now(),
         })
@@ -733,7 +663,7 @@ export default function AdminPage({
       setManagementActionLoadingId(null);
     }
   };
-  const handleDeleteEstimate = async (estimate: any) => {
+  const handleDeleteEstimate = async (estimate: EstimateRecord) => {
     clearManagementMessages();
     if (!ensureManagementWritable()) return;
     const estimateId = String(estimate?.id ?? "").trim();
@@ -742,7 +672,7 @@ export default function AdminPage({
     if (!window.confirm(`Delete estimate "${estimateTitle}"?`)) return;
     setManagementActionLoadingId(`estimate:delete:${estimateId}`);
     try {
-      await db.transact(db.tx.estimates[estimateId].delete());
+      await db.transact(tx.estimates[estimateId].delete());
       setManagementActionStatus(`Deleted estimate "${estimateTitle}".`);
     } catch (err) {
       setManagementActionError(
@@ -752,7 +682,10 @@ export default function AdminPage({
       setManagementActionLoadingId(null);
     }
   };
-  const handleMoveEstimateToProject = async (estimate: any, targetProjectId: string) => {
+  const handleMoveEstimateToProject = async (
+    estimate: EstimateRecord,
+    targetProjectId: string
+  ) => {
     clearManagementMessages();
     if (!ensureManagementWritable()) return;
     const estimateId = String(estimate?.id ?? "").trim();
@@ -768,18 +701,18 @@ export default function AdminPage({
     try {
       const now = Date.now();
       const operations = [
-        db.tx.estimates[estimateId]
+        tx.estimates[estimateId]
           .update({
             updatedAt: now,
           })
           .link({ project: nextProjectId }),
-        db.tx.projects[nextProjectId].update({
+        tx.projects[nextProjectId].update({
           updatedAt: now,
         }),
       ];
       if (currentProjectId && currentProjectId !== nextProjectId) {
         operations.push(
-          db.tx.projects[currentProjectId].update({
+          tx.projects[currentProjectId].update({
             updatedAt: now,
           })
         );
@@ -1146,7 +1079,7 @@ export default function AdminPage({
         return next;
       })
       .filter((binding): binding is PandaDocTemplateBinding => Boolean(binding));
-    const cleanedRules = templateRules
+    const cleanedRules: PandaDocTemplateRule[] = templateRules
       .map((rule, index) => {
         const templateUuid = String(rule.templateUuid ?? "").trim();
         if (!templateUuid) return null;
@@ -1169,7 +1102,7 @@ export default function AdminPage({
           isActive: rule.isActive !== false,
         } satisfies PandaDocTemplateRule;
       })
-      .filter((rule): rule is PandaDocTemplateRule => Boolean(rule));
+      .filter((rule): rule is NonNullable<typeof rule> => Boolean(rule));
     const templateUuid = selectedTemplateId.trim();
     if (!templateUuid && !cleanedRules.length) {
       setSaveError(
