@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -38,9 +37,6 @@ export default function UnifiedAdminPage() {
         <Card className="w-full max-w-lg border-border/60 bg-card/85 shadow-elevated">
           <CardHeader>
             <CardTitle className="text-2xl font-serif">Admin unavailable</CardTitle>
-            <CardDescription>
-              Configure Clerk to access the unified admin dashboard.
-            </CardDescription>
           </CardHeader>
         </Card>
       </main>
@@ -53,9 +49,6 @@ export default function UnifiedAdminPage() {
         <Card className="w-full max-w-lg border-border/60 bg-card/85 shadow-elevated">
           <CardHeader>
             <CardTitle className="text-2xl font-serif">Loading admin access</CardTitle>
-            <CardDescription>
-              Verifying your account before showing dashboard data.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <div className="inline-flex items-center gap-2 text-sm text-muted-foreground">
@@ -74,9 +67,6 @@ export default function UnifiedAdminPage() {
         <Card className="w-full max-w-lg border-border/60 bg-card/85 shadow-elevated">
           <CardHeader>
             <CardTitle className="text-2xl font-serif">Sign in required</CardTitle>
-            <CardDescription>
-              Sign in to view and manage projects, estimates, and PandaDoc mappings.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <SignInButton mode="modal">
@@ -125,9 +115,6 @@ export default function UnifiedAdminPage() {
                 <h1 className="text-4xl font-serif leading-tight tracking-tight md:text-5xl">
                   One dashboard for teams, catalogs, projects, estimates, and PandaDoc routing.
                 </h1>
-                <p className="max-w-3xl text-sm text-white/75 md:text-base">
-                  Rebuilt as a single operational surface so you can focus one lane at a time.
-                </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button variant="secondary" size="sm" onClick={() => setActiveTab("workspace")}>
@@ -165,28 +152,24 @@ export default function UnifiedAdminPage() {
                   Workspace
                 </p>
                 <p className="mt-1 text-xl font-semibold text-white">Team + Roles</p>
-                <p className="text-xs text-white/65">Owners, admins, and sub-teams</p>
               </div>
               <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
                 <p className="text-[10px] uppercase tracking-[0.2em] text-white/65">
                   Catalog
                 </p>
                 <p className="mt-1 text-xl font-semibold text-white">Pricing Inputs</p>
-                <p className="text-xs text-white/65">Vendors, unit types, product options</p>
               </div>
               <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
                 <p className="text-[10px] uppercase tracking-[0.2em] text-white/65">
                   Records
                 </p>
                 <p className="mt-1 text-xl font-semibold text-white">Projects + Estimates</p>
-                <p className="text-xs text-white/65">Create, rename, move, and remove</p>
               </div>
               <div className="rounded-2xl border border-white/15 bg-white/10 px-4 py-3 backdrop-blur-sm">
                 <p className="text-[10px] uppercase tracking-[0.2em] text-white/65">
                   Mapping
                 </p>
                 <p className="mt-1 text-xl font-semibold text-white">PandaDoc Rules</p>
-                <p className="text-xs text-white/65">Template routing and field bindings</p>
               </div>
             </div>
           </div>
@@ -245,11 +228,6 @@ export default function UnifiedAdminPage() {
                   ? "Workspace and Team Operations"
                   : "Catalog Management"}
               </h2>
-              <p className="text-sm text-muted-foreground">
-                {activeTab === "workspace"
-                  ? "Organization structure, member roles, and team settings."
-                  : "Vendors, project types, unit types, and product feature options."}
-              </p>
             </div>
             <TeamAdminDashboard
               embedded
@@ -272,11 +250,6 @@ export default function UnifiedAdminPage() {
                   ? "Project and Estimate Operations"
                   : "PandaDoc Mapping and Template Config"}
               </h2>
-              <p className="text-sm text-muted-foreground">
-                {activeTab === "records"
-                  ? "Create, rename, move, and clean up project and estimate records."
-                  : "Control template selection, routing rules, field catalog, and binding presets."}
-              </p>
             </div>
             <AdminMappingDashboard
               embedded

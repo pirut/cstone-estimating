@@ -8,7 +8,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -985,13 +984,7 @@ export function EstimateBuilderCard({
               Step 1
             </Badge>
             <CardTitle className="text-2xl font-serif">Manual Estimate Builder</CardTitle>
-            <CardDescription>
-              Complete each section to unlock the next and keep calculations clean.
-            </CardDescription>
           </div>
-          <Badge variant="outline" className="bg-background/80">
-            Guided workflow
-          </Badge>
         </div>
 
         <div className="space-y-2 rounded-xl border border-border/60 bg-background/65 p-3">
@@ -1055,9 +1048,6 @@ export function EstimateBuilderCard({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-foreground">Estimate Session</p>
-              <p className="text-xs text-muted-foreground">
-                Name this estimate and manage save/version actions from the action dock.
-              </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button variant="outline" onClick={handleClear}>
@@ -1087,11 +1077,7 @@ export function EstimateBuilderCard({
         </section>
 
         <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
-          <SectionHeader
-            title="Project Details"
-            description="These values populate the proposal cover and headers."
-            done={projectStepComplete}
-          />
+          <SectionHeader title="Project Details" done={projectStepComplete} />
           <div className="grid gap-3 md:grid-cols-2">
             {groupList.flatMap((group) =>
               group.fields.map((field) => {
@@ -1214,9 +1200,6 @@ export function EstimateBuilderCard({
                         />
                         {isProjectNameField ? (
                           <div className="space-y-2">
-                            <p className="text-xs text-muted-foreground">
-                              Type a project address to autofill the city/state/zip.
-                            </p>
                             {isAddressLookupLoading ? (
                               <p className="text-xs text-muted-foreground">
                                 Looking up addresses...
@@ -1267,25 +1250,17 @@ export function EstimateBuilderCard({
               })
             )}
           </div>
-          {!projectStepComplete ? (
-            <UnlockNotice
-              message={`Complete Prepared For, Project Name, Project Type, and Proposal Date to unlock ${
-                isChangeOrderMode ? "Change Order Pricing" : "Product Pricing"
-              }.`}
-            />
-          ) : null}
         </section>
 
         {showChangeOrder ? (
           <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
             <SectionHeader
               title="Change Order Pricing"
-              description="Keep this simple: vendor cost + markup, labor cost + markup."
               done={changeOrderStepComplete}
             />
 
             {!vendorOptions.length ? (
-              <UnlockNotice message="No active vendors are configured for this team. Add vendors in Team Admin to use change-order vendor selection." />
+              <div className="text-xs text-muted-foreground">No active vendors.</div>
             ) : null}
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -1381,19 +1356,12 @@ export function EstimateBuilderCard({
               </div>
             </div>
 
-            {!changeOrderStepComplete ? (
-              <UnlockNotice message="Select a vendor and enter vendor + labor costs to unlock review totals." />
-            ) : null}
           </section>
         ) : null}
 
         {showProducts ? (
           <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
-            <SectionHeader
-              title="Product Pricing"
-              description="Add vendor/product lines and markup values."
-              done={productStepComplete}
-            />
+            <SectionHeader title="Product Pricing" done={productStepComplete} />
 
             <div className="grid gap-3 md:grid-cols-3">
               <div className="space-y-2">
@@ -1416,7 +1384,7 @@ export function EstimateBuilderCard({
               </div>
             </div>
             {!vendorOptions.length ? (
-              <UnlockNotice message="No active vendors are configured for this team. Add vendors in Team Admin to use manual estimate dropdowns." />
+              <div className="text-xs text-muted-foreground">No active vendors.</div>
             ) : null}
 
             <div className="space-y-3">
@@ -1583,9 +1551,6 @@ export function EstimateBuilderCard({
                           <div>
                             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                               EUR Cost Calculator
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Mirrors workbook section labels and converts to USD.
                             </p>
                           </div>
                           <Button
@@ -1788,10 +1753,6 @@ export function EstimateBuilderCard({
                         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                           Features
                         </p>
-                        <p className="text-xs text-muted-foreground">
-                          Ordered to match your product details list. Choose from
-                          suggestions or type a custom value.
-                        </p>
                       </div>
 
                       <div className="grid gap-3 md:grid-cols-2">
@@ -1878,13 +1839,6 @@ export function EstimateBuilderCard({
                         </label>
                       </div>
 
-                      {!allowsSplitFinish ? (
-                        <p className="text-xs text-muted-foreground">
-                          This vendor does not allow split finish. A single frame
-                          color is used.
-                        </p>
-                      ) : null}
-
                       <div className="rounded-lg border border-border/60 bg-card/70 px-3 py-2">
                         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                           Features list (ordered)
@@ -1927,19 +1881,12 @@ export function EstimateBuilderCard({
               </div>
             </div>
 
-            {!productStepComplete ? (
-              <UnlockNotice message="Add at least one product name and price above 0 to unlock Bucking & Waterproof." />
-            ) : null}
           </section>
         ) : null}
 
         {showBucking ? (
           <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
-            <SectionHeader
-              title="Bucking & Waterproof"
-              description="Capture lineal footage and rates for job conditions."
-              done={buckingStepComplete}
-            />
+            <SectionHeader title="Bucking & Waterproof" done={buckingStepComplete} />
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <RateField
@@ -1984,7 +1931,7 @@ export function EstimateBuilderCard({
 
             <div className="space-y-3">
               {!panelTypeOptions.length ? (
-                <UnlockNotice message="No active unit types are configured for this team. Add unit types in Team Admin to use bucking dropdowns." />
+                <div className="text-xs text-muted-foreground">No active unit types.</div>
               ) : null}
               {draft.bucking.map((item, index) => {
                 const qty = toNumber(item.qty);
@@ -2136,19 +2083,12 @@ export function EstimateBuilderCard({
               </div>
             </div>
 
-            {!buckingStepComplete ? (
-              <UnlockNotice message="Add at least one line with Qty and SqFt to unlock Install Calculator." />
-            ) : null}
           </section>
         ) : null}
 
         {showInstall ? (
           <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
-            <SectionHeader
-              title="Install Calculator"
-              description="Control install markup, rentals, and optional overrides."
-              done={installStepComplete}
-            />
+            <SectionHeader title="Install Calculator" done={installStepComplete} />
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <RateField
@@ -2208,11 +2148,7 @@ export function EstimateBuilderCard({
 
         {showReview ? (
           <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
-            <SectionHeader
-              title="Calculated Totals"
-              description="These values are sent to the proposal PDF field mapping."
-              done={installStepComplete}
-            />
+            <SectionHeader title="Calculated Totals" done={installStepComplete} />
 
             <div className="grid gap-3 md:grid-cols-2">
               {[
@@ -2324,14 +2260,14 @@ export function EstimateBuilderCard({
               <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-3 text-sm text-foreground">
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-destructive" />
-                  Review margin checks before generating.
+                  Margin review required.
                 </div>
               </div>
             ) : (
               <div className="rounded-xl border border-accent/30 bg-accent/10 px-3 py-3 text-sm text-foreground">
                 <div className="flex items-center gap-2">
                   <Sparkles className="h-4 w-4 text-accent" />
-                  Ready to generate. Your totals, schedule, and margins are ready to sync to PandaDoc.
+                  Ready.
                 </div>
               </div>
             )}
@@ -2345,18 +2281,15 @@ export function EstimateBuilderCard({
 
 function SectionHeader({
   title,
-  description,
   done,
 }: {
   title: string;
-  description: string;
   done: boolean;
 }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
       <div>
         <p className="text-sm font-semibold text-foreground">{title}</p>
-        <p className="text-xs text-muted-foreground">{description}</p>
       </div>
       <Badge
         variant={done ? "accent" : "outline"}
@@ -2364,15 +2297,6 @@ function SectionHeader({
       >
         {done ? "Complete" : "In progress"}
       </Badge>
-    </div>
-  );
-}
-
-function UnlockNotice({ message }: { message: string }) {
-  return (
-    <div className="flex items-start gap-2 rounded-xl border border-border/60 bg-muted/30 px-3 py-3 text-sm text-muted-foreground">
-      <LockKeyhole className="mt-0.5 h-4 w-4" />
-      <span>{message}</span>
     </div>
   );
 }

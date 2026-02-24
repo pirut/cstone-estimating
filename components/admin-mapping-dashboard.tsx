@@ -25,7 +25,6 @@ import type {
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -1318,9 +1317,6 @@ export default function AdminPage({
                   Operations
                 </Badge>
                 <CardTitle className="text-2xl font-serif">Project Management</CardTitle>
-                <CardDescription>
-                  Create, rename, and retire projects across your organization teams.
-                </CardDescription>
               </div>
               <div className="space-y-2">
                 <label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
@@ -1480,9 +1476,6 @@ export default function AdminPage({
                   Operations
                 </Badge>
                 <CardTitle className="text-2xl font-serif">Estimate Management</CardTitle>
-                <CardDescription>
-                  Rename, move, and remove estimates with project-aware filtering.
-                </CardDescription>
               </div>
               <div className="grid gap-2 md:grid-cols-[1fr_220px]">
                 <div className="relative">
@@ -1666,9 +1659,6 @@ export default function AdminPage({
                   Active preset
                 </Badge>
                 <CardTitle className="text-xl font-serif">Template Config</CardTitle>
-                <CardDescription>
-                  This preset is read by proposal generation on the main page.
-                </CardDescription>
               </div>
               <Button
                 variant="secondary"
@@ -1736,9 +1726,6 @@ export default function AdminPage({
           <Card id="pandadoc-template" className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
           <CardHeader>
             <CardTitle className="text-xl font-serif">PandaDoc Template</CardTitle>
-            <CardDescription>
-              Choose a PandaDoc template, then map source keys to tokens/fields.
-            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {templatesError ? (
@@ -2068,9 +2055,6 @@ export default function AdminPage({
           <Card id="field-catalog" className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
           <CardHeader>
             <CardTitle className="text-xl font-serif">Field Catalog</CardTitle>
-            <CardDescription>
-              Source keys for bindings are loaded from Convex org estimate data.
-            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             <p className="text-sm text-muted-foreground">
@@ -2094,9 +2078,6 @@ export default function AdminPage({
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <CardTitle className="text-xl font-serif">Bindings</CardTitle>
-                <CardDescription>
-                  Map estimate source keys to PandaDoc token names or merge fields.
-                </CardDescription>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Button variant="secondary" size="sm" onClick={handleAutoMap}>

@@ -26,7 +26,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -1869,7 +1868,6 @@ export default function HomePage() {
     if (isGenerating) {
       return {
         label: "Generating PandaDoc",
-        helper: "Creating or revising the document and preparing signing.",
         tone: "loading" as const,
       };
     }
@@ -1877,14 +1875,12 @@ export default function HomePage() {
     if (canGenerate) {
       return {
         label: "Ready to generate",
-        helper: "Estimate is ready.",
         tone: "ready" as const,
       };
     }
 
     return {
       label: "Awaiting estimate",
-      helper: "Enter estimate details.",
       tone: "idle" as const,
     };
   }, [isGenerating, canGenerate]);
@@ -3260,9 +3256,6 @@ export default function HomePage() {
               Step 2
             </Badge>
             <CardTitle className="text-2xl font-serif">Generation Presets</CardTitle>
-            <CardDescription>
-              Optionally load team mapping presets before creating PandaDoc.
-            </CardDescription>
           </div>
           <Badge variant="outline" className="bg-background/80">
             Optional
@@ -3295,9 +3288,7 @@ export default function HomePage() {
             </p>
           </div>
         ) : (
-          <div className="text-sm text-muted-foreground">
-            No preset yet. You can still generate directly from current values.
-          </div>
+          <div className="text-sm text-muted-foreground">No preset.</div>
         )}
         <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
           <span>
@@ -3395,65 +3386,18 @@ export default function HomePage() {
         <section className="relative overflow-hidden rounded-[32px] border border-border/60 bg-foreground text-white shadow-elevated">
           <div className="absolute -right-28 -top-24 h-72 w-72 rounded-full bg-accent/25 blur-3xl" />
           <div className="absolute bottom-0 left-10 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
-          <div className="relative grid gap-8 p-8 lg:grid-cols-[1.15fr_0.85fr] 2xl:grid-cols-[1.25fr_0.75fr]">
-            <div className="space-y-6">
+          <div className="relative p-8">
+            <div className="space-y-4">
               <BrandMark tone="dark" />
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <Badge variant="outline" className={statusClassName}>
                   {status.label}
                 </Badge>
-                <div className="space-y-3">
-                  <h1 className="text-4xl font-serif tracking-tight md:text-5xl">
-                    Cornerstone Proposal Generator
-                  </h1>
-                  <p className="max-w-xl text-base text-white/70">
-                    Build estimate variables, generate PandaDoc, and launch e-sign.
-                  </p>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <Button asChild variant="accent" size="sm">
-                  <a href="#step-input">Start</a>
-                </Button>
+                <h1 className="text-4xl font-serif tracking-tight md:text-5xl">
+                  Cornerstone Proposal Generator
+                </h1>
               </div>
             </div>
-            <Card className="border-white/10 bg-white/10 text-white shadow-none backdrop-blur-sm">
-              <CardHeader>
-                <CardTitle className="text-xl text-white">Checklist</CardTitle>
-                <CardDescription className="text-white/60">
-                  {status.helper}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2 rounded-xl border border-white/10 bg-black/10 p-4">
-                  <div className="flex items-center justify-between text-xs uppercase tracking-[0.24em] text-white/60">
-                    <span>Completion</span>
-                    <span>{workflowPercent}%</span>
-                  </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-white/20">
-                    <div
-                      className="h-full rounded-full bg-accent transition-all duration-500"
-                      style={{ width: `${workflowPercent}%` }}
-                    />
-                  </div>
-                </div>
-                <div className="space-y-3">
-                  {workflowMilestones.map((milestone) => (
-                    <div
-                      key={milestone.id}
-                      className="flex items-start gap-3 rounded-xl border border-white/10 bg-white/5 px-4 py-3"
-                    >
-                      {milestone.done ? (
-                        <CheckCircle2 className="mt-0.5 h-4 w-4 text-accent" />
-                      ) : (
-                        <CircleDashed className="mt-0.5 h-4 w-4 text-white/60" />
-                      )}
-                      <p className="text-sm text-white/70">{milestone.label}</p>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </section>
 
@@ -3464,16 +3408,10 @@ export default function HomePage() {
                 <CardTitle className="text-2xl font-serif">
                   Sign in required
                 </CardTitle>
-                <CardDescription>
-                  Access to proposals and project estimates is restricted to your
-                  organization.
-                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {authLoaded ? (
-                  <div className="text-sm text-muted-foreground">
-                    Use your Microsoft account to continue.
-                  </div>
+                  <div className="text-sm text-muted-foreground">Microsoft sign-in</div>
                 ) : (
                   <div className="text-sm text-muted-foreground">
                     Checking your account status...
@@ -3599,9 +3537,6 @@ export default function HomePage() {
                     <CardTitle className="text-2xl font-serif">
                       Project Management
                     </CardTitle>
-                    <CardDescription>
-                      Create projects, set the active destination, and switch teams.
-                    </CardDescription>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline" className="bg-background/80">
@@ -3680,15 +3615,11 @@ export default function HomePage() {
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent align="end" className="w-80 space-y-3">
-                          <div className="space-y-1">
-                            <p className="text-sm font-semibold text-foreground">
-                              New project
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Enter the required project details to add it to your
-                              active team.
-                            </p>
-                          </div>
+                        <div className="space-y-1">
+                          <p className="text-sm font-semibold text-foreground">
+                            New project
+                          </p>
+                        </div>
                           <div className="space-y-2">
                             <label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                               Project name
@@ -3790,7 +3721,7 @@ export default function HomePage() {
                       <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-4 text-sm text-muted-foreground">
                         {projectLibraryItems.length
                           ? "No projects match your search."
-                          : "No projects yet. Use + to create your first project."}
+                          : "No projects."}
                       </div>
                     )}
                   </div>
@@ -3806,25 +3737,6 @@ export default function HomePage() {
                           : "No project selected")}
                     </Badge>
                   </div>
-                  <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-3">
-                    <p className="text-xs text-muted-foreground">
-                      Power workflow shortcuts
-                    </p>
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px]">
-                      <Badge variant="outline" className="bg-background/80">
-                        Ctrl/Cmd+S save
-                      </Badge>
-                      <Badge variant="outline" className="bg-background/80">
-                        Ctrl/Cmd+Enter generate
-                      </Badge>
-                      <Badge variant="outline" className="bg-background/80">
-                        Ctrl/Cmd+Shift+N new
-                      </Badge>
-                      <Badge variant="outline" className="bg-background/80">
-                        Ctrl/Cmd+. dock
-                      </Badge>
-                    </div>
-                  </div>
                 </CardContent>
                 </Card>
               </div>
@@ -3839,9 +3751,6 @@ export default function HomePage() {
                       <CardTitle className="text-2xl font-serif">
                         Estimates & History
                       </CardTitle>
-                      <CardDescription>
-                        Search estimates, move between projects, and manage versions.
-                      </CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
                       <Button
@@ -4032,9 +3941,6 @@ export default function HomePage() {
                                           <p className="text-sm font-semibold text-foreground">
                                             Move estimate
                                           </p>
-                                          <p className="text-xs text-muted-foreground">
-                                            Choose a destination project.
-                                          </p>
                                         </div>
                                         <Select
                                           value={selectedMoveTarget || undefined}
@@ -4158,9 +4064,6 @@ export default function HomePage() {
                             Version history:{" "}
                             {selectedHistoryEstimate.title ?? "Untitled"}
                           </p>
-                          <p className="text-xs text-muted-foreground">
-                            Reverting creates a new version and keeps the full timeline.
-                          </p>
                         </div>
                         <Button
                           variant="ghost"
@@ -4229,7 +4132,7 @@ export default function HomePage() {
                   ) : null}
                   {editingEstimateId ? (
                     <div className="text-xs text-muted-foreground">
-                      Editing a project estimate. Use “Save to project” to update it.
+                      Editing a project estimate.
                     </div>
                   ) : null}
                 </CardContent>
@@ -4266,10 +4169,6 @@ export default function HomePage() {
             <Card className="rounded-2xl border-border/60 bg-card/70">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">Estimate Tags</CardTitle>
-                <CardDescription>
-                  Add custom tags like option names, alternates, or change-order
-                  candidates.
-                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex flex-wrap gap-2">
@@ -4321,9 +4220,7 @@ export default function HomePage() {
                     ))}
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
-                    No tags yet. Tags are stored with this estimate inside its project.
-                  </p>
+                  <p className="text-xs text-muted-foreground">No tags.</p>
                 )}
               </CardContent>
             </Card>
@@ -4360,9 +4257,6 @@ export default function HomePage() {
                       Workspace
                     </Badge>
                     <CardTitle className="text-xl font-serif">At a glance</CardTitle>
-                    <CardDescription>
-                      Keep core estimate context visible while editing and generating.
-                    </CardDescription>
                   </div>
                   <Workflow className="mt-1 h-5 w-5 text-muted-foreground" />
                 </div>
@@ -4453,9 +4347,6 @@ export default function HomePage() {
                     <CardTitle className="text-2xl font-serif">
                       Generate PandaDoc
                     </CardTitle>
-                    <CardDescription>
-                      Create the proposal in PandaDoc and start signing.
-                    </CardDescription>
                   </div>
                   <LayoutTemplate className="mt-1 h-5 w-5 text-muted-foreground" />
                 </div>
@@ -4693,11 +4584,6 @@ export default function HomePage() {
                     </div>
                   </div>
                 ) : null}
-                <p className="text-xs text-muted-foreground">
-                  For saved projects, this step revises the linked PandaDoc
-                  document. If it is sent, we move it back to Draft and then apply
-                  updates. Add recipients and send from PandaDoc.
-                </p>
               </CardContent>
             </Card>
           </div>

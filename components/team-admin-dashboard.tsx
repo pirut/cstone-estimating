@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
@@ -1779,9 +1778,6 @@ export default function TeamAdminPage({
             <CardTitle className="text-2xl font-serif">
               Clerk not configured
             </CardTitle>
-            <CardDescription>
-              Add the Clerk publishable key to enable team admin access.
-            </CardDescription>
           </CardHeader>
         </Card>
       );
@@ -1794,9 +1790,6 @@ export default function TeamAdminPage({
             <CardTitle className="text-2xl font-serif">
               Sign in required
             </CardTitle>
-            <CardDescription>
-              Only organization owners and admins can manage teams and members.
-            </CardDescription>
           </CardHeader>
           <CardContent>
             <SignInButton mode="modal">
@@ -1842,9 +1835,6 @@ export default function TeamAdminPage({
           <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
             <div>
               <h1 className="text-3xl font-serif">Team Admin</h1>
-              <p className="text-sm text-muted-foreground">
-                Manage organization teams and memberships.
-              </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Button asChild variant="accent" size="sm">
@@ -1881,9 +1871,6 @@ export default function TeamAdminPage({
               <CardTitle className="text-2xl font-serif">
                 Admin access only
               </CardTitle>
-              <CardDescription>
-                Ask your organization owner to grant owner/admin access.
-              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="text-sm text-muted-foreground">
@@ -1900,9 +1887,6 @@ export default function TeamAdminPage({
                     <CardTitle className="text-2xl font-serif">
                       Organization overview
                     </CardTitle>
-                    <CardDescription>
-                      Primary workspace for {teamDomain || "your domain"}.
-                    </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {convexLoading ? (
@@ -1943,9 +1927,6 @@ export default function TeamAdminPage({
                     <CardTitle className="text-2xl font-serif">
                       Create sub team
                     </CardTitle>
-                    <CardDescription>
-                      Add a focused team within your organization.
-                    </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4">
                     {teamError ? (
@@ -1976,9 +1957,6 @@ export default function TeamAdminPage({
                 <Card id="team-directory" className="border-border/60 bg-card/80 shadow-elevated lg:col-span-2">
                   <CardHeader>
                     <CardTitle className="text-2xl font-serif">Teams</CardTitle>
-                    <CardDescription>
-                      Select a team to manage its members.
-                    </CardDescription>
                   </CardHeader>
                   <CardContent className="grid gap-6 lg:grid-cols-[0.6fr_0.4fr]">
                     <ScrollArea className="h-72 rounded-lg border border-border/70 bg-background/70">
@@ -2074,9 +2052,6 @@ export default function TeamAdminPage({
                 <CardTitle className="text-2xl font-serif">
                   Team members
                 </CardTitle>
-                <CardDescription>
-                  Manage roles and access for the selected team.
-                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
                 {memberActionError ? (
@@ -2347,7 +2322,7 @@ export default function TeamAdminPage({
             </Card>
 
             {includeEstimateSection ? (
-              <Card
+                <Card
                 id="team-estimates"
                 className="border-border/60 bg-card/80 shadow-elevated lg:col-span-2"
               >
@@ -2355,9 +2330,6 @@ export default function TeamAdminPage({
                   <CardTitle className="text-2xl font-serif">
                     Team estimates
                   </CardTitle>
-                  <CardDescription>
-                    Review, rename, and remove estimates for the selected team.
-                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {estimateError ? (
@@ -2459,9 +2431,6 @@ export default function TeamAdminPage({
                 <CardTitle className="text-2xl font-serif">
                   Catalog settings
                 </CardTitle>
-                <CardDescription>
-                  Manage vendors, project types, unit types, and product feature dropdown options.
-                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-8">
                 <div className="space-y-2">
