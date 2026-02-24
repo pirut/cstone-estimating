@@ -21,7 +21,6 @@ const DEFAULT_SEND_DOCUMENT = true;
 const DEFAULT_CREATE_SESSION = true;
 const DEFAULT_SESSION_LIFETIME_SECONDS = 900;
 const DEFAULT_ALLOW_CREATE_FALLBACK = true;
-const DEFAULT_DOCUMENT_VALUE_CURRENCY = "USD";
 
 function toBoolean(value: unknown, fallback: boolean) {
   if (typeof value === "boolean") return value;
@@ -53,72 +52,20 @@ function toDocumentValueAmount(value: unknown) {
   return raw.includes("(") && raw.includes(")") ? -Math.abs(parsed) : parsed;
 }
 
-function formatDocumentValue(amount: number, currency?: string) {
-  if (currency) {
-    try {
-      return new Intl.NumberFormat("en-US", {
-        style: "currency",
-        currency,
-      }).format(amount);
-    } catch {
-      return `${currency} ${amount.toFixed(2)}`;
-    }
-  }
-  return amount.toFixed(2);
-}
-
 function resolveFallbackDocumentValueAmount(candidates: unknown[]) {
+  let firstFinite: number | undefined;
   for (const candidate of candidates) {
     const parsed = toDocumentValueAmount(candidate);
     if (typeof parsed === "number" && Number.isFinite(parsed)) {
-      return parsed;
+      if (firstFinite === undefined) {
+        firstFinite = parsed;
+      }
+      if (parsed > 0) {
+        return parsed;
+      }
     }
   }
-  return undefined;
-}
-
-function withFallbackDocumentValue(
-  document: {
-    id: string;
-    name: string;
-    status: string;
-    appUrl: string;
-    apiUrl: string;
-    sharedLink?: string;
-    valueAmount?: number;
-    valueCurrency?: string;
-    valueFormatted?: string;
-  },
-  fallbackCandidates: unknown[]
-) {
-  const fallbackAmount = resolveFallbackDocumentValueAmount(fallbackCandidates);
-  const documentAmount =
-    typeof document.valueAmount === "number" && Number.isFinite(document.valueAmount)
-      ? document.valueAmount
-      : undefined;
-  const shouldUseFallbackAmount =
-    typeof fallbackAmount === "number" &&
-    Number.isFinite(fallbackAmount) &&
-    (documentAmount === undefined ||
-      (fallbackAmount > 0 && documentAmount <= 0));
-  const valueAmount = shouldUseFallbackAmount ? fallbackAmount : documentAmount;
-  const valueCurrency =
-    String(document.valueCurrency ?? "").trim() ||
-    (valueAmount !== undefined ? DEFAULT_DOCUMENT_VALUE_CURRENCY : undefined);
-  const formattedFromDocument = String(document.valueFormatted ?? "").trim() || undefined;
-  const valueFormatted =
-    shouldUseFallbackAmount || !formattedFromDocument
-      ? valueAmount !== undefined
-        ? formatDocumentValue(valueAmount, valueCurrency)
-        : undefined
-      : formattedFromDocument;
-
-  return {
-    ...document,
-    valueAmount,
-    valueCurrency,
-    valueFormatted,
-  };
+  return firstFinite;
 }
 
 function normalizePandaDocRecipient(
@@ -273,6 +220,9 @@ export async function POST(request: NextRequest) {
       fieldValues.final_payment,
       fieldValues.change_order_total,
     ];
+    const desiredDocumentValueAmount = resolveFallbackDocumentValueAmount(
+      fallbackDocumentValueCandidates
+    );
 
     const updateDraftPayload = buildPandaDocDraft({
       fieldValues,
@@ -333,6 +283,7 @@ export async function POST(request: NextRequest) {
       sessionLifetimeSeconds,
       recipientEmail: updateRecipientEmail || createRecipientEmail,
       sendOptions: sendConfig,
+      documentValueAmount: desiredDocumentValueAmount,
     };
     const generationCreateCommon = {
       draft: createDraftPayload,
@@ -341,6 +292,7 @@ export async function POST(request: NextRequest) {
       sessionLifetimeSeconds,
       recipientEmail: createRecipientEmail,
       sendOptions: sendConfig,
+      documentValueAmount: desiredDocumentValueAmount,
     };
     const canFallbackCreate =
       allowCreateFallback && Boolean(createDraftPayload.templateUuid);
@@ -386,10 +338,7 @@ export async function POST(request: NextRequest) {
         revisedDocumentId,
         fallbackFromDocumentId,
         revision: generation.revision,
-        document: withFallbackDocumentValue(
-          generation.document,
-          fallbackDocumentValueCandidates
-        ),
+        document: generation.document,
         recipient: generation.recipient,
         sendResult: generation.sendResult,
         session: generation.session,
