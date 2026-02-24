@@ -105,11 +105,13 @@ function withFallbackDocumentValue(
   const valueCurrency =
     String(document.valueCurrency ?? "").trim() ||
     (valueAmount !== undefined ? DEFAULT_DOCUMENT_VALUE_CURRENCY : undefined);
+  const formattedFromDocument = String(document.valueFormatted ?? "").trim() || undefined;
   const valueFormatted =
-    String(document.valueFormatted ?? "").trim() ||
-    (valueAmount !== undefined
-      ? formatDocumentValue(valueAmount, valueCurrency)
-      : undefined);
+    shouldUseFallbackAmount || !formattedFromDocument
+      ? valueAmount !== undefined
+        ? formatDocumentValue(valueAmount, valueCurrency)
+        : undefined
+      : formattedFromDocument;
 
   return {
     ...document,

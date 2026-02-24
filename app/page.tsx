@@ -2383,14 +2383,17 @@ export default function HomePage() {
       const normalizedValueCurrency =
         String(responseDocument?.valueCurrency ?? "").trim() ||
         (normalizedValueAmount !== undefined ? "USD" : undefined);
+      const formattedFromResponse =
+        String(responseDocument?.valueFormatted ?? "").trim() || undefined;
       const normalizedValueFormatted =
-        String(responseDocument?.valueFormatted ?? "").trim() ||
-        (normalizedValueAmount !== undefined
-          ? formatPandaDocDocumentValue({
-              valueAmount: normalizedValueAmount,
-              valueCurrency: normalizedValueCurrency,
-            }) ?? undefined
-          : undefined);
+        applyValueFallback || !formattedFromResponse
+          ? normalizedValueAmount !== undefined
+            ? formatPandaDocDocumentValue({
+                valueAmount: normalizedValueAmount,
+                valueCurrency: normalizedValueCurrency,
+              }) ?? undefined
+            : undefined
+          : formattedFromResponse;
       const data: PandaDocGenerationResponse =
         responseDocument && typeof responseDocument === "object"
           ? {
