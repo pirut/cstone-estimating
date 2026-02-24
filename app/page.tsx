@@ -1099,6 +1099,11 @@ export default function HomePage() {
   const hasSelectedProject = Boolean(
     activeProjectId && activeProjectId !== UNASSIGNED_PROJECT_KEY
   );
+  const activeProjectLabel =
+    activeProject?.name ??
+    (activeProjectId === UNASSIGNED_PROJECT_KEY
+      ? "Unassigned estimates"
+      : "No project selected");
   const activeEditingEstimateProjectId = String(
     activeEditingEstimate?.project?.id ?? ""
   ).trim();
@@ -3753,42 +3758,22 @@ export default function HomePage() {
                       </CardTitle>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Button
-                        variant="secondary"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={resetEstimateWorkspace}
-                      >
-                        <Plus className="h-4 w-4" />
-                        <span className="sr-only">New estimate</span>
-                      </Button>
                       <Badge variant="outline" className="bg-background/80">
                         {filteredTeamEstimates.length} shown
                       </Badge>
                       <Badge variant="outline" className="bg-background/80">
-                        {teamEstimates.length} in project
+                        {teamEstimates.length} in view
                       </Badge>
                     </div>
                   </div>
-                  <div className="grid gap-3 lg:grid-cols-[0.7fr_0.3fr]">
-                    <div className="relative">
-                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <Input
-                        value={teamEstimateQuery}
-                        onChange={(event) => setTeamEstimateQuery(event.target.value)}
-                        placeholder="Search estimates by name..."
-                        className="pl-9"
-                      />
-                    </div>
-                    <div className="flex items-center lg:justify-end">
-                      <Badge variant="outline" className="bg-background/80">
-                        <FolderKanban className="mr-1 h-3.5 w-3.5" />
-                        {activeProject?.name ??
-                          (activeProjectId === UNASSIGNED_PROJECT_KEY
-                            ? "Unassigned estimates"
-                            : "No project selected")}
-                      </Badge>
-                    </div>
+                  <div className="relative">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      value={teamEstimateQuery}
+                      onChange={(event) => setTeamEstimateQuery(event.target.value)}
+                      placeholder="Search estimates by name..."
+                      className="pl-9"
+                    />
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     <Button
@@ -3829,6 +3814,31 @@ export default function HomePage() {
                       {projectActionNotice}
                     </div>
                   ) : null}
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/70 px-3 py-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
+                        Viewing project
+                      </span>
+                      <Badge variant="outline" className="bg-background/80">
+                        <FolderKanban className="mr-1 h-3.5 w-3.5" />
+                        {activeProjectLabel}
+                      </Badge>
+                    </div>
+                    <div className="group relative">
+                      <span className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md border border-border/60 bg-card/95 px-2 py-1 text-xs font-medium text-foreground opacity-0 shadow-md transition-all duration-150 group-hover:-translate-y-1 group-hover:opacity-100 group-focus-within:-translate-y-1 group-focus-within:opacity-100">
+                        New estimate
+                      </span>
+                      <Button
+                        variant="accent"
+                        size="icon"
+                        className="h-11 w-11 rounded-full border border-accent/40 shadow-md transition-transform duration-150 hover:scale-105"
+                        onClick={resetEstimateWorkspace}
+                      >
+                        <Plus className="h-5 w-5" />
+                        <span className="sr-only">New estimate</span>
+                      </Button>
+                    </div>
+                  </div>
                   {!teamReady ? (
                     <div className="text-sm text-muted-foreground">
                       Preparing your team workspace...
