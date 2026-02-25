@@ -6,4 +6,5 @@ node_modules
 .env.*.local
 __pycache__
 .venv
-"WORKBOOK ES 2026 (Windows).xlsx"
+.workbooks
+output
