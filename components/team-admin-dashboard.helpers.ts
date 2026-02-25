@@ -17,6 +17,7 @@ export type UnitTypeDraft = {
   code: string;
   label: string;
   price: string;
+  vendorPrices: Record<string, string>;
   sortOrder: number;
   isActive: boolean;
 };
@@ -62,6 +63,7 @@ type UnitTypeLike = {
   code?: string;
   label?: string;
   price?: number;
+  vendorPrices?: unknown;
   sortOrder?: number;
   isActive?: boolean;
 };
@@ -183,9 +185,33 @@ export function toUnitTypeDrafts(unitTypeRecords: UnitTypeLike[]) {
       typeof unit.price === "number" && Number.isFinite(unit.price)
         ? unit.price.toString()
         : "",
+    vendorPrices: normalizeUnitTypeVendorPrices(unit.vendorPrices),
     sortOrder: typeof unit.sortOrder === "number" ? unit.sortOrder : index + 1,
     isActive: unit.isActive !== false,
   }));
+}
+
+function normalizeUnitTypeVendorPrices(value: unknown) {
+  const normalized: Record<string, string> = {};
+  if (Array.isArray(value)) {
+    value.forEach((entry) => {
+      if (!entry || typeof entry !== "object") return;
+      const vendorId = String((entry as { vendorId?: unknown }).vendorId ?? "").trim();
+      const price = Number((entry as { price?: unknown }).price);
+      if (!vendorId || !Number.isFinite(price)) return;
+      normalized[vendorId] = price.toString();
+    });
+    return normalized;
+  }
+  if (value && typeof value === "object") {
+    Object.entries(value as Record<string, unknown>).forEach(([vendorId, entry]) => {
+      const normalizedVendorId = String(vendorId ?? "").trim();
+      const price = Number(entry);
+      if (!normalizedVendorId || !Number.isFinite(price)) return;
+      normalized[normalizedVendorId] = price.toString();
+    });
+  }
+  return normalized;
 }
 
 export function toProjectTypeDrafts(projectTypeRecords: ProjectTypeLike[]) {

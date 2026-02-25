@@ -26,8 +26,14 @@ export type UnitTypeRecord = {
   code?: string;
   label?: string;
   price?: number;
+  vendorPrices?: UnitTypeVendorPriceRecord[];
   sortOrder?: number;
   isActive?: boolean;
+};
+
+export type UnitTypeVendorPriceRecord = {
+  vendorId: string;
+  price: number;
 };
 
 export type ProjectTypeRecord = {

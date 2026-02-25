@@ -359,7 +359,7 @@ function parseMoneyToModel(value: string) {
   let hasDot = false;
 
   for (const char of String(value ?? "")) {
-    if (char === "-" && !result.length) {
+    if ((char === "-" || char === "+") && !result.length) {
       result += char;
       continue;
     }
@@ -397,9 +397,11 @@ function formatMoneyForInput(value: string, currency: "USD" | "EUR") {
   if (!value) return "";
   const symbol = currency === "EUR" ? "€" : "$";
   const isNegative = value.startsWith("-");
-  const unsigned = isNegative ? value.slice(1) : value;
+  const isPositive = value.startsWith("+");
+  const unsigned = isNegative || isPositive ? value.slice(1) : value;
+  const signPrefix = isNegative ? "-" : isPositive ? "+" : "";
   if (!unsigned || unsigned === ".") {
-    return `${isNegative ? "-" : ""}${symbol}${unsigned ? "0." : ""}`;
+    return `${signPrefix}${symbol}${unsigned ? "0." : ""}`;
   }
 
   const [intRaw, decimalRaw] = unsigned.split(".");
@@ -409,7 +411,7 @@ function formatMoneyForInput(value: string, currency: "USD" | "EUR") {
     ? intValue.toLocaleString("en-US")
     : "0";
 
-  return `${isNegative ? "-" : ""}${symbol}${intFormatted}${
+  return `${signPrefix}${symbol}${intFormatted}${
     decimalRaw !== undefined ? `.${decimalRaw}` : ""
   }`;
 }

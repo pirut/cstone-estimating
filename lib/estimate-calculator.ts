@@ -103,6 +103,7 @@ export function createDefaultProductItem(id = "product-1"): ProductItem {
 export type BuckingLineItem = {
   id: string;
   unit_type: string;
+  vendor_id?: string;
   qty: string;
   sqft: string;
   replacement_qty: string;
@@ -153,6 +154,15 @@ export type PanelType = {
   id: string;
   label: string;
   price: number;
+  vendorPrices?: Record<string, number>;
+};
+
+export type OverrideInputMode = "none" | "absolute" | "delta";
+
+export type ParsedOverrideInput = {
+  mode: OverrideInputMode;
+  value: number;
+  raw: string;
 };
 
 export const DEFAULT_DRAFT: EstimateDraft = {
@@ -162,6 +172,7 @@ export const DEFAULT_DRAFT: EstimateDraft = {
     {
       id: "bucking-1",
       unit_type: "",
+      vendor_id: "",
       qty: "",
       sqft: "",
       replacement_qty: "",
@@ -298,51 +309,66 @@ export function computeEstimate(
   });
   const totalLinealFt = sum(linealTotals);
 
-  const overrideBucking = toNumber(draft.calculator.override_bucking_cost);
-  const overrideWaterproof = toNumber(draft.calculator.override_waterproofing_cost);
-
-  const buckingCostBase =
-    draft.calculator.override_bucking_cost.trim() !== ""
-      ? overrideBucking
-      : totalLinealFt * buckingRate;
-  const waterproofingCostBase =
-    draft.calculator.override_waterproofing_cost.trim() !== ""
-      ? overrideWaterproof
-      : totalLinealFt * waterproofRate;
+  const buckingCostBaseComputed = totalLinealFt * buckingRate;
+  const waterproofingCostBaseComputed = totalLinealFt * waterproofRate;
+  const buckingOverride = parseOverrideInput(draft.calculator.override_bucking_cost);
+  const waterproofingOverride = parseOverrideInput(
+    draft.calculator.override_waterproofing_cost
+  );
+  const buckingCostBase = applyOverrideValue(
+    buckingCostBaseComputed,
+    buckingOverride
+  );
+  const waterproofingCostBase = applyOverrideValue(
+    waterproofingCostBaseComputed,
+    waterproofingOverride
+  );
 
   const panelCounts: EstimateComputed["panelCounts"] = {};
   const panelTotals: EstimateComputed["panelTotals"] = {};
+  const panelTypeById = new Map(
+    resolvedPanelTypes.map((panel) => [panel.id, panel] as const)
+  );
+  const defaultInstallVendorId = resolveDefaultInstallVendorId(products);
   resolvedPanelTypes.forEach((panel) => {
     panelCounts[panel.id] = {
       total_qty: 0,
       clerestory_qty: 0,
       replacement_qty: 0,
     };
+    panelTotals[panel.id] = 0;
   });
 
   for (const item of draft.bucking ?? []) {
     const type = item.unit_type;
-    if (!panelCounts[type]) continue;
-    panelCounts[type].total_qty += toNumber(item.qty);
-    panelCounts[type].clerestory_qty += toNumber(item.clerestory_qty);
-    panelCounts[type].replacement_qty += toNumber(item.replacement_qty);
-  }
+    const counts = panelCounts[type];
+    if (!counts) continue;
+    const qty = toNumber(item.qty);
+    const clerestoryQty = toNumber(item.clerestory_qty);
+    const replacementQty = toNumber(item.replacement_qty);
 
-  for (const panel of resolvedPanelTypes) {
-    const counts = panelCounts[panel.id];
-    const total =
-      panel.price * counts.total_qty +
-      panel.price * counts.clerestory_qty * 0.5 +
-      panel.price * counts.replacement_qty;
-    panelTotals[panel.id] = total;
+    counts.total_qty += qty;
+    counts.clerestory_qty += clerestoryQty;
+    counts.replacement_qty += replacementQty;
+
+    const hasExplicitVendor =
+      item.vendor_id !== undefined && item.vendor_id !== null;
+    const effectiveVendorId = hasExplicitVendor
+      ? String(item.vendor_id).trim()
+      : defaultInstallVendorId;
+    const panelPrice = resolvePanelPrice(
+      panelTypeById.get(type),
+      effectiveVendorId
+    );
+    panelTotals[type] +=
+      panelPrice * qty +
+      panelPrice * clerestoryQty * 0.5 +
+      panelPrice * replacementQty;
   }
 
   const panelInstallValue = sum(Object.values(panelTotals));
-  const overrideInstallTotal = toNumber(draft.calculator.override_install_total);
-  const totalInstallValue =
-    draft.calculator.override_install_total.trim() !== ""
-      ? overrideInstallTotal
-      : panelInstallValue;
+  const installOverride = parseOverrideInput(draft.calculator.override_install_total);
+  const totalInstallValue = applyOverrideValue(panelInstallValue, installOverride);
 
   const installCostBase = roundUp(totalInstallValue * 0.7);
   const coversCostBase = roundUp(totalInstallValue * 0.2);
@@ -570,7 +596,18 @@ function normalizePanelTypes(
   panelTypes: PanelType[],
   bucking: BuckingLineItem[]
 ) {
-  const map = new Map(panelTypes.map((panel) => [panel.id, panel] as const));
+  const map = new Map(
+    panelTypes.map(
+      (panel) =>
+        [
+          panel.id,
+          {
+            ...panel,
+            vendorPrices: normalizeVendorPriceMap(panel.vendorPrices),
+          },
+        ] as const
+    )
+  );
 
   for (const item of bucking) {
     if (!item.unit_type || map.has(item.unit_type)) continue;
@@ -578,10 +615,47 @@ function normalizePanelTypes(
       id: item.unit_type,
       label: item.unit_type,
       price: 0,
+      vendorPrices: {},
     });
   }
 
   return Array.from(map.values());
+}
+
+function normalizeVendorPriceMap(value: Record<string, number> | undefined) {
+  if (!value || typeof value !== "object") return {};
+  const entries = Object.entries(value)
+    .map(([vendorId, price]) => [String(vendorId).trim(), Number(price)] as const)
+    .filter(([vendorId, price]) => vendorId && Number.isFinite(price));
+  return Object.fromEntries(entries);
+}
+
+function resolvePanelPrice(
+  panel: PanelType | undefined,
+  vendorId: string
+) {
+  if (!panel) return 0;
+  if (vendorId) {
+    const vendorPrice = panel.vendorPrices?.[vendorId];
+    if (typeof vendorPrice === "number" && Number.isFinite(vendorPrice)) {
+      return vendorPrice;
+    }
+  }
+  return Number.isFinite(panel.price) ? panel.price : 0;
+}
+
+function resolveDefaultInstallVendorId(products: ProductItem[]) {
+  const ids = products
+    .map((item) => String(item.vendorId ?? "").trim())
+    .filter(Boolean);
+  if (!ids.length) return "";
+  return ids[0];
+}
+
+function applyOverrideValue(baseValue: number, override: ParsedOverrideInput) {
+  if (override.mode === "none") return baseValue;
+  if (override.mode === "delta") return baseValue + override.value;
+  return override.value;
 }
 
 export function roundUp(value: number) {
@@ -601,6 +675,34 @@ export function toNumber(value: string | number | undefined | null) {
   if (!cleaned) return 0;
   const parsed = Number(cleaned);
   return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function parseOverrideInput(
+  value: string | number | undefined | null
+): ParsedOverrideInput {
+  if (value === null || value === undefined) {
+    return { mode: "none", value: 0, raw: "" };
+  }
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return { mode: "absolute", value, raw: String(value) };
+  }
+  const raw = String(value).trim();
+  if (!raw || !/\d/.test(raw)) {
+    return { mode: "none", value: 0, raw };
+  }
+  const parsed = toNumber(raw);
+  if (!Number.isFinite(parsed)) {
+    return { mode: "none", value: 0, raw };
+  }
+  const sign = raw[0];
+  if (sign === "+" || sign === "-") {
+    return { mode: "delta", value: parsed, raw };
+  }
+  return { mode: "absolute", value: parsed, raw };
+}
+
+export function hasOverrideInput(value: string | number | undefined | null) {
+  return parseOverrideInput(value).mode !== "none";
 }
 
 export function normalizeMarginThresholds(

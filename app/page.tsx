@@ -629,6 +629,19 @@ export default function HomePage() {
         return String(a.code ?? "").localeCompare(String(b.code ?? ""));
       });
     return list.map((unit) => ({
+      vendorPrices: Array.isArray(unit.vendorPrices)
+        ? Object.fromEntries(
+            unit.vendorPrices
+              .map((entry: any) => [
+                String(entry?.vendorId ?? "").trim(),
+                Number(entry?.price),
+              ])
+              .filter(
+                (entry: [string, number]) =>
+                  entry[0] && Number.isFinite(entry[1])
+              )
+          )
+        : undefined,
       id: unit.code,
       label: unit.label ?? unit.code,
       price: typeof unit.price === "number" ? unit.price : 0,

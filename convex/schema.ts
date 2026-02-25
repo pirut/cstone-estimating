@@ -103,6 +103,14 @@ export default defineSchema({
     code: v.string(),
     label: v.string(),
     price: v.number(),
+    vendorPrices: v.optional(
+      v.array(
+        v.object({
+          vendorId: v.string(),
+          price: v.number(),
+        })
+      )
+    ),
     sortOrder: v.optional(v.number()),
     isActive: v.optional(v.boolean()),
     createdAt: v.number(),

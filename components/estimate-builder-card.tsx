@@ -24,6 +24,7 @@ import { Separator } from "@/components/ui/separator";
 import type { UploadedFile } from "@/lib/types";
 import {
   computeEuroPricingTotals,
+  hasOverrideInput,
   isChangeOrderProjectType,
   createDefaultProductItem,
   createDefaultEuroPricing,
@@ -463,6 +464,24 @@ export function EstimateBuilderCard({
     toNumber(draft.changeOrder.laborCost) *
       (1 + toNumber(draft.changeOrder.laborMarkup))
   );
+  const defaultBuckingVendorId = useMemo(() => {
+    for (const item of draft.products) {
+      const productVendorId = String(item.vendorId ?? "").trim();
+      if (
+        productVendorId &&
+        vendorOptions.some((vendor) => vendor.id === productVendorId)
+      ) {
+        return productVendorId;
+      }
+      const matchedByName = vendorOptions.find(
+        (vendor) => vendor.name === item.name
+      );
+      if (matchedByName?.id) {
+        return matchedByName.id;
+      }
+    }
+    return vendorOptions[0]?.id ?? "";
+  }, [draft.products, vendorOptions]);
 
   useEffect(() => {
     if (legacyValues) {
@@ -935,9 +954,11 @@ export function EstimateBuilderCard({
     (item) => toNumber(item.qty) > 0 && toNumber(item.sqft) > 0
   );
   const hasBuckingOverrides =
-    toNumber(draft.calculator.override_bucking_cost) > 0 &&
-    toNumber(draft.calculator.override_waterproofing_cost) > 0;
-  const hasInstallOverride = toNumber(draft.calculator.override_install_total) > 0;
+    hasOverrideInput(draft.calculator.override_bucking_cost) &&
+    hasOverrideInput(draft.calculator.override_waterproofing_cost);
+  const hasInstallOverride = hasOverrideInput(
+    draft.calculator.override_install_total
+  );
   const buckingStepComplete = hasBuckingLineItems || hasBuckingOverrides;
   const installInputsComplete = hasBuckingLineItems || hasInstallOverride;
   const installStepComplete = isChangeOrderMode
@@ -1967,6 +1988,9 @@ export function EstimateBuilderCard({
                 moneyCurrency="USD"
               />
             </div>
+            <p className="text-[11px] text-muted-foreground">
+              Tip: enter `+` or `-` to apply an adjustment from the calculated value.
+            </p>
 
             <div className="space-y-3">
               {!panelTypeOptions.length ? (
@@ -1981,7 +2005,37 @@ export function EstimateBuilderCard({
                     key={item.id}
                     className="rounded-xl border border-border/60 bg-card/70 p-3"
                   >
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
+                      <div className="space-y-1">
+                        <label className="text-xs text-muted-foreground">Vendor</label>
+                        <Select
+                          value={
+                            vendorOptions.some(
+                              (vendor) => vendor.id === item.vendor_id
+                            )
+                              ? String(item.vendor_id)
+                              : "__none__"
+                          }
+                          onValueChange={(value) =>
+                            handleBuckingChange(index, {
+                              vendor_id: value === "__none__" ? "" : value,
+                            })
+                          }
+                          disabled={Boolean(legacyValues) || !vendorOptions.length}
+                        >
+                          <SelectTrigger className={inputSmClassName}>
+                            <SelectValue placeholder="Select vendor" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">Select vendor</SelectItem>
+                            {vendorOptions.map((vendor) => (
+                              <SelectItem key={vendor.id} value={vendor.id}>
+                                {vendor.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">Unit Type</label>
                         <Select
@@ -2103,6 +2157,7 @@ export function EstimateBuilderCard({
                       ...draft.bucking,
                       {
                         id: createId("bucking"),
+                        vendor_id: defaultBuckingVendorId,
                         unit_type: panelTypeOptions[0]?.id ?? "",
                         qty: "",
                         sqft: "",
@@ -2151,11 +2206,14 @@ export function EstimateBuilderCard({
                 onChange={(value) =>
                   handleCalculatorChange("override_install_total", value)
                 }
-                placeholder="Optional"
+                placeholder="Optional (+/-)"
                 disabled={Boolean(legacyValues)}
                 moneyCurrency="USD"
               />
             </div>
+            <p className="text-[11px] text-muted-foreground">
+              Use `+` or `-` for small adjustments from the calculated install total.
+            </p>
 
             <div className="rounded-xl border border-border/60 bg-card/70 p-3">
               <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">

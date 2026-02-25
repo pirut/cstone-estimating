@@ -94,6 +94,10 @@ type UnitTypeGraphDoc = {
   code: string;
   label: string;
   price: number;
+  vendorPrices?: Array<{
+    vendorId: string;
+    price: number;
+  }>;
   sortOrder?: number;
   isActive?: boolean;
   createdAt: number;

@@ -259,6 +259,38 @@ export default function TeamAdminPage({
       return String(a.__teamName ?? "").localeCompare(String(b.__teamName ?? ""));
     });
   }, [catalogDisplayTeams]);
+  const unitTypeVendorColumns = useMemo(() => {
+    const source = catalogTeam?.vendors ?? [];
+    return source
+      .filter(
+        (vendor) => vendor.isActive !== false && typeof vendor.id === "string" && vendor.id
+      )
+      .slice()
+      .sort((a, b) => {
+        const orderA = typeof a.sortOrder === "number" ? a.sortOrder : 0;
+        const orderB = typeof b.sortOrder === "number" ? b.sortOrder : 0;
+        if (orderA !== orderB) return orderA - orderB;
+        return String(a.name ?? "").localeCompare(String(b.name ?? ""));
+      })
+      .map((vendor) => ({
+        id: String(vendor.id),
+        name: String(vendor.name ?? ""),
+      }));
+  }, [catalogTeam?.vendors]);
+  const unitTypeGridTemplate = useMemo(
+    () =>
+      [
+        "auto",
+        "minmax(96px,1fr)",
+        "minmax(150px,1.6fr)",
+        "minmax(110px,1fr)",
+        ...unitTypeVendorColumns.map(() => "minmax(130px,1fr)"),
+        "minmax(70px,0.6fr)",
+        "auto",
+      ].join(" "),
+    [unitTypeVendorColumns]
+  );
+  const unitTypeTableMinWidth = 760 + unitTypeVendorColumns.length * 130;
   const projectTypeRecords = useMemo(() => {
     const list = catalogDisplayTeams.flatMap((team) =>
       (team.projectTypes ?? []).map((projectType) => ({
@@ -956,6 +988,26 @@ export default function TeamAdminPage({
     );
   };
 
+  const handleUnitTypeVendorPriceChange = (
+    index: number,
+    vendorId: string,
+    value: string
+  ) => {
+    setUnitTypeDrafts((prev) =>
+      prev.map((unit, idx) =>
+        idx === index
+          ? {
+              ...unit,
+              vendorPrices: {
+                ...(unit.vendorPrices ?? {}),
+                [vendorId]: value,
+              },
+            }
+          : unit
+      )
+    );
+  };
+
   const handleAddUnitType = () => {
     const nextOrder =
       unitTypeDrafts.reduce(
@@ -968,6 +1020,7 @@ export default function TeamAdminPage({
         code: "",
         label: "",
         price: "",
+        vendorPrices: {},
         sortOrder: nextOrder,
         isActive: true,
       },
@@ -994,6 +1047,14 @@ export default function TeamAdminPage({
         code: unit.code.trim(),
         label: unit.label.trim(),
         price: unit.price.trim(),
+        vendorPrices: Object.fromEntries(
+          Object.entries(unit.vendorPrices ?? {})
+            .map(([vendorId, vendorPrice]) => [
+              vendorId.trim(),
+              String(vendorPrice ?? "").trim(),
+            ])
+            .filter(([vendorId]) => vendorId)
+        ),
         sortOrder:
           typeof unit.sortOrder === "number" && Number.isFinite(unit.sortOrder)
             ? unit.sortOrder
@@ -1007,6 +1068,15 @@ export default function TeamAdminPage({
     }
 
     const seenCodes = new Set<string>();
+    const validatedUnits: Array<{
+      id?: string;
+      code: string;
+      label: string;
+      priceValue: number;
+      vendorPrices: Array<{ vendorId: string; price: number }>;
+      sortOrder: number;
+      isActive: boolean;
+    }> = [];
     for (const unit of cleaned) {
       if (!unit.code || !unit.label) {
         setUnitTypeError("Unit type code and label are required.");
@@ -1027,15 +1097,40 @@ export default function TeamAdminPage({
         setUnitTypeError(`Invalid price for ${unit.code}.`);
         return;
       }
+
+      const vendorPrices: Array<{ vendorId: string; price: number }> = [];
+      for (const [vendorId, rawVendorPrice] of Object.entries(
+        unit.vendorPrices ?? {}
+      )) {
+        if (!rawVendorPrice) continue;
+        const vendorPriceValue = Number(rawVendorPrice);
+        if (!Number.isFinite(vendorPriceValue)) {
+          const vendorLabel =
+            unitTypeVendorColumns.find((vendor) => vendor.id === vendorId)?.name ||
+            vendorId;
+          setUnitTypeError(`Invalid vendor price for ${unit.code} / ${vendorLabel}.`);
+          return;
+        }
+        vendorPrices.push({ vendorId, price: vendorPriceValue });
+      }
+      validatedUnits.push({
+        id: unit.id,
+        code: unit.code,
+        label: unit.label,
+        priceValue,
+        vendorPrices,
+        sortOrder: unit.sortOrder,
+        isActive: unit.isActive,
+      });
     }
 
     const now = Date.now();
-    const txs = cleaned.map((unit, index) => {
-      const priceValue = Number(unit.price);
+    const txs = validatedUnits.map((unit, index) => {
       const payload = {
         code: unit.code,
         label: unit.label,
-        price: priceValue,
+        price: unit.priceValue,
+        vendorPrices: unit.vendorPrices,
         sortOrder: unit.sortOrder || index + 1,
         isActive: unit.isActive,
         updatedAt: now,
@@ -2635,6 +2730,7 @@ export default function TeamAdminPage({
                     </p>
                     <p className="text-xs text-muted-foreground">
                       Drives bucking line items and the install calculator.
+                      Default price is used when a vendor-specific price is blank.
                     </p>
                   </div>
                   {unitTypeError ? (
@@ -2648,12 +2744,20 @@ export default function TeamAdminPage({
                     </div>
                   ) : null}
                   <div className="rounded-lg border border-border/70 bg-background/70 overflow-x-auto">
-                    <div className="min-w-[760px]">
-                      <div className="grid grid-cols-[auto_1fr_1.6fr_1fr_0.6fr_auto] gap-2 border-b border-border/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
+                    <div style={{ minWidth: `${unitTypeTableMinWidth}px` }}>
+                      <div
+                        className="grid gap-2 border-b border-border/60 px-3 py-2 text-xs font-semibold text-muted-foreground"
+                        style={{ gridTemplateColumns: unitTypeGridTemplate }}
+                      >
                         <span>Active</span>
                         <span>Code</span>
                         <span>Label</span>
-                        <span>Price</span>
+                        <span>Default price</span>
+                        {unitTypeVendorColumns.map((vendor) => (
+                          <span key={`unit-header-${vendor.id}`} title={vendor.name}>
+                            {vendor.name}
+                          </span>
+                        ))}
                         <span>Order</span>
                         <span></span>
                       </div>
@@ -2661,7 +2765,8 @@ export default function TeamAdminPage({
                         {unitTypeDrafts.map((unit, index) => (
                           <div
                             key={unit.id ?? `unit-${index}`}
-                            className="relative grid grid-cols-[auto_1fr_1.6fr_1fr_0.6fr_auto] items-center gap-2 px-3 py-2 text-sm"
+                            className="relative grid items-center gap-2 px-3 py-2 text-sm"
+                            style={{ gridTemplateColumns: unitTypeGridTemplate }}
                             draggable={canEditCatalog}
                             onDragStart={() => {
                               setDragUnitTypeIndex(index);
@@ -2737,6 +2842,23 @@ export default function TeamAdminPage({
                               placeholder="0"
                               disabled={!canEditCatalog}
                             />
+                            {unitTypeVendorColumns.map((vendor) => (
+                              <Input
+                                key={`unit-${unit.id ?? index}-vendor-${vendor.id}`}
+                                uiSize="xs"
+                                value={unit.vendorPrices?.[vendor.id] ?? ""}
+                                onChange={(event) =>
+                                  handleUnitTypeVendorPriceChange(
+                                    index,
+                                    vendor.id,
+                                    event.target.value
+                                  )
+                                }
+                                inputMode="decimal"
+                                placeholder="Default"
+                                disabled={!canEditCatalog}
+                              />
+                            ))}
                             <div className="flex items-center gap-2 text-xs text-muted-foreground">
                               <GripVertical className="h-4 w-4" />
                               <span>{index + 1}</span>

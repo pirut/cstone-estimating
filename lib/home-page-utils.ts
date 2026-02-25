@@ -1,5 +1,6 @@
 import type { EstimateVersionPandaDocDocument } from "@/lib/estimate-versioning";
 import type { LibraryItem, PandaDocTemplateConfig } from "@/lib/types";
+import { hasOverrideInput } from "@/lib/estimate-calculator";
 
 export type EstimateSnapshot = {
   title: string;
@@ -406,10 +407,11 @@ export function getManualEstimateProgress(
         return qty > 0 && sqft > 0;
       });
       const hasBuckingOverrides =
-        toFiniteNumber(calculator?.override_bucking_cost) > 0 &&
-        toFiniteNumber(calculator?.override_waterproofing_cost) > 0;
-      const hasInstallOverride =
-        toFiniteNumber(calculator?.override_install_total) > 0;
+        hasOverrideInput(calculator?.override_bucking_cost as any) &&
+        hasOverrideInput(calculator?.override_waterproofing_cost as any);
+      const hasInstallOverride = hasOverrideInput(
+        calculator?.override_install_total as any
+      );
       const buckingStepComplete = hasBuckingLineItems || hasBuckingOverrides;
       const installStepComplete =
         totalContractReady && (hasBuckingLineItems || hasInstallOverride);
