@@ -127,6 +127,34 @@ const LINKED_DOCUMENT_POLL_INTERVAL_MS = 20_000;
 const UNASSIGNED_PROJECT_KEY = "__unassigned__";
 const LOCAL_DRAFT_STORAGE_KEY = "cstone:manual-estimate:draft:v1";
 
+function mergeTotalsWithPandaDocValue(
+  totals: Record<string, any> | null | undefined,
+  generation: PandaDocGenerationResponse | null | undefined
+) {
+  const baseTotals =
+    totals && typeof totals === "object" && !Array.isArray(totals)
+      ? { ...totals }
+      : {};
+  const valueAmount = generation?.document?.valueAmount;
+  const valueCurrency = String(generation?.document?.valueCurrency ?? "").trim();
+  const valueFormatted = String(generation?.document?.valueFormatted ?? "").trim();
+  if (
+    typeof valueAmount !== "number" &&
+    !valueCurrency &&
+    !valueFormatted
+  ) {
+    return Object.keys(baseTotals).length ? baseTotals : null;
+  }
+  return {
+    ...baseTotals,
+    ...(typeof valueAmount === "number" && Number.isFinite(valueAmount)
+      ? { pandadoc_document_value_amount: valueAmount }
+      : {}),
+    ...(valueCurrency ? { pandadoc_document_value_currency: valueCurrency } : {}),
+    ...(valueFormatted ? { pandadoc_document_value_formatted: valueFormatted } : {}),
+  };
+}
+
 export default function HomePage() {
   const { isLoaded: authLoaded, isSignedIn } = useOptionalAuth();
   const { user } = useOptionalUser();
@@ -1346,6 +1374,10 @@ export default function HomePage() {
       const now = Date.now();
       const tags = normalizeEstimateTags(estimateTags);
       const pandadocDocument = toPandaDocVersionDocument(generation, now);
+      const totalsWithPandaDocValue = mergeTotalsWithPandaDocValue(
+        snapshot.totals,
+        generation
+      );
       if (editingEstimateId) {
         const existingEstimate = findTeamEstimateById(editingEstimateId);
         const targetProjectId = resolveEstimateProjectId(existingEstimate);

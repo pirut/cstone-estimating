@@ -25,6 +25,9 @@ export type PandaDocGenerationResponse = {
     status?: string;
     appUrl?: string;
     sharedLink?: string;
+    valueAmount?: number;
+    valueCurrency?: string;
+    valueFormatted?: string;
   };
   session?: {
     id?: string;
