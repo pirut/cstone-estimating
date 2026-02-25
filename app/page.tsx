@@ -1044,6 +1044,11 @@ export default function HomePage() {
   useEffect(() => {
     if (!convexAppUrl || !editingEstimateId || !activeTrackedDocumentId) return;
     if (!linkedDocumentLive || linkedDocumentLive.loading) return;
+    if (linkedDocumentLive.id !== activeTrackedDocumentId) return;
+    const latestGeneratedDocumentId = String(lastGeneration?.document?.id ?? "").trim();
+    if (latestGeneratedDocumentId && latestGeneratedDocumentId !== activeTrackedDocumentId) {
+      return;
+    }
     const estimate = findTeamEstimateById(editingEstimateId);
     if (!estimate) return;
 
@@ -1100,6 +1105,7 @@ export default function HomePage() {
     editingEstimateId,
     activeTrackedDocumentId,
     linkedDocumentLive,
+    lastGeneration?.document?.id,
     findTeamEstimateById,
     getPersistedEstimateHistory,
   ]);
