@@ -188,7 +188,7 @@ export default function UnifiedAdminPage() {
               Focus Tabs
             </p>
             <div className="flex items-center gap-2">
-              <ThemeToggle className="h-9 w-9 bg-background/70" />
+              <ThemeToggle className="bg-background/70" />
               <Button asChild variant="accent" size="sm">
                 <Link href="/">
                   Proposal workspace

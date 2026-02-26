@@ -2885,7 +2885,7 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <ThemeToggle className="h-9 w-9 bg-background/80" />
+            <ThemeToggle />
             <Badge variant="outline" className="hidden bg-background/80 sm:inline-flex">
               v{APP_VERSION}
             </Badge>
