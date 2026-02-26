@@ -5,6 +5,7 @@ import {
   buildPandaDocDraft,
   createPandaDocDocument,
   getPandaDocMissingEnvVars,
+  resolvePandaDocWorkspaceMemberEmail,
   updatePandaDocDocument,
 } from "@/lib/server/pandadoc";
 import { buildBusinessCentralSyncPreview } from "@/lib/server/business-central-sync";
@@ -82,6 +83,16 @@ export async function POST(request: NextRequest) {
     const pandadocGeneratedBy = normalizePandaDocRecipient(
       pandadocConfig?.generatedBy
     );
+    const resolvedRecipientEmail = await resolvePandaDocWorkspaceMemberEmail(
+      pandadocRecipient?.email
+    );
+    const resolvedPandaDocRecipient =
+      pandadocRecipient && resolvedRecipientEmail
+        ? {
+            ...pandadocRecipient,
+            email: resolvedRecipientEmail,
+          }
+        : pandadocRecipient;
     const sendDocument = toBoolean(
       pandadocConfig?.send,
       DEFAULT_SEND_DOCUMENT
@@ -131,7 +142,7 @@ export async function POST(request: NextRequest) {
       fieldValues,
       templateUuid: pandadocTemplateUuid,
       documentName: pandadocDocumentName,
-      recipient: pandadocRecipient,
+      recipient: resolvedPandaDocRecipient,
       recipientRole: pandadocRecipientRole,
       bindings: pandadocBindings,
       useEnvRecipient: !pandadocDocumentId,
@@ -140,7 +151,7 @@ export async function POST(request: NextRequest) {
       fieldValues,
       templateUuid: pandadocTemplateUuid,
       documentName: pandadocDocumentName,
-      recipient: pandadocRecipient,
+      recipient: resolvedPandaDocRecipient,
       recipientRole: pandadocRecipientRole,
       bindings: pandadocBindings,
       useEnvRecipient: true,

@@ -447,7 +447,12 @@ function buildTeamEmailCandidates(email: string) {
     return [normalized];
   }
   const localPart = normalized.slice(0, atIndex);
-  const domainCandidates = getTeamEmailDomains().map(
+  const domainPart = normalized.slice(atIndex + 1);
+  const teamDomains = getTeamEmailDomains();
+  if (!teamDomains.includes(domainPart)) {
+    return [normalized];
+  }
+  const domainCandidates = teamDomains.map(
     (domain) => `${localPart}@${domain}`
   );
   const candidates = [...domainCandidates, normalized];
@@ -874,6 +879,15 @@ async function findMatchingWorkspaceMemberEmail(candidateEmails: string[]) {
     return undefined;
   }
   return undefined;
+}
+
+export async function resolvePandaDocWorkspaceMemberEmail(email?: string) {
+  const normalizedEmail = coerceString(email).toLowerCase();
+  if (!normalizedEmail) return undefined;
+  const candidateEmails = buildTeamEmailCandidates(normalizedEmail);
+  if (!candidateEmails.length) return normalizedEmail;
+  const matchedEmail = await findMatchingWorkspaceMemberEmail(candidateEmails);
+  return matchedEmail || normalizedEmail;
 }
 
 async function findPandaDocContactByEmail(email: string) {
