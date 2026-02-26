@@ -227,6 +227,7 @@ export function resolvePandaDocTemplateConfigForEstimate(
       templateName: defaultTemplateName || undefined,
       recipientRole: defaultRecipientRole || undefined,
       matchedRuleId: null as string | null,
+      matchError: null as string | null,
     };
   }
 
@@ -234,6 +235,22 @@ export function resolvePandaDocTemplateConfigForEstimate(
     normalizeTemplateMatchKey(estimatePayload?.info?.project_type) ||
     normalizeTemplateMatchKey(estimatePayload?.values?.project_type) ||
     normalizeTemplateMatchKey(estimateValues.project_type);
+  const projectTypeLabel = String(
+    estimatePayload?.info?.project_type ??
+      estimatePayload?.values?.project_type ??
+      estimateValues.project_type ??
+      ""
+  ).trim();
+  if (!projectType) {
+    return {
+      templateUuid: "",
+      templateName: undefined,
+      recipientRole: defaultRecipientRole || undefined,
+      matchedRuleId: null as string | null,
+      matchError: "Select an estimate type before generating PandaDoc.",
+    };
+  }
+
   const { vendorIds, vendorNames } = collectEstimateVendorKeys(
     estimatePayload,
     estimateValues
@@ -244,15 +261,12 @@ export function resolvePandaDocTemplateConfigForEstimate(
       const ruleVendorId = normalizeTemplateMatchKey(rule.vendorId);
       const ruleVendorName = normalizeTemplateMatchKey(rule.vendorName);
       const ruleProjectType = normalizeTemplateMatchKey(rule.projectType);
+      if (!ruleProjectType || ruleProjectType !== projectType) return null;
 
       if (ruleVendorId && !vendorIds.has(ruleVendorId)) return null;
       if (ruleVendorName && !vendorNames.has(ruleVendorName)) return null;
-      if (ruleProjectType && ruleProjectType !== projectType) return null;
 
-      const specificity =
-        (ruleVendorId ? 1 : 0) +
-        (ruleVendorName ? 1 : 0) +
-        (ruleProjectType ? 1 : 0);
+      const specificity = (ruleVendorId ? 1 : 0) + (ruleVendorName ? 1 : 0);
       return { rule, index, specificity };
     })
     .filter((entry): entry is { rule: any; index: number; specificity: number } =>
@@ -266,10 +280,11 @@ export function resolvePandaDocTemplateConfigForEstimate(
   const matched = scoredRules[0]?.rule;
   if (!matched) {
     return {
-      templateUuid: defaultTemplateUuid,
-      templateName: defaultTemplateName || undefined,
+      templateUuid: "",
+      templateName: undefined,
       recipientRole: defaultRecipientRole || undefined,
       matchedRuleId: null as string | null,
+      matchError: `No PandaDoc template rule exactly matches estimate type "${projectTypeLabel || projectType}". Update PandaDoc routing rules and try again.`,
     };
   }
 
@@ -282,6 +297,7 @@ export function resolvePandaDocTemplateConfigForEstimate(
     templateName: matchedTemplateName || defaultTemplateName || undefined,
     recipientRole: matchedRecipientRole || defaultRecipientRole || undefined,
     matchedRuleId: String(matched.id ?? "").trim() || null,
+    matchError: null as string | null,
   };
 }
 

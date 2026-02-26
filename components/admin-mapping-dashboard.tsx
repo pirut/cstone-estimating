@@ -1767,8 +1767,8 @@ export default function AdminPage({
                     Template Routing Rules
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Route PandaDoc template by vendor + project type. First exact
-                    match wins, then less specific matches.
+                    Route PandaDoc template by vendor + project type. Rules only
+                    apply when the estimate type matches exactly.
                   </p>
                 </div>
                 <Button variant="outline" size="sm" onClick={addTemplateRule}>

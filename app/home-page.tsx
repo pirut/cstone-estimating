@@ -1634,6 +1634,10 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
       estimatePayload,
       estimateValues
     );
+    if (resolvedPandaDocTemplate.matchError) {
+      setError(resolvedPandaDocTemplate.matchError);
+      return;
+    }
     const templateRecipientRole = String(
       resolvedPandaDocTemplate.recipientRole ??
         templatePandaDocConfig?.recipientRole ??
