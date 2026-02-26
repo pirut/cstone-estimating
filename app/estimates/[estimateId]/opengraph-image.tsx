@@ -196,8 +196,7 @@ export default async function OpenGraphImage({ params }: OpenGraphImageProps) {
 
         <div
           style={{
-            display: "grid",
-            gridTemplateColumns: "1.2fr 0.8fr",
+            display: "flex",
             gap: 20,
             alignItems: "stretch",
           }}
@@ -206,6 +205,7 @@ export default async function OpenGraphImage({ params }: OpenGraphImageProps) {
             style={{
               display: "flex",
               flexDirection: "column",
+              flex: "1.2 1 0%",
               gap: 12,
               padding: "22px 24px",
               borderRadius: 22,
@@ -241,8 +241,8 @@ export default async function OpenGraphImage({ params }: OpenGraphImageProps) {
                 opacity: 0.94,
               }}
             >
-              <div>Status: {statusLabel}</div>
-              <div>Updated: {updatedOnLabel}</div>
+              <div>{`Status: ${statusLabel}`}</div>
+              <div>{`Updated: ${updatedOnLabel}`}</div>
             </div>
           </div>
 
@@ -250,6 +250,7 @@ export default async function OpenGraphImage({ params }: OpenGraphImageProps) {
             style={{
               display: "flex",
               flexDirection: "column",
+              flex: "0.8 1 0%",
               justifyContent: "space-between",
               gap: 14,
               padding: "22px 24px",
