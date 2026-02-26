@@ -53,7 +53,7 @@ PANDADOC_SESSION_LIFETIME_SECONDS=900
 PANDADOC_READY_TIMEOUT_MS=45000
 PANDADOC_READY_POLL_INTERVAL_MS=1200
 PANDADOC_OWNER_MEMBERSHIP_ID=... # preferred, PandaDoc workspace membership_id for responsible owner
-PANDADOC_OWNER_EMAIL=... # optional fallback for create requests
+PANDADOC_OWNER_EMAIL=... # optional override for create requests (default is sales@cornerstonecompaniesfl.com)
 ```
 
 ## Convex local deployment

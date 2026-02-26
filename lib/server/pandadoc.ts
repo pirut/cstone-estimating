@@ -11,6 +11,7 @@ const DEFAULT_API_BASE_URL = "https://api.pandadoc.com/public/v1";
 const DEFAULT_APP_BASE_URL = "https://app.pandadoc.com";
 const DEFAULT_READY_TIMEOUT_MS = 45_000;
 const DEFAULT_READY_POLL_INTERVAL_MS = 1_200;
+const DEFAULT_OWNER_EMAIL = "sales@cornerstonecompaniesfl.com";
 const UPLOADED_STATUS = "document.uploaded";
 const ERROR_STATUS = "document.error";
 const DRAFT_STATUS = "document.draft";
@@ -377,7 +378,9 @@ function resolveDraftOwner() {
     };
   }
 
-  return undefined;
+  return {
+    email: DEFAULT_OWNER_EMAIL,
+  };
 }
 
 function getOwnerMembershipId() {
