@@ -162,7 +162,10 @@ type PandaDocSessionResponse = {
 };
 
 type PandaDocRecipientDetails = {
+  id?: string;
   type?: string;
+  recipient_type?: string;
+  contact_id?: string;
   email?: string;
   first_name?: string;
   last_name?: string;
@@ -1033,6 +1036,64 @@ async function shareWithDocumentGenerator(
   }
 }
 
+function isSignerRecipient(recipient: PandaDocRecipientDetails) {
+  return coerceString(recipient.recipient_type).toLowerCase() === "signer";
+}
+
+async function reassignDocumentSignerIfNeeded(
+  documentId: string,
+  desiredRecipient: PandaDocDraft["recipients"][number] | undefined
+) {
+  const desiredEmail = coerceString(desiredRecipient?.email).toLowerCase();
+  if (!desiredEmail) return;
+
+  const detailsResponse = await pandadocRequest<PandaDocDetailsResponse>(
+    `/documents/${encodeURIComponent(documentId)}/details`,
+    {
+      method: "GET",
+      expectedStatus: 200,
+    }
+  );
+  const recipients = Array.isArray(detailsResponse.recipients)
+    ? detailsResponse.recipients
+    : [];
+
+  const matchedSigner = recipients.find(
+    (recipient) =>
+      isSignerRecipient(recipient) &&
+      coerceString(recipient.email).toLowerCase() === desiredEmail
+  );
+  if (matchedSigner) return;
+
+  const currentSigner = recipients.find(
+    (recipient) => isSignerRecipient(recipient) && coerceString(recipient.id)
+  );
+  if (!currentSigner) return;
+
+  const candidateEmails = buildTeamEmailCandidates(desiredEmail);
+  const contact = await ensurePandaDocContact(
+    {
+      email: desiredEmail,
+      firstName: desiredRecipient?.first_name,
+      lastName: desiredRecipient?.last_name,
+    },
+    desiredEmail,
+    candidateEmails.length ? candidateEmails : [desiredEmail]
+  );
+
+  await pandadocRequest<Record<string, unknown>>(
+    `/documents/${encodeURIComponent(documentId)}/recipients/${encodeURIComponent(coerceString(currentSigner.id))}/reassign`,
+    {
+      method: "POST",
+      expectedStatus: 200,
+      body: {
+        id: contact.contactId,
+        kind: "contact",
+      },
+    }
+  );
+}
+
 function assertDocumentIsDraft(documentId: string, status: string) {
   if (status === DRAFT_STATUS) return;
   throw new Error(
@@ -1188,6 +1249,10 @@ export async function updatePandaDocDocument(
   const editableStatusResponse = await waitForDocumentReady(normalizedDocumentId);
   const editableStatus = coerceString(editableStatusResponse.status) || "unknown";
   assertDocumentIsDraft(normalizedDocumentId, editableStatus);
+  await reassignDocumentSignerIfNeeded(
+    normalizedDocumentId,
+    draft.recipients[0]
+  );
 
   const updatePayload: Record<string, unknown> = {
     name: draft.name,

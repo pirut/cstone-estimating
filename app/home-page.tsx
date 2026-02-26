@@ -1706,14 +1706,14 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
       activeTrackedPandaDocDocument?.recipientRole ?? templateRecipientRole
     ).trim();
     const defaultSignerRole = pandadocSignerRole || trackedRecipientRole || templateRecipientRole;
-    const signerEmail = trackedRecipientEmail || emailAddress;
+    const signerEmail = emailAddress || trackedRecipientEmail;
     const fallbackNameSegments = preparedByName.split(/\s+/).filter(Boolean);
     const fallbackFirstName = fallbackNameSegments[0] ?? "";
     const fallbackLastName = fallbackNameSegments.slice(1).join(" ");
     const signerFirstName =
-      trackedRecipientFirstName || user?.firstName?.trim() || fallbackFirstName;
+      user?.firstName?.trim() || trackedRecipientFirstName || fallbackFirstName;
     const signerLastName =
-      trackedRecipientLastName || user?.lastName?.trim() || fallbackLastName;
+      user?.lastName?.trim() || trackedRecipientLastName || fallbackLastName;
     const generationRecipient = signerEmail
       ? {
           email: signerEmail,
