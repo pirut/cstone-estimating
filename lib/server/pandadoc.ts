@@ -12,8 +12,10 @@ const DEFAULT_APP_BASE_URL = "https://app.pandadoc.com";
 const DEFAULT_READY_TIMEOUT_MS = 45_000;
 const DEFAULT_READY_POLL_INTERVAL_MS = 1_200;
 const DEFAULT_OWNER_EMAIL = "sales@cornerstonecompaniesfl.com";
-const DEFAULT_WORKSPACE_EMAIL_DOMAIN = "cstonefl.com";
-const DEFAULT_WORKSPACE_EMAIL_ALIAS = "cornerstonecompaniesfl.com";
+const DEFAULT_TEAM_EMAIL_DOMAINS = [
+  "cstonefl.com",
+  "cornerstonecompaniesfl.com",
+] as const;
 const UPLOADED_STATUS = "document.uploaded";
 const ERROR_STATUS = "document.error";
 const DRAFT_STATUS = "document.draft";
@@ -187,6 +189,15 @@ type PandaDocContactDetails = {
 
 type PandaDocContactListResponse = {
   results?: PandaDocContactDetails[];
+};
+
+type PandaDocMemberDetails = {
+  email?: string;
+  is_active?: boolean;
+};
+
+type PandaDocMemberListResponse = {
+  results?: PandaDocMemberDetails[];
 };
 
 type PandaDocTemplateListResponse = {
@@ -407,42 +418,40 @@ function getOwnerMembershipId() {
   return coerceString(process.env.PANDADOC_OWNER_MEMBERSHIP_ID);
 }
 
-function getWorkspaceEmailDomain() {
-  return (
-    coerceString(process.env.PANDADOC_WORKSPACE_EMAIL_DOMAIN) ||
-    DEFAULT_WORKSPACE_EMAIL_DOMAIN
-  )
-    .trim()
-    .toLowerCase();
-}
-
-function getWorkspaceEmailAliases() {
-  const fromEnv = coerceString(process.env.PANDADOC_WORKSPACE_EMAIL_ALIASES)
+function getTeamEmailDomains() {
+  const configured = coerceString(process.env.PANDADOC_TEAM_EMAIL_DOMAINS)
     .split(",")
     .map((entry) => entry.trim().toLowerCase())
     .filter(Boolean);
-  const aliases = new Set<string>([DEFAULT_WORKSPACE_EMAIL_ALIAS, ...fromEnv]);
-  return aliases;
+  const legacyDomain = coerceString(process.env.PANDADOC_WORKSPACE_EMAIL_DOMAIN)
+    .trim()
+    .toLowerCase();
+  const legacyAliases = coerceString(process.env.PANDADOC_WORKSPACE_EMAIL_ALIASES)
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  const domains = [
+    ...configured,
+    legacyDomain,
+    ...legacyAliases,
+    ...DEFAULT_TEAM_EMAIL_DOMAINS,
+  ].filter(Boolean);
+  return Array.from(new Set(domains));
 }
 
-function normalizeWorkspaceMemberEmail(email: string) {
+function buildTeamEmailCandidates(email: string) {
   const normalized = coerceString(email).toLowerCase();
-  if (!normalized) return "";
+  if (!normalized) return [];
   const atIndex = normalized.lastIndexOf("@");
   if (atIndex <= 0 || atIndex >= normalized.length - 1) {
-    return normalized;
+    return [normalized];
   }
   const localPart = normalized.slice(0, atIndex);
-  const domainPart = normalized.slice(atIndex + 1);
-  const workspaceDomain = getWorkspaceEmailDomain();
-  if (!workspaceDomain || domainPart === workspaceDomain) {
-    return normalized;
-  }
-  const aliases = getWorkspaceEmailAliases();
-  if (!aliases.has(domainPart)) {
-    return normalized;
-  }
-  return `${localPart}@${workspaceDomain}`;
+  const candidates = [
+    normalized,
+    ...getTeamEmailDomains().map((domain) => `${localPart}@${domain}`),
+  ];
+  return Array.from(new Set(candidates.filter(Boolean)));
 }
 
 function getApiKey() {
@@ -815,18 +824,59 @@ async function getPandaDocMatchedRecipient(
   };
 }
 
-function hasRecipientEmail(
+type ResolvedPandaDocContact = {
+  contactId: string;
+  email: string;
+};
+
+function findRecipientEmailMatch(
   recipients: PandaDocRecipientDetails[] | undefined,
-  email: string
+  candidateEmails: string[]
 ) {
-  const normalizedEmail = coerceString(email).toLowerCase();
-  if (!normalizedEmail || !recipients?.length) return false;
-  return recipients.some(
-    (recipient) => coerceString(recipient.email).toLowerCase() === normalizedEmail
+  if (!recipients?.length || !candidateEmails.length) return undefined;
+  const recipientEmails = new Set(
+    recipients
+      .map((recipient) => coerceString(recipient.email).toLowerCase())
+      .filter(Boolean)
   );
+  for (const candidate of candidateEmails) {
+    const normalized = coerceString(candidate).toLowerCase();
+    if (normalized && recipientEmails.has(normalized)) {
+      return normalized;
+    }
+  }
+  return undefined;
 }
 
-async function findPandaDocContactIdByEmail(email: string) {
+async function findMatchingWorkspaceMemberEmail(candidateEmails: string[]) {
+  if (!candidateEmails.length) return undefined;
+  try {
+    const response = await pandadocRequest<PandaDocMemberListResponse>(
+      "/members",
+      {
+        method: "GET",
+        expectedStatus: 200,
+      }
+    );
+    const activeEmails = new Set(
+      (Array.isArray(response.results) ? response.results : [])
+        .filter((member) => member.is_active !== false)
+        .map((member) => coerceString(member.email).toLowerCase())
+        .filter(Boolean)
+    );
+    for (const candidate of candidateEmails) {
+      const normalized = coerceString(candidate).toLowerCase();
+      if (normalized && activeEmails.has(normalized)) {
+        return normalized;
+      }
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+async function findPandaDocContactByEmail(email: string) {
   const normalizedEmail = coerceString(email).toLowerCase();
   if (!normalizedEmail) return undefined;
   const searchParams = new URLSearchParams();
@@ -844,17 +894,33 @@ async function findPandaDocContactIdByEmail(email: string) {
       (contact) => coerceString(contact.email).toLowerCase() === normalizedEmail
     ) ?? contacts[0];
   const contactId = coerceString(matched?.id);
-  return contactId || undefined;
+  if (!contactId) return undefined;
+  return {
+    contactId,
+    email: coerceString(matched?.email).toLowerCase() || normalizedEmail,
+  } as ResolvedPandaDocContact;
 }
 
-async function ensurePandaDocContactId(
-  sharedWith: PandaDocRecipientInput,
-  normalizedEmail: string
-) {
-  const existingId = await findPandaDocContactIdByEmail(normalizedEmail);
-  if (existingId) return existingId;
+async function findPandaDocContactByCandidates(candidateEmails: string[]) {
+  for (const candidate of candidateEmails) {
+    const found = await findPandaDocContactByEmail(candidate);
+    if (found) return found;
+  }
+  return undefined;
+}
 
-  const createPayload: Record<string, unknown> = { email: normalizedEmail };
+async function ensurePandaDocContact(
+  sharedWith: PandaDocRecipientInput,
+  preferredEmail: string,
+  candidateEmails: string[]
+): Promise<ResolvedPandaDocContact> {
+  const orderedCandidates = Array.from(
+    new Set([preferredEmail, ...candidateEmails].filter(Boolean))
+  );
+  const existingContact = await findPandaDocContactByCandidates(orderedCandidates);
+  if (existingContact) return existingContact;
+
+  const createPayload: Record<string, unknown> = { email: preferredEmail };
   if (coerceString(sharedWith.firstName)) {
     createPayload.first_name = coerceString(sharedWith.firstName);
   }
@@ -869,17 +935,22 @@ async function ensurePandaDocContactId(
       body: createPayload,
     });
     const createdId = coerceString(created.id);
-    if (createdId) return createdId;
+    if (createdId) {
+      return {
+        contactId: createdId,
+        email: coerceString(created.email).toLowerCase() || preferredEmail,
+      };
+    }
   } catch (error) {
-    const raceSafeId = await findPandaDocContactIdByEmail(normalizedEmail);
-    if (raceSafeId) return raceSafeId;
+    const raceSafeContact = await findPandaDocContactByCandidates(orderedCandidates);
+    if (raceSafeContact) return raceSafeContact;
     throw error;
   }
 
-  const fallbackId = await findPandaDocContactIdByEmail(normalizedEmail);
-  if (fallbackId) return fallbackId;
+  const fallbackContact = await findPandaDocContactByCandidates(orderedCandidates);
+  if (fallbackContact) return fallbackContact;
   throw new Error(
-    `Unable to resolve PandaDoc contact for ${normalizedEmail}.`
+    `Unable to resolve PandaDoc contact for ${preferredEmail}.`
   );
 }
 
@@ -889,7 +960,13 @@ async function shareWithDocumentGenerator(
 ): Promise<PandaDocCreateResult["shareResult"]> {
   const rawEmail = coerceString(sharedWith?.email).toLowerCase();
   if (!rawEmail) return undefined;
-  const normalizedEmail = normalizeWorkspaceMemberEmail(rawEmail);
+  const candidateEmails = buildTeamEmailCandidates(rawEmail);
+  if (!candidateEmails.length) return undefined;
+  const memberEmail = await findMatchingWorkspaceMemberEmail(candidateEmails);
+  const preferredEmail = memberEmail || candidateEmails[0] || rawEmail;
+  const orderedCandidates = Array.from(
+    new Set([preferredEmail, ...candidateEmails].filter(Boolean))
+  );
 
   try {
     const detailsResponse = await pandadocRequest<PandaDocDetailsResponse>(
@@ -899,22 +976,24 @@ async function shareWithDocumentGenerator(
         expectedStatus: 200,
       }
     );
-    if (
-      hasRecipientEmail(detailsResponse.recipients, normalizedEmail) ||
-      hasRecipientEmail(detailsResponse.recipients, rawEmail)
-    ) {
+    const matchedRecipientEmail = findRecipientEmailMatch(
+      detailsResponse.recipients,
+      orderedCandidates
+    );
+    if (matchedRecipientEmail) {
       return {
-        email: normalizedEmail,
+        email: matchedRecipientEmail,
         status: "already_shared",
       };
     }
 
-    const contactId = await ensurePandaDocContactId(
+    const contact = await ensurePandaDocContact(
       {
         ...sharedWith,
-        email: normalizedEmail,
+        email: preferredEmail,
       },
-      normalizedEmail
+      preferredEmail,
+      orderedCandidates
     );
     await pandadocRequest<Record<string, unknown>>(
       `/documents/${encodeURIComponent(documentId)}/recipients`,
@@ -922,19 +1001,19 @@ async function shareWithDocumentGenerator(
         method: "POST",
         expectedStatus: 200,
         body: {
-          id: contactId,
+          id: contact.contactId,
           kind: "contact",
         },
       }
     );
 
     return {
-      email: normalizedEmail,
+      email: contact.email,
       status: "shared",
     };
   } catch (error) {
     return {
-      email: normalizedEmail,
+      email: preferredEmail,
       status: "failed",
       error: error instanceof Error ? error.message : "Unknown error.",
     };
