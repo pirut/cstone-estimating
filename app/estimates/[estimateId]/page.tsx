@@ -1,5 +1,11 @@
 import type { Metadata } from "next";
 import HomePage from "@/app/home-page";
+import {
+  formatEstimatePreviewId,
+  formatEstimateStatus,
+  parseEstimateId,
+  resolveEstimateSharePreview,
+} from "@/app/estimates/[estimateId]/estimate-share-preview";
 
 type EstimatePageProps = {
   params: {
@@ -7,27 +13,18 @@ type EstimatePageProps = {
   };
 };
 
-function decodeEstimateId(raw: string) {
-  try {
-    return decodeURIComponent(raw);
-  } catch {
-    return raw;
-  }
-}
-
-function formatEstimatePreviewId(estimateId: string) {
-  if (!estimateId) return "Unknown";
-  if (estimateId.length <= 26) return estimateId;
-  return `${estimateId.slice(0, 12)}...${estimateId.slice(-8)}`;
-}
-
-export function generateMetadata({ params }: EstimatePageProps): Metadata {
-  const estimateId = decodeEstimateId(params.estimateId);
+export async function generateMetadata({
+  params,
+}: EstimatePageProps): Promise<Metadata> {
+  const estimateId = parseEstimateId(params.estimateId);
   const encodedEstimateId = encodeURIComponent(estimateId);
   const previewId = formatEstimatePreviewId(estimateId);
-  const title = `Estimate ${previewId}`;
-  const description =
-    "Open this shared Cornerstone estimate link to review and manage the project.";
+  const preview = await resolveEstimateSharePreview(estimateId);
+  const customerLabel = preview?.customerName || "Customer not set";
+  const projectLabel = preview?.projectName || preview?.title || `Estimate ${previewId}`;
+  const statusLabel = preview ? formatEstimateStatus(preview.status) : "Draft";
+  const title = `${projectLabel} • ${customerLabel}`;
+  const description = `Cornerstone shared estimate. Project: ${projectLabel}. Customer: ${customerLabel}. Status: ${statusLabel}.`;
   const estimatePath = `/estimates/${encodedEstimateId}`;
   const ogImagePath = `${estimatePath}/opengraph-image`;
 
@@ -56,7 +53,7 @@ export function generateMetadata({ params }: EstimatePageProps): Metadata {
 }
 
 export default function EstimatePage({ params }: EstimatePageProps) {
-  const estimateId = decodeEstimateId(params.estimateId);
+  const estimateId = parseEstimateId(params.estimateId);
 
   return <HomePage routeEstimateId={estimateId} />;
 }
