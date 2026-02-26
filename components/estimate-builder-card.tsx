@@ -32,6 +32,7 @@ import {
   createId,
   DEFAULT_DRAFT,
   EURO_DEFAULT_FLUFF,
+  normalizeUnitTypeCostOverrides,
   roundUp,
   resolveProductBasePrice,
   toNumber,
@@ -293,6 +294,13 @@ function normalizeLoadedProduct(
   });
 }
 
+function ensureSingleProductLine(products: ProductItem[]): ProductItem[] {
+  if (!Array.isArray(products) || products.length === 0) {
+    return [createDefaultProductItem()];
+  }
+  return [products[0]];
+}
+
 function normalizeLoadedChangeOrder(
   source: unknown,
   fallback: ChangeOrderDraft,
@@ -528,7 +536,7 @@ export function EstimateBuilderCard({
       return;
     }
 
-    const loadedProducts =
+    const loadedProducts = ensureSingleProductLine(
       Array.isArray(loadPayload.products) && loadPayload.products.length
         ? loadPayload.products.map((item, index) =>
             normalizeLoadedProduct(
@@ -536,7 +544,14 @@ export function EstimateBuilderCard({
               createId(`product-${index + 1}`)
             )
           )
-        : DEFAULT_DRAFT.products;
+        : DEFAULT_DRAFT.products
+    );
+    const loadCalculator =
+      loadPayload.calculator &&
+      typeof loadPayload.calculator === "object" &&
+      !Array.isArray(loadPayload.calculator)
+        ? (loadPayload.calculator as Partial<EstimateDraft["calculator"]>)
+        : null;
     const loadedTotals =
       loadPayload.totals && typeof loadPayload.totals === "object"
         ? (loadPayload.totals as Record<string, unknown>)
@@ -551,7 +566,10 @@ export function EstimateBuilderCard({
           : DEFAULT_DRAFT.bucking,
       calculator: {
         ...DEFAULT_DRAFT.calculator,
-        ...(loadPayload.calculator ?? {}),
+        ...(loadCalculator ?? {}),
+        unit_type_cost_overrides: normalizeUnitTypeCostOverrides(
+          loadCalculator?.unit_type_cost_overrides
+        ),
       },
       changeOrder: normalizeLoadedChangeOrder(
         loadPayload.changeOrder,
@@ -641,7 +659,10 @@ export function EstimateBuilderCard({
   }, [legacyValues, projectNameValue, addressLookupOpen]);
 
   const handleDraftChange = (next: EstimateDraft) => {
-    setDraft(next);
+    setDraft({
+      ...next,
+      products: ensureSingleProductLine(next.products),
+    });
     setLegacyValues(null);
     onActivate?.();
   };
@@ -685,12 +706,17 @@ export function EstimateBuilderCard({
 
   const updateProductById = useCallback(
     (productId: string, updater: (item: ProductItem) => ProductItem) => {
-      setDraft((prev) => ({
-        ...prev,
-        products: prev.products.map((item) =>
-          item.id === productId ? updater(item) : item
-        ),
-      }));
+      setDraft((prev) => {
+        const nextProducts = ensureSingleProductLine(
+          prev.products.map((item) =>
+            item.id === productId ? updater(item) : item
+          )
+        );
+        return {
+          ...prev,
+          products: nextProducts,
+        };
+      });
       setLegacyValues(null);
       onActivate?.();
     },
@@ -901,7 +927,7 @@ export function EstimateBuilderCard({
   };
 
   const handleCalculatorChange = (
-    field: keyof EstimateDraft["calculator"],
+    field: Exclude<keyof EstimateDraft["calculator"], "unit_type_cost_overrides">,
     value: string
   ) => {
     handleDraftChange({
@@ -909,6 +935,28 @@ export function EstimateBuilderCard({
       calculator: {
         ...draft.calculator,
         [field]: value,
+      },
+    });
+  };
+
+  const handleUnitTypeCostOverrideChange = (
+    unitTypeId: string,
+    value: string
+  ) => {
+    const nextOverrides = {
+      ...draft.calculator.unit_type_cost_overrides,
+    };
+    const normalizedValue = value.trim();
+    if (normalizedValue) {
+      nextOverrides[unitTypeId] = value;
+    } else {
+      delete nextOverrides[unitTypeId];
+    }
+    handleDraftChange({
+      ...draft,
+      calculator: {
+        ...draft.calculator,
+        unit_type_cost_overrides: nextOverrides,
       },
     });
   };
@@ -1581,27 +1629,10 @@ export function EstimateBuilderCard({
                           disabled={Boolean(legacyValues)}
                         />
                       </div>
-                      <div className="flex items-end justify-end gap-2">
+                      <div className="flex items-end justify-end">
                         <div className="rounded-lg border border-border/60 bg-background px-3 py-2 text-sm font-semibold text-foreground">
                           {Number.isFinite(total) ? formatCurrency(total) : "-"}
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            const next = draft.products.filter((_, idx) => idx !== index);
-                            handleDraftChange({
-                              ...draft,
-                              products: next.length
-                                ? next
-                                : [createDefaultProductItem()],
-                            });
-                          }}
-                          disabled={draft.products.length === 1 || Boolean(legacyValues)}
-                          aria-label="Remove product line"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
                       </div>
                     </div>
 
@@ -1915,27 +1946,7 @@ export function EstimateBuilderCard({
               })}
             </div>
 
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() =>
-                  handleDraftChange({
-                    ...draft,
-                    products: [
-                      ...draft.products,
-                      {
-                        ...createDefaultProductItem(createId("product")),
-                        markup: draft.calculator.product_markup_default,
-                      },
-                    ],
-                  })
-                }
-                disabled={Boolean(legacyValues) || !vendorOptions.length}
-              >
-                <Plus className="h-4 w-4" />
-                Add product line
-              </Button>
+            <div className="flex justify-end">
               <div className="text-xs text-muted-foreground">
                 Product subtotal: {formatCurrency(computed.totals.product_price)}
               </div>
@@ -2184,7 +2195,7 @@ export function EstimateBuilderCard({
           <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
             <SectionHeader title="Install Calculator" done={installStepComplete} />
 
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               <RateField
                 label="Install markup"
                 value={draft.calculator.install_markup}
@@ -2212,12 +2223,15 @@ export function EstimateBuilderCard({
               />
             </div>
             <p className="text-[11px] text-muted-foreground">
-              Use `+` or `-` for small adjustments from the calculated install total.
+              Use `+` or `-` to adjust from the calculated install total.
             </p>
 
             <div className="rounded-xl border border-border/60 bg-card/70 p-3">
               <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 Panel count summary
+              </p>
+              <p className="mb-3 text-[11px] text-muted-foreground">
+                Override unit cost by type to recalculate install totals for this estimate.
               </p>
               <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                 {panelTypeOptions.map((panel) => {
@@ -2231,6 +2245,30 @@ export function EstimateBuilderCard({
                       <p className="text-xs text-muted-foreground">
                         Qty {counts.total_qty} | Clerestory {counts.clerestory_qty} | Replacement {counts.replacement_qty}
                       </p>
+                      <div className="mt-2 space-y-1">
+                        <label className="text-xs text-muted-foreground">
+                          Unit cost override
+                        </label>
+                        <MoneyInput
+                          className={inputSmClassName}
+                          value={
+                            draft.calculator.unit_type_cost_overrides[panel.id] ?? ""
+                          }
+                          onValueChange={(value) =>
+                            handleUnitTypeCostOverrideChange(panel.id, value)
+                          }
+                          currency="USD"
+                          placeholder={
+                            Number.isFinite(panel.price) && panel.price > 0
+                              ? panel.price.toFixed(2)
+                              : "0"
+                          }
+                          disabled={Boolean(legacyValues)}
+                        />
+                        <p className="text-[11px] text-muted-foreground">
+                          Leave blank to use catalog pricing.
+                        </p>
+                      </div>
                     </div>
                   );
                 })}

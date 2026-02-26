@@ -116,6 +116,7 @@ export type InstallCalculator = {
   bucking_rate: string;
   waterproofing_rate: string;
   rentals: string;
+  unit_type_cost_overrides: Record<string, string>;
   override_bucking_cost: string;
   override_waterproofing_cost: string;
   override_install_total: string;
@@ -185,6 +186,7 @@ export const DEFAULT_DRAFT: EstimateDraft = {
     bucking_rate: "7.71",
     waterproofing_rate: "5.61",
     rentals: "",
+    unit_type_cost_overrides: {},
     override_bucking_cost: "",
     override_waterproofing_cost: "",
     override_install_total: "",
@@ -286,6 +288,9 @@ export function computeEstimate(
   const buckingRate = toNumber(draft.calculator.bucking_rate);
   const waterproofRate = toNumber(draft.calculator.waterproofing_rate);
   const rentals = toNumber(draft.calculator.rentals);
+  const unitTypeCostOverrides = normalizeUnitTypeCostOverrides(
+    draft.calculator.unit_type_cost_overrides
+  );
 
   const products = draft.products ?? [];
   const productLineItems = products.map((item) => {
@@ -360,16 +365,21 @@ export function computeEstimate(
       panelTypeById.get(type),
       effectiveVendorId
     );
+    const unitTypeOverridePrice = resolveUnitTypeOverridePrice(
+      unitTypeCostOverrides,
+      type
+    );
+    const effectivePanelPrice =
+      unitTypeOverridePrice === null ? panelPrice : unitTypeOverridePrice;
     panelTotals[type] +=
-      panelPrice * qty +
-      panelPrice * clerestoryQty * 0.5 +
-      panelPrice * replacementQty;
+      effectivePanelPrice * qty +
+      effectivePanelPrice * clerestoryQty * 0.5 +
+      effectivePanelPrice * replacementQty;
   }
 
   const panelInstallValue = sum(Object.values(panelTotals));
   const installOverride = parseOverrideInput(draft.calculator.override_install_total);
   const totalInstallValue = applyOverrideValue(panelInstallValue, installOverride);
-
   const installCostBase = roundUp(totalInstallValue * 0.7);
   const coversCostBase = roundUp(totalInstallValue * 0.2);
   const punchCostBase = roundUp(totalInstallValue * 0.1);
@@ -650,6 +660,32 @@ function resolveDefaultInstallVendorId(products: ProductItem[]) {
     .filter(Boolean);
   if (!ids.length) return "";
   return ids[0];
+}
+
+function resolveUnitTypeOverridePrice(
+  overrides: Record<string, string>,
+  unitType: string
+) {
+  const raw = String(overrides[unitType] ?? "").trim();
+  if (!raw) return null;
+  const parsed = toNumber(raw);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return parsed;
+}
+
+export function normalizeUnitTypeCostOverrides(
+  value: unknown
+): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const entries: Array<[string, string]> = [];
+  Object.entries(value as Record<string, unknown>).forEach(([key, raw]) => {
+    const unitType = String(key).trim();
+    if (!unitType) return;
+    const normalized = String(raw ?? "").trim();
+    if (!normalized) return;
+    entries.push([unitType, normalized]);
+  });
+  return Object.fromEntries(entries);
 }
 
 function applyOverrideValue(baseValue: number, override: ParsedOverrideInput) {
