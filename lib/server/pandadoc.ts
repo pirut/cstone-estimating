@@ -447,10 +447,10 @@ function buildTeamEmailCandidates(email: string) {
     return [normalized];
   }
   const localPart = normalized.slice(0, atIndex);
-  const candidates = [
-    normalized,
-    ...getTeamEmailDomains().map((domain) => `${localPart}@${domain}`),
-  ];
+  const domainCandidates = getTeamEmailDomains().map(
+    (domain) => `${localPart}@${domain}`
+  );
+  const candidates = [...domainCandidates, normalized];
   return Array.from(new Set(candidates.filter(Boolean)));
 }
 
@@ -889,10 +889,9 @@ async function findPandaDocContactByEmail(email: string) {
     }
   );
   const contacts = Array.isArray(response.results) ? response.results : [];
-  const matched =
-    contacts.find(
-      (contact) => coerceString(contact.email).toLowerCase() === normalizedEmail
-    ) ?? contacts[0];
+  const matched = contacts.find(
+    (contact) => coerceString(contact.email).toLowerCase() === normalizedEmail
+  );
   const contactId = coerceString(matched?.id);
   if (!contactId) return undefined;
   return {
