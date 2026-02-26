@@ -23,7 +23,7 @@ export async function generateMetadata({
   const customerLabel = preview?.customerName || "Customer not set";
   const projectLabel = preview?.projectName || preview?.title || `Estimate ${previewId}`;
   const statusLabel = preview ? formatEstimateStatus(preview.status) : "Draft";
-  const title = `${projectLabel} • ${customerLabel}`;
+  const title = `${projectLabel} — ${customerLabel} | Cornerstone`;
   const description = `Cornerstone shared estimate. Project: ${projectLabel}. Customer: ${customerLabel}. Status: ${statusLabel}.`;
   const estimatePath = `/estimates/${encodedEstimateId}`;
   const ogImagePath = `${estimatePath}/opengraph-image`;
