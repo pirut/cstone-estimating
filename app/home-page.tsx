@@ -9,7 +9,6 @@ import {
   useState,
 } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { BrandMark } from "@/components/brand-mark";
 import { EstimateBuilderCard } from "@/components/estimate-builder-card";
 import {
@@ -132,6 +131,16 @@ const LINKED_DOCUMENT_POLL_INTERVAL_MS = 20_000;
 const UNASSIGNED_PROJECT_KEY = "__unassigned__";
 const LOCAL_DRAFT_STORAGE_KEY = "cstone:manual-estimate:draft:v1";
 
+function parseEstimateIdFromPathname(pathname: string) {
+  const match = String(pathname ?? "").match(/^\/estimates\/([^/?#]+)/i);
+  if (!match) return null;
+  try {
+    return decodeURIComponent(match[1]);
+  } catch {
+    return match[1];
+  }
+}
+
 function mergeTotalsWithPandaDocValue(
   totals: Record<string, any> | null | undefined,
   generation: PandaDocGenerationResponse | null | undefined
@@ -161,8 +170,10 @@ function mergeTotalsWithPandaDocValue(
 }
 
 export default function HomePage({ routeEstimateId = null }: HomePageProps = {}) {
-  const router = useRouter();
   const normalizedRouteEstimateId = String(routeEstimateId ?? "").trim();
+  const [urlEstimateId, setUrlEstimateId] = useState<string | null>(
+    normalizedRouteEstimateId || null
+  );
   const { isLoaded: authLoaded, isSignedIn } = useOptionalAuth();
   const { user } = useOptionalUser();
   const { isLoading: convexLoading, user: convexUser, error: convexAuthError } =
@@ -791,6 +802,37 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
     );
   }, []);
 
+  const updateEstimateUrl = useCallback(
+    (estimateId: string | null, mode: "push" | "replace" = "push") => {
+      if (typeof window === "undefined") return;
+      const nextPath = estimateId
+        ? `/estimates/${encodeURIComponent(estimateId)}`
+        : "/";
+      if (window.location.pathname !== nextPath) {
+        if (mode === "replace") {
+          window.history.replaceState(window.history.state, "", nextPath);
+        } else {
+          window.history.pushState(window.history.state, "", nextPath);
+        }
+      }
+      setUrlEstimateId(estimateId);
+    },
+    []
+  );
+
+  useEffect(() => {
+    setUrlEstimateId(normalizedRouteEstimateId || null);
+  }, [normalizedRouteEstimateId]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onPopState = () => {
+      setUrlEstimateId(parseEstimateIdFromPathname(window.location.pathname));
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
   useEffect(() => {
     if (!teamName && teamDomain) {
       const base = teamDomain.split(".")[0] || "Cornerstone";
@@ -879,7 +921,7 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
     if (typeof window === "undefined") return;
     if (draftRestoredRef.current) return;
     draftRestoredRef.current = true;
-    if (normalizedRouteEstimateId) return;
+    if (urlEstimateId) return;
 
     const hasLocalWork =
       Boolean(estimateName.trim()) ||
@@ -944,7 +986,7 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
     estimatePayload,
     estimateTags,
     estimateValues,
-    normalizedRouteEstimateId,
+    urlEstimateId,
   ]);
 
   useEffect(() => {
@@ -1385,10 +1427,10 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
     setEstimateTags([]);
     setEstimateTagInput("");
     setProjectActionNotice("Started a new estimate.");
-    if (normalizedRouteEstimateId) {
-      router.push("/");
+    if (urlEstimateId) {
+      updateEstimateUrl(null);
     }
-  }, [normalizedRouteEstimateId, router]);
+  }, [updateEstimateUrl, urlEstimateId]);
 
   const persistGeneratedEstimateVersion = useCallback(
     async (generation?: PandaDocGenerationResponse | null) => {
@@ -2159,8 +2201,8 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
       });
       setProjectActionNotice(`Deleted "${deleteEstimateDialog.title}".`);
       setDeleteEstimateDialog(null);
-      if (normalizedRouteEstimateId && normalizedRouteEstimateId === estimateId) {
-        router.push("/");
+      if (urlEstimateId && urlEstimateId === estimateId) {
+        updateEstimateUrl(null, "replace");
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
@@ -2175,8 +2217,8 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
     convexUser,
     deleteEstimateDialog,
     editingEstimateId,
-    normalizedRouteEstimateId,
-    router,
+    updateEstimateUrl,
+    urlEstimateId,
   ]);
 
   useEffect(() => {
@@ -2508,26 +2550,37 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
     setHistoryEstimateId(estimate?.id ?? null);
   }, []);
 
+  const handleOpenTeamEstimate = useCallback(
+    (estimate: any, mode: "push" | "replace" = "push") => {
+      const estimateId = String(estimate?.id ?? "").trim();
+      if (!estimateId) return;
+      routedEstimateLoadedRef.current = estimateId;
+      handleLoadTeamEstimate(estimate);
+      updateEstimateUrl(estimateId, mode);
+    },
+    [handleLoadTeamEstimate, updateEstimateUrl]
+  );
+
   useEffect(() => {
-    if (!normalizedRouteEstimateId) {
+    if (!urlEstimateId) {
       routedEstimateLoadedRef.current = null;
       return;
     }
-    const estimate = findTeamEstimateById(normalizedRouteEstimateId);
+    const estimate = findTeamEstimateById(urlEstimateId);
     if (!estimate) {
       routedEstimateLoadedRef.current = null;
       return;
     }
-    if (routedEstimateLoadedRef.current === normalizedRouteEstimateId) {
+    if (routedEstimateLoadedRef.current === urlEstimateId) {
       return;
     }
 
-    routedEstimateLoadedRef.current = normalizedRouteEstimateId;
+    routedEstimateLoadedRef.current = urlEstimateId;
     handleLoadTeamEstimate(estimate);
   }, [
     findTeamEstimateById,
     handleLoadTeamEstimate,
-    normalizedRouteEstimateId,
+    urlEstimateId,
   ]);
 
   const handleRevertTeamEstimateVersion = async (
@@ -3371,7 +3424,17 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
                                     <Link
                                       href={estimateHref}
                                       className="text-sm font-semibold text-foreground hover:text-accent"
-                                      onClick={() => handleLoadTeamEstimate(estimate)}
+                                      onClick={(event) => {
+                                        const modifiedClick =
+                                          event.button !== 0 ||
+                                          event.metaKey ||
+                                          event.ctrlKey ||
+                                          event.shiftKey ||
+                                          event.altKey;
+                                        if (modifiedClick) return;
+                                        event.preventDefault();
+                                        handleOpenTeamEstimate(estimate);
+                                      }}
                                     >
                                       {estimate.title ?? "Untitled"}
                                     </Link>
@@ -3494,10 +3557,7 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
                                   <Button
                                     variant="secondary"
                                     size="sm"
-                                    onClick={() => {
-                                      handleLoadTeamEstimate(estimate);
-                                      router.push(estimateHref);
-                                    }}
+                                    onClick={() => handleOpenTeamEstimate(estimate)}
                                     disabled={isDeletingEstimate}
                                   >
                                     Open
