@@ -1166,13 +1166,13 @@ export default function AdminPage({
       {showAmbientBackground ? (
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -top-24 left-1/2 h-80 w-[620px] -translate-x-1/2 rounded-full bg-accent/20 blur-3xl" />
-          <div className="absolute top-24 right-0 h-72 w-72 rounded-full bg-foreground/10 blur-3xl" />
+          <div className="absolute top-24 right-0 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
           <div className="absolute bottom-0 left-0 h-72 w-72 rounded-full bg-accent/15 blur-3xl" />
         </div>
       ) : null}
       <div className="relative w-full space-y-6 px-4 py-8 sm:px-6 md:py-10 lg:px-8 xl:px-10 2xl:px-12">
         {showHero ? (
-          <section className="relative overflow-hidden rounded-[32px] border border-border/60 bg-foreground text-white shadow-elevated">
+          <section className="relative overflow-hidden rounded-[32px] border border-border/60 bg-[#18120d] text-[#f8efe2] shadow-elevated dark:bg-[#120e0b]">
             <div className="absolute -right-24 -top-20 h-64 w-64 rounded-full bg-accent/25 blur-3xl" />
             <div className="absolute -bottom-24 left-8 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
             <div className="relative grid gap-6 p-8 lg:grid-cols-[1.15fr_0.85fr]">

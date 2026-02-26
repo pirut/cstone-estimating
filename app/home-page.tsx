@@ -2866,7 +2866,7 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
       />
       <div className="pointer-events-none absolute inset-0 overflow-hidden">
         <div className="absolute -top-28 left-1/2 h-80 w-[560px] -translate-x-1/2 rounded-full bg-accent/20 blur-3xl" />
-        <div className="absolute top-20 right-0 h-72 w-72 rounded-full bg-foreground/10 blur-3xl" />
+        <div className="absolute top-20 right-0 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
         <div className="absolute -bottom-24 left-10 h-72 w-72 rounded-full bg-accent/15 blur-3xl" />
       </div>
       <div className="relative w-full px-4 py-8 sm:px-6 md:py-10 lg:px-8 xl:px-10 2xl:px-12">
@@ -2924,7 +2924,7 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
             enable the project library.
           </div>
         ) : null}
-        <section className="relative overflow-hidden rounded-[32px] border border-border/60 bg-foreground text-white shadow-elevated">
+        <section className="relative overflow-hidden rounded-[32px] border border-border/60 bg-[#18120d] text-[#f8efe2] shadow-elevated dark:bg-[#120e0b]">
           <div className="absolute -right-28 -top-24 h-72 w-72 rounded-full bg-accent/25 blur-3xl" />
           <div className="absolute bottom-0 left-10 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
           <div className="relative p-8">

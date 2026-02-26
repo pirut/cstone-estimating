@@ -100,7 +100,7 @@ export default function UnifiedAdminPage() {
 
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -left-32 top-24 h-72 w-72 rounded-full bg-accent/20 blur-3xl" />
-        <div className="absolute right-0 top-12 h-80 w-80 rounded-full bg-foreground/10 blur-3xl" />
+        <div className="absolute right-0 top-12 h-80 w-80 rounded-full bg-accent/10 blur-3xl" />
       </div>
 
       <div className="relative w-full px-4 py-6 sm:px-6 lg:px-8 xl:px-10 2xl:px-12">
