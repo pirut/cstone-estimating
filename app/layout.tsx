@@ -16,9 +16,43 @@ const workSans = Work_Sans({
   display: "swap",
 });
 
+const DEFAULT_APP_URL = "https://estimating.jrbussard.com";
+
+function resolveMetadataBase() {
+  const raw =
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
+    DEFAULT_APP_URL;
+  const normalized = /^https?:\/\//i.test(raw) ? raw : `https://${raw}`;
+  try {
+    return new URL(normalized);
+  } catch {
+    return new URL(DEFAULT_APP_URL);
+  }
+}
+
 export const metadata: Metadata = {
+  metadataBase: resolveMetadataBase(),
   title: "Cornerstone Proposal Generator",
   description: "Generate Cornerstone New Construction Proposals from Excel.",
+  openGraph: {
+    title: "Cornerstone Proposal Generator",
+    description: "Generate Cornerstone New Construction Proposals from Excel.",
+    type: "website",
+    siteName: "Cornerstone Proposal Generator",
+    images: [
+      {
+        url: "/brand/cornerstone-logo.png",
+        alt: "Cornerstone Proposal Generator",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "Cornerstone Proposal Generator",
+    description: "Generate Cornerstone New Construction Proposals from Excel.",
+    images: ["/brand/cornerstone-logo.png"],
+  },
 };
 
 export default function RootLayout({
