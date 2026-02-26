@@ -1722,6 +1722,13 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
           role: defaultSignerRole || undefined,
         }
       : undefined;
+    const generatedBy = emailAddress
+      ? {
+          email: emailAddress,
+          firstName: user?.firstName?.trim() || fallbackFirstName || undefined,
+          lastName: user?.lastName?.trim() || fallbackLastName || undefined,
+        }
+      : undefined;
     let generationSucceeded = false;
 
     if (progressResetTimeoutRef.current !== null) {
@@ -1750,6 +1757,7 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
             recipientRole:
               generationRecipient?.role ? undefined : templateRecipientRole || undefined,
             recipient: generationRecipient,
+            generatedBy,
             bindings: templateBindings,
             documentId: trackedDocumentId || undefined,
             allowCreateFallback: true,
@@ -1776,6 +1784,13 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
       const data: PandaDocGenerationResponse = rawData;
 
       setLastGeneration(data);
+      if (data.shareResult?.status === "failed") {
+        const sharedEmail = String(data.shareResult.email ?? "").trim();
+        const shareError = String(data.shareResult.error ?? "").trim();
+        setError(
+          `PandaDoc generated, but sharing${sharedEmail ? ` with ${sharedEmail}` : ""} failed${shareError ? `: ${shareError}` : "."}`
+        );
+      }
       if (data.document?.id) {
         setLinkedDocumentLive({
           id: data.document.id,

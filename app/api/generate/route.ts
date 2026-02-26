@@ -79,6 +79,9 @@ export async function POST(request: NextRequest) {
     const pandadocRecipient = normalizePandaDocRecipient(
       pandadocConfig?.recipient
     );
+    const pandadocGeneratedBy = normalizePandaDocRecipient(
+      pandadocConfig?.generatedBy
+    );
     const sendDocument = toBoolean(
       pandadocConfig?.send,
       DEFAULT_SEND_DOCUMENT
@@ -183,6 +186,7 @@ export async function POST(request: NextRequest) {
       sessionLifetimeSeconds,
       recipientEmail: updateRecipientEmail || createRecipientEmail,
       sendOptions: sendConfig,
+      sharedWith: pandadocGeneratedBy,
     };
     const generationCreateCommon = {
       draft: createDraftPayload,
@@ -191,6 +195,7 @@ export async function POST(request: NextRequest) {
       sessionLifetimeSeconds,
       recipientEmail: createRecipientEmail,
       sendOptions: sendConfig,
+      sharedWith: pandadocGeneratedBy,
     };
     const canFallbackCreate =
       allowCreateFallback && Boolean(createDraftPayload.templateUuid);
@@ -238,6 +243,7 @@ export async function POST(request: NextRequest) {
         revision: generation.revision,
         document: generation.document,
         recipient: generation.recipient,
+        shareResult: generation.shareResult,
         sendResult: generation.sendResult,
         session: generation.session,
         businessCentralSync,

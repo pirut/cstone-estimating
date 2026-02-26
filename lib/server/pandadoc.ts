@@ -12,6 +12,8 @@ const DEFAULT_APP_BASE_URL = "https://app.pandadoc.com";
 const DEFAULT_READY_TIMEOUT_MS = 45_000;
 const DEFAULT_READY_POLL_INTERVAL_MS = 1_200;
 const DEFAULT_OWNER_EMAIL = "sales@cornerstonecompaniesfl.com";
+const DEFAULT_WORKSPACE_EMAIL_DOMAIN = "cstonefl.com";
+const DEFAULT_WORKSPACE_EMAIL_ALIAS = "cornerstonecompaniesfl.com";
 const UPLOADED_STATUS = "document.uploaded";
 const ERROR_STATUS = "document.error";
 const DRAFT_STATUS = "document.draft";
@@ -77,6 +79,7 @@ export type CreatePandaDocDocumentOptions = {
   sessionLifetimeSeconds: number;
   recipientEmail?: string;
   sendOptions?: PandaDocSendOptions;
+  sharedWith?: PandaDocRecipientInput;
 };
 
 export type UpdatePandaDocDocumentOptions = {
@@ -87,6 +90,7 @@ export type UpdatePandaDocDocumentOptions = {
   sessionLifetimeSeconds: number;
   recipientEmail?: string;
   sendOptions?: PandaDocSendOptions;
+  sharedWith?: PandaDocRecipientInput;
 };
 
 export type PandaDocCreateResult = {
@@ -109,6 +113,11 @@ export type PandaDocCreateResult = {
   };
   sendResult?: {
     status: string;
+  };
+  shareResult?: {
+    email: string;
+    status: "shared" | "already_shared" | "failed";
+    error?: string;
   };
   session?: {
     id: string;
@@ -167,6 +176,17 @@ type PandaDocGrandTotal = {
 type PandaDocDetailsResponse = {
   recipients?: PandaDocRecipientDetails[];
   grand_total?: PandaDocGrandTotal;
+};
+
+type PandaDocContactDetails = {
+  id?: string;
+  email?: string;
+  first_name?: string;
+  last_name?: string;
+};
+
+type PandaDocContactListResponse = {
+  results?: PandaDocContactDetails[];
 };
 
 type PandaDocTemplateListResponse = {
@@ -385,6 +405,44 @@ function resolveDraftOwner() {
 
 function getOwnerMembershipId() {
   return coerceString(process.env.PANDADOC_OWNER_MEMBERSHIP_ID);
+}
+
+function getWorkspaceEmailDomain() {
+  return (
+    coerceString(process.env.PANDADOC_WORKSPACE_EMAIL_DOMAIN) ||
+    DEFAULT_WORKSPACE_EMAIL_DOMAIN
+  )
+    .trim()
+    .toLowerCase();
+}
+
+function getWorkspaceEmailAliases() {
+  const fromEnv = coerceString(process.env.PANDADOC_WORKSPACE_EMAIL_ALIASES)
+    .split(",")
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  const aliases = new Set<string>([DEFAULT_WORKSPACE_EMAIL_ALIAS, ...fromEnv]);
+  return aliases;
+}
+
+function normalizeWorkspaceMemberEmail(email: string) {
+  const normalized = coerceString(email).toLowerCase();
+  if (!normalized) return "";
+  const atIndex = normalized.lastIndexOf("@");
+  if (atIndex <= 0 || atIndex >= normalized.length - 1) {
+    return normalized;
+  }
+  const localPart = normalized.slice(0, atIndex);
+  const domainPart = normalized.slice(atIndex + 1);
+  const workspaceDomain = getWorkspaceEmailDomain();
+  if (!workspaceDomain || domainPart === workspaceDomain) {
+    return normalized;
+  }
+  const aliases = getWorkspaceEmailAliases();
+  if (!aliases.has(domainPart)) {
+    return normalized;
+  }
+  return `${localPart}@${workspaceDomain}`;
 }
 
 function getApiKey() {
@@ -757,6 +815,132 @@ async function getPandaDocMatchedRecipient(
   };
 }
 
+function hasRecipientEmail(
+  recipients: PandaDocRecipientDetails[] | undefined,
+  email: string
+) {
+  const normalizedEmail = coerceString(email).toLowerCase();
+  if (!normalizedEmail || !recipients?.length) return false;
+  return recipients.some(
+    (recipient) => coerceString(recipient.email).toLowerCase() === normalizedEmail
+  );
+}
+
+async function findPandaDocContactIdByEmail(email: string) {
+  const normalizedEmail = coerceString(email).toLowerCase();
+  if (!normalizedEmail) return undefined;
+  const searchParams = new URLSearchParams();
+  searchParams.set("email", normalizedEmail);
+  const response = await pandadocRequest<PandaDocContactListResponse>(
+    `/contacts?${searchParams.toString()}`,
+    {
+      method: "GET",
+      expectedStatus: 200,
+    }
+  );
+  const contacts = Array.isArray(response.results) ? response.results : [];
+  const matched =
+    contacts.find(
+      (contact) => coerceString(contact.email).toLowerCase() === normalizedEmail
+    ) ?? contacts[0];
+  const contactId = coerceString(matched?.id);
+  return contactId || undefined;
+}
+
+async function ensurePandaDocContactId(
+  sharedWith: PandaDocRecipientInput,
+  normalizedEmail: string
+) {
+  const existingId = await findPandaDocContactIdByEmail(normalizedEmail);
+  if (existingId) return existingId;
+
+  const createPayload: Record<string, unknown> = { email: normalizedEmail };
+  if (coerceString(sharedWith.firstName)) {
+    createPayload.first_name = coerceString(sharedWith.firstName);
+  }
+  if (coerceString(sharedWith.lastName)) {
+    createPayload.last_name = coerceString(sharedWith.lastName);
+  }
+
+  try {
+    const created = await pandadocRequest<PandaDocContactDetails>("/contacts", {
+      method: "POST",
+      expectedStatus: 201,
+      body: createPayload,
+    });
+    const createdId = coerceString(created.id);
+    if (createdId) return createdId;
+  } catch (error) {
+    const raceSafeId = await findPandaDocContactIdByEmail(normalizedEmail);
+    if (raceSafeId) return raceSafeId;
+    throw error;
+  }
+
+  const fallbackId = await findPandaDocContactIdByEmail(normalizedEmail);
+  if (fallbackId) return fallbackId;
+  throw new Error(
+    `Unable to resolve PandaDoc contact for ${normalizedEmail}.`
+  );
+}
+
+async function shareWithDocumentGenerator(
+  documentId: string,
+  sharedWith?: PandaDocRecipientInput
+): Promise<PandaDocCreateResult["shareResult"]> {
+  const rawEmail = coerceString(sharedWith?.email).toLowerCase();
+  if (!rawEmail) return undefined;
+  const normalizedEmail = normalizeWorkspaceMemberEmail(rawEmail);
+
+  try {
+    const detailsResponse = await pandadocRequest<PandaDocDetailsResponse>(
+      `/documents/${encodeURIComponent(documentId)}/details`,
+      {
+        method: "GET",
+        expectedStatus: 200,
+      }
+    );
+    if (
+      hasRecipientEmail(detailsResponse.recipients, normalizedEmail) ||
+      hasRecipientEmail(detailsResponse.recipients, rawEmail)
+    ) {
+      return {
+        email: normalizedEmail,
+        status: "already_shared",
+      };
+    }
+
+    const contactId = await ensurePandaDocContactId(
+      {
+        ...sharedWith,
+        email: normalizedEmail,
+      },
+      normalizedEmail
+    );
+    await pandadocRequest<Record<string, unknown>>(
+      `/documents/${encodeURIComponent(documentId)}/recipients`,
+      {
+        method: "POST",
+        expectedStatus: 200,
+        body: {
+          id: contactId,
+          kind: "contact",
+        },
+      }
+    );
+
+    return {
+      email: normalizedEmail,
+      status: "shared",
+    };
+  } catch (error) {
+    return {
+      email: normalizedEmail,
+      status: "failed",
+      error: error instanceof Error ? error.message : "Unknown error.",
+    };
+  }
+}
+
 function assertDocumentIsDraft(documentId: string, status: string) {
   if (status === DRAFT_STATUS) return;
   throw new Error(
@@ -774,6 +958,7 @@ export async function createPandaDocDocument(
     sessionLifetimeSeconds,
     recipientEmail,
     sendOptions,
+    sharedWith,
   } = options;
 
   const createPayload: Record<string, unknown> = {
@@ -823,6 +1008,7 @@ export async function createPandaDocDocument(
       }
     );
   }
+  const shareResult = await shareWithDocumentGenerator(documentId, sharedWith);
 
   let sendResult: PandaDocCreateResult["sendResult"];
   if (sendDocument) {
@@ -867,6 +1053,7 @@ export async function createPandaDocDocument(
           }
         : undefined,
     sendResult,
+    shareResult,
     session: sessionResult,
     revision: undefined,
   };
@@ -883,6 +1070,7 @@ export async function updatePandaDocDocument(
     sessionLifetimeSeconds,
     recipientEmail,
     sendOptions,
+    sharedWith,
   } = options;
 
   const normalizedDocumentId = coerceString(documentId);
@@ -944,6 +1132,10 @@ export async function updatePandaDocDocument(
       }
     );
   }
+  const shareResult = await shareWithDocumentGenerator(
+    normalizedDocumentId,
+    sharedWith
+  );
 
   let sendResult: PandaDocCreateResult["sendResult"];
   if (sendDocument) {
@@ -988,6 +1180,7 @@ export async function updatePandaDocDocument(
           }
         : undefined,
     sendResult,
+    shareResult,
     session: sessionResult,
     revision: {
       revertedToDraft,

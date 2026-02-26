@@ -40,6 +40,11 @@ export type PandaDocGenerationResponse = {
     lastName?: string;
     role?: string;
   };
+  shareResult?: {
+    email?: string;
+    status?: "shared" | "already_shared" | "failed";
+    error?: string;
+  };
   businessCentralSync?: {
     status?: string;
     reason?: string;
