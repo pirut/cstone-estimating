@@ -61,6 +61,7 @@ import {
   type EstimateVersionEntry,
 } from "@/lib/estimate-versioning";
 import { ConvexAuthSync } from "@/components/convex-auth-sync";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 import { APP_VERSION } from "@/lib/version";
 import {
@@ -2884,6 +2885,7 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
             )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
+            <ThemeToggle className="h-9 w-9 bg-background/80" />
             <Badge variant="outline" className="hidden bg-background/80 sm:inline-flex">
               v{APP_VERSION}
             </Badge>

@@ -64,6 +64,14 @@
     background-attachment: fixed;
   }
 
+  .dark body {
+    background-image:
+      radial-gradient(circle at 12% 16%, rgba(204, 170, 112, 0.14), transparent 48%),
+      radial-gradient(circle at 84% 10%, rgba(222, 198, 155, 0.1), transparent 56%),
+      radial-gradient(circle at 74% 92%, rgba(130, 95, 49, 0.2), transparent 45%),
+      linear-gradient(140deg, rgba(20, 17, 14, 0.95), rgba(13, 11, 9, 0.96));
+  }
+
   h1,
   h2,
   h3,

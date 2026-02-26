@@ -5,6 +5,7 @@ import { useState } from "react";
 import AdminMappingDashboard from "@/components/admin-mapping-dashboard";
 import { ConvexAuthSync } from "@/components/convex-auth-sync";
 import TeamAdminDashboard from "@/components/team-admin-dashboard";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -186,12 +187,15 @@ export default function UnifiedAdminPage() {
             <p className="text-xs uppercase tracking-[0.14em] text-muted-foreground">
               Focus Tabs
             </p>
-            <Button asChild variant="accent" size="sm">
-              <Link href="/">
-                Proposal workspace
-                <ArrowRight className="h-4 w-4" />
-              </Link>
-            </Button>
+            <div className="flex items-center gap-2">
+              <ThemeToggle className="h-9 w-9 bg-background/70" />
+              <Button asChild variant="accent" size="sm">
+                <Link href="/">
+                  Proposal workspace
+                  <ArrowRight className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
           </div>
 
           <Tabs
