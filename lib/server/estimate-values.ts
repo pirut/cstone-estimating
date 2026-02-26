@@ -32,9 +32,10 @@ export function buildFieldValuesFromSourceValues(
     values[fieldName] = formatValue(raw, format, preparedByMap, missingValue);
   }
 
-  const planSetDate = values.plan_set_date;
-  values.plan_set_date_line =
-    planSetDate && planSetDate !== missingValue ? planSetDate : missingValue;
+  const normalizedPlanSetDate =
+    String(values.plan_set_date ?? "").trim() || "N/A";
+  values.plan_set_date = normalizedPlanSetDate;
+  values.plan_set_date_line = normalizedPlanSetDate;
 
   for (const [sourceKey, rawValue] of Object.entries(sourceValues)) {
     if (!sourceKey || sourceKey in values) continue;

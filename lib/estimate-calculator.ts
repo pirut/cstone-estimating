@@ -421,9 +421,10 @@ export function computeEstimate(
     installationPrice -
     (mobilizationDeposit + installationDraw1 + installationDraw2);
   const productFeaturesBlock = buildProductFeaturesBlock(products);
+  const pdfInfoValues = buildPdfInfoValues(draft.info);
 
   const pdfValues: Record<string, number | string> = {
-    ...draft.info,
+    ...pdfInfoValues,
     product_price: productPrice,
     bucking_price: buckingPrice,
     waterproofing_price: waterproofingPrice,
@@ -503,8 +504,9 @@ function computeChangeOrderEstimate(
   const installMargin = calculateMargin(laborPrice, laborCost);
   const projectMargin = calculateMargin(totalContractPrice, totalCostBase);
 
+  const pdfInfoValues = buildPdfInfoValues(draft.info);
   const pdfValues: Record<string, number | string> = {
-    ...draft.info,
+    ...pdfInfoValues,
     product_price: vendorPrice,
     bucking_price: 0,
     waterproofing_price: 0,
@@ -600,6 +602,14 @@ function buildProductFeaturesBlock(products: ProductItem[]) {
 
   if (!lines.length) return "- No product features selected.";
   return lines.join("\n");
+}
+
+function buildPdfInfoValues(info: EstimateInfo) {
+  const planSetDate = String(info.plan_set_date ?? "").trim() || "N/A";
+  return {
+    ...info,
+    plan_set_date: planSetDate,
+  };
 }
 
 function normalizePanelTypes(
