@@ -20,6 +20,10 @@ export type { PandaDocRecipientInput };
 export type PandaDocDraft = {
   name: string;
   templateUuid: string;
+  owner?: {
+    email?: string;
+    membership_id?: string;
+  };
   recipients: Array<{
     email: string;
     first_name: string;
@@ -358,6 +362,28 @@ function buildFieldsFromBindings(
   return fields;
 }
 
+function resolveDraftOwner() {
+  const membershipId = coerceString(process.env.PANDADOC_OWNER_MEMBERSHIP_ID);
+  if (membershipId) {
+    return {
+      membership_id: membershipId,
+    };
+  }
+
+  const email = coerceString(process.env.PANDADOC_OWNER_EMAIL);
+  if (email) {
+    return {
+      email,
+    };
+  }
+
+  return undefined;
+}
+
+function getOwnerMembershipId() {
+  return coerceString(process.env.PANDADOC_OWNER_MEMBERSHIP_ID);
+}
+
 function getApiKey() {
   return coerceString(process.env.PANDADOC_API_KEY);
 }
@@ -608,6 +634,7 @@ export function buildPandaDocDraft(
   return {
     name: resolvedName,
     templateUuid: resolvedTemplateUuid,
+    owner: resolveDraftOwner(),
     recipients: resolvedEmail
       ? [
           {
@@ -751,6 +778,9 @@ export async function createPandaDocDocument(
     template_uuid: draft.templateUuid,
     metadata: draft.metadata,
   };
+  if (draft.owner?.membership_id || draft.owner?.email) {
+    createPayload.owner = draft.owner;
+  }
   if (draft.recipients.length > 0) {
     createPayload.recipients = draft.recipients;
   }
@@ -777,6 +807,19 @@ export async function createPandaDocDocument(
 
   const statusResponse = await waitForDocumentReady(documentId);
   const documentStatus = coerceString(statusResponse.status) || DRAFT_STATUS;
+  const ownerMembershipId = getOwnerMembershipId();
+  if (ownerMembershipId) {
+    await pandadocRequest<Record<string, never>>(
+      `/documents/${encodeURIComponent(documentId)}/ownership`,
+      {
+        method: "PATCH",
+        expectedStatus: 204,
+        body: {
+          membership_id: ownerMembershipId,
+        },
+      }
+    );
+  }
 
   let sendResult: PandaDocCreateResult["sendResult"];
   if (sendDocument) {
@@ -885,6 +928,19 @@ export async function updatePandaDocDocument(
 
   const refreshedStatus = await waitForDocumentReady(normalizedDocumentId);
   const documentStatus = coerceString(refreshedStatus.status) || DRAFT_STATUS;
+  const ownerMembershipId = getOwnerMembershipId();
+  if (ownerMembershipId) {
+    await pandadocRequest<Record<string, never>>(
+      `/documents/${encodeURIComponent(normalizedDocumentId)}/ownership`,
+      {
+        method: "PATCH",
+        expectedStatus: 204,
+        body: {
+          membership_id: ownerMembershipId,
+        },
+      }
+    );
+  }
 
   let sendResult: PandaDocCreateResult["sendResult"];
   if (sendDocument) {
