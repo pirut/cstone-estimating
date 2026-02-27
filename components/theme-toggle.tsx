@@ -20,9 +20,12 @@ type DocumentWithViewTransition = Document & {
 
 const BATMAN_THEME_ANIMATION_DURATION_MS = 1320;
 const CIRCLE_THEME_ANIMATION_DURATION_MS = 860;
+const BATMAN_SVG_TRANSITION_MASK = "/svgwaves_io_batman.svg";
+const BATMAN_GIF_TRANSITION_MASK = "/theme-transition/batman-gif-1.gif";
+const BATMAN_GIF_TRANSITION_CHANCE = 0.1;
 const BATMAN_TRANSITION_MASK_ASSETS = [
-  "/svgwaves_io_batman.svg",
-  "/theme-transition/batman-gif-1.gif",
+  BATMAN_SVG_TRANSITION_MASK,
+  BATMAN_GIF_TRANSITION_MASK,
 ] as const;
 
 export function ThemeToggle({ className }: ThemeToggleProps) {
@@ -73,8 +76,9 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
   }
 
   function pickBatmanTransitionMask() {
-    const index = Math.floor(Math.random() * BATMAN_TRANSITION_MASK_ASSETS.length);
-    return BATMAN_TRANSITION_MASK_ASSETS[index];
+    return Math.random() < BATMAN_GIF_TRANSITION_CHANCE
+      ? BATMAN_GIF_TRANSITION_MASK
+      : BATMAN_SVG_TRANSITION_MASK;
   }
 
   function applyTheme(nextTheme: ThemeName) {
