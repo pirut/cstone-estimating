@@ -4,6 +4,7 @@ import type { CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
+import { Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
@@ -44,7 +45,8 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
   }, []);
 
   const isDark = mounted && resolvedTheme === "dark";
-  const stateLabel = isDark ? "ON" : "OFF";
+  const stateLabel = isDark ? "DARK" : "LIGHT";
+  const nextModeLabel = isDark ? "Switch to light mode" : "Switch to dark mode";
 
   function clearTransitionTimers() {
     if (swapTimeoutRef.current) {
@@ -100,9 +102,9 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
             )}
             style={
               {
-                "--bat-x": `${transition.x}px`,
-                "--bat-y": `${transition.y}px`,
-                "--bat-transition-duration": `${THEME_ANIMATION_DURATION_MS}ms`,
+                left: `${transition.x}px`,
+                top: `${transition.y}px`,
+                animationDuration: `${THEME_ANIMATION_DURATION_MS}ms`,
               } as CSSProperties
             }
           />,
@@ -123,8 +125,8 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
         )}
         onClick={toggleTheme}
         disabled={!mounted || isAnimating}
-        aria-label={isDark ? "Disable Dark Knight Mode" : "Enable Dark Knight Mode"}
-        title={isDark ? "Disable Dark Knight Mode" : "Enable Dark Knight Mode"}
+        aria-label={nextModeLabel}
+        title={nextModeLabel}
       >
         <span
           className={cn(
@@ -135,24 +137,37 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
           )}
           aria-hidden="true"
         >
-          <span
-            className={cn(
-              "h-[18px] w-[18px]",
-              isDark ? "bg-accent-foreground" : "bg-foreground/80"
-            )}
-            style={{
-              WebkitMaskImage: "url('/svgwaves_io_batman.svg')",
-              maskImage: "url('/svgwaves_io_batman.svg')",
-              WebkitMaskRepeat: "no-repeat",
-              maskRepeat: "no-repeat",
-              WebkitMaskPosition: "center",
-              maskPosition: "center",
-              WebkitMaskSize: "contain",
-              maskSize: "contain",
-            }}
-          />
+          <span className="relative h-[18px] w-[18px]">
+            <Sun
+              className={cn(
+                "absolute inset-0 h-[18px] w-[18px] text-amber-500 transition-all duration-500",
+                isDark
+                  ? "scale-[0.45] -rotate-90 opacity-0"
+                  : "scale-100 rotate-0 opacity-100"
+              )}
+              style={{ transitionTimingFunction: "cubic-bezier(0.2, 0.72, 0.2, 1)" }}
+            />
+            <span
+              className={cn(
+                "absolute inset-0 h-[18px] w-[18px] bg-accent-foreground transition-all duration-500",
+                isDark
+                  ? "scale-100 rotate-0 opacity-100"
+                  : "scale-[0.45] rotate-90 opacity-0"
+              )}
+              style={{
+                transitionTimingFunction: "cubic-bezier(0.2, 0.72, 0.2, 1)",
+                WebkitMaskImage: "url('/svgwaves_io_batman.svg')",
+                maskImage: "url('/svgwaves_io_batman.svg')",
+                WebkitMaskRepeat: "no-repeat",
+                maskRepeat: "no-repeat",
+                WebkitMaskPosition: "center",
+                maskPosition: "center",
+                WebkitMaskSize: "contain",
+                maskSize: "contain",
+              }}
+            />
+          </span>
         </span>
-        <span className="text-foreground">Dark Knight Mode</span>
         <span
           className={cn(
             "rounded-full px-2 py-0.5 text-[9px] tracking-[0.16em]",
@@ -163,7 +178,7 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
         >
           {stateLabel}
         </span>
-        <span className="sr-only">Toggle Dark Knight Mode</span>
+        <span className="sr-only">{nextModeLabel}</span>
       </Button>
       {transitionOverlay}
     </>

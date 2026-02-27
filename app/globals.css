@@ -93,9 +93,7 @@
   @keyframes batman-theme-sweep {
     0% {
       opacity: 0;
-      -webkit-mask-size: 4vmax;
-      mask-size: 4vmax;
-      transform: translateZ(0) scale(0.9);
+      transform: translate(-50%, -50%) translateZ(0) scale(0.02);
     }
     12% {
       opacity: 1;
@@ -105,27 +103,27 @@
     }
     100% {
       opacity: 0;
-      -webkit-mask-size: 240vmax;
-      mask-size: 240vmax;
-      transform: translateZ(0) scale(1);
+      transform: translate(-50%, -50%) translateZ(0) scale(1);
     }
   }
 
   .theme-bat-transition {
     position: fixed;
-    inset: 0;
+    width: 240vmax;
+    height: 240vmax;
     z-index: 2147483646;
     pointer-events: none;
+    transform: translate(-50%, -50%) translateZ(0) scale(0.02);
     -webkit-mask-image: url("/svgwaves_io_batman.svg");
     mask-image: url("/svgwaves_io_batman.svg");
     -webkit-mask-repeat: no-repeat;
     mask-repeat: no-repeat;
-    -webkit-mask-position: var(--bat-x, 50%) var(--bat-y, 50%);
-    mask-position: var(--bat-x, 50%) var(--bat-y, 50%);
-    -webkit-mask-size: 4vmax;
-    mask-size: 4vmax;
-    will-change: opacity, -webkit-mask-size, mask-size, transform;
-    animation: batman-theme-sweep var(--bat-transition-duration, 860ms)
+    -webkit-mask-position: center center;
+    mask-position: center center;
+    -webkit-mask-size: contain;
+    mask-size: contain;
+    will-change: opacity, transform;
+    animation: batman-theme-sweep 860ms
       cubic-bezier(0.2, 0.72, 0.2, 1) forwards;
   }
 
