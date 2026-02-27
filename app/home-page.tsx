@@ -1742,14 +1742,25 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
       user?.firstName?.trim() || trackedRecipientFirstName || fallbackFirstName;
     const signerLastName =
       user?.lastName?.trim() || trackedRecipientLastName || fallbackLastName;
-    const generationRecipient = signerEmail
-      ? {
-          email: signerEmail,
-          firstName: signerFirstName || undefined,
-          lastName: signerLastName || undefined,
-          role: defaultSignerRole || undefined,
-        }
-      : undefined;
+    const usesStandardCornerstoneSigner =
+      defaultSignerRole.toLowerCase() === pandadocSignerRole.toLowerCase();
+    const generationRecipient = usesStandardCornerstoneSigner
+      ? trackedRecipientEmail
+        ? {
+            email: trackedRecipientEmail,
+            firstName: trackedRecipientFirstName || undefined,
+            lastName: trackedRecipientLastName || undefined,
+            role: trackedRecipientRole || defaultSignerRole || undefined,
+          }
+        : undefined
+      : signerEmail
+        ? {
+            email: signerEmail,
+            firstName: signerFirstName || undefined,
+            lastName: signerLastName || undefined,
+            role: defaultSignerRole || undefined,
+          }
+        : undefined;
     const generatedBy = emailAddress
       ? {
           email: emailAddress,
