@@ -131,6 +131,13 @@ type HomePageProps = {
 const LINKED_DOCUMENT_POLL_INTERVAL_MS = 20_000;
 const UNASSIGNED_PROJECT_KEY = "__unassigned__";
 const LOCAL_DRAFT_STORAGE_KEY = "cstone:manual-estimate:draft:v1";
+const APP_TAB_TITLE = "Cornerstone Proposal Generator";
+
+function formatBrowserTabTitle(estimateLabel?: string | null) {
+  const normalized = String(estimateLabel ?? "").trim();
+  if (!normalized) return APP_TAB_TITLE;
+  return `${normalized} | ${APP_TAB_TITLE}`;
+}
 
 function parseEstimateIdFromPathname(pathname: string) {
   const match = String(pathname ?? "").match(/^\/estimates\/([^/?#]+)/i);
@@ -585,6 +592,21 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
       editingEstimateId ? findTeamEstimateById(editingEstimateId) : null,
     [editingEstimateId, findTeamEstimateById]
   );
+  const activeEstimateTabLabel = useMemo(() => {
+    const fromActiveEstimate = String(activeEditingEstimate?.title ?? "").trim();
+    if (fromActiveEstimate) return fromActiveEstimate;
+    const fromDraftName = estimateName.trim();
+    if (fromDraftName) return fromDraftName;
+    const fromSelectedUpload = String(selectedEstimate?.name ?? "").trim();
+    if (fromSelectedUpload) return fromSelectedUpload;
+    if (urlEstimateId) return "Estimate";
+    return "";
+  }, [
+    activeEditingEstimate?.title,
+    estimateName,
+    selectedEstimate?.name,
+    urlEstimateId,
+  ]);
   const hasSelectedProject = Boolean(
     activeProjectId && activeProjectId !== UNASSIGNED_PROJECT_KEY
   );
@@ -896,6 +918,11 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
     }
     setFloatingDockMoveTargetId(floatingDockMoveOptions[0]?.id ?? "");
   }, [floatingDockMoveOptions, floatingDockMoveTargetId]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    document.title = formatBrowserTabTitle(activeEstimateTabLabel);
+  }, [activeEstimateTabLabel]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
