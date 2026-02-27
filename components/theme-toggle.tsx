@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -34,25 +35,22 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
     >
       <span
         className={cn(
-          "inline-flex h-6 w-6 items-center justify-center rounded-full border",
+          "inline-flex h-7 w-7 items-center justify-center rounded-full border p-1",
           isDark
-            ? "border-accent/40 bg-accent/15"
-            : "border-border/70 bg-muted/70"
+            ? "border-accent/60 bg-accent/40"
+            : "border-border/70 bg-muted/80"
         )}
         aria-hidden="true"
       >
-        <span
-          className={cn("h-4 w-4", isDark ? "bg-accent" : "bg-muted-foreground")}
-          style={{
-            WebkitMaskImage: "url('/batman-5-logo-svgrepo-com.svg')",
-            maskImage: "url('/batman-5-logo-svgrepo-com.svg')",
-            WebkitMaskRepeat: "no-repeat",
-            maskRepeat: "no-repeat",
-            WebkitMaskPosition: "center",
-            maskPosition: "center",
-            WebkitMaskSize: "contain",
-            maskSize: "contain",
-          }}
+        <Image
+          src="/svgwaves_io_batman.svg"
+          alt=""
+          width={18}
+          height={18}
+          className={cn(
+            "h-[18px] w-[18px] object-contain",
+            isDark ? "brightness-0 contrast-125" : "brightness-0 contrast-110"
+          )}
         />
       </span>
       <span className="text-foreground">Dark Knight Mode</span>
