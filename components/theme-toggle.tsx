@@ -11,8 +11,6 @@ import { cn } from "@/lib/utils";
 type ThemeToggleProps = { className?: string };
 type ThemeName = "light" | "dark";
 type ThemeTransition = {
-  x: number;
-  y: number;
   nextTheme: ThemeName;
   key: number;
 };
@@ -25,7 +23,6 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
   const [mounted, setMounted] = useState(false);
   const [transition, setTransition] = useState<ThemeTransition | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
-  const buttonRef = useRef<HTMLButtonElement | null>(null);
   const swapTimeoutRef = useRef<number | null>(null);
   const cleanupTimeoutRef = useRef<number | null>(null);
 
@@ -69,12 +66,8 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
     }
 
     clearTransitionTimers();
-    const rect = buttonRef.current?.getBoundingClientRect();
-    const x = rect ? rect.left + rect.width / 2 : window.innerWidth / 2;
-    const y = rect ? rect.top + rect.height / 2 : window.innerHeight / 2;
-
     setIsAnimating(true);
-    setTransition({ x, y, nextTheme, key: Date.now() });
+    setTransition({ nextTheme, key: Date.now() });
 
     swapTimeoutRef.current = window.setTimeout(() => {
       setTheme(nextTheme);
@@ -95,15 +88,13 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
             key={transition.key}
             aria-hidden="true"
             className={cn(
-              "theme-bat-transition",
+              "theme-theme-transition",
               transition.nextTheme === "dark"
                 ? "theme-bat-transition--dark"
-                : "theme-bat-transition--light"
+                : "theme-circle-transition--light"
             )}
             style={
               {
-                left: `${transition.x}px`,
-                top: `${transition.y}px`,
                 animationDuration: `${THEME_ANIMATION_DURATION_MS}ms`,
               } as CSSProperties
             }
@@ -115,7 +106,6 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
   return (
     <>
       <Button
-        ref={buttonRef}
         type="button"
         variant="outline"
         size="sm"

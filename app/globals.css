@@ -93,7 +93,8 @@
   @keyframes batman-theme-sweep {
     0% {
       opacity: 0;
-      transform: translate(-50%, -50%) translateZ(0) scale(0.02);
+      -webkit-mask-size: 4vmax;
+      mask-size: 4vmax;
     }
     12% {
       opacity: 1;
@@ -103,31 +104,49 @@
     }
     100% {
       opacity: 0;
-      transform: translate(-50%, -50%) translateZ(0) scale(1);
+      -webkit-mask-size: 240vmax;
+      mask-size: 240vmax;
     }
   }
 
-  .theme-bat-transition {
+  @keyframes circle-theme-sweep {
+    0% {
+      opacity: 0;
+      clip-path: circle(0 at 50% 50%);
+    }
+    12% {
+      opacity: 1;
+    }
+    78% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      clip-path: circle(150vmax at 50% 50%);
+    }
+  }
+
+  .theme-theme-transition {
     position: fixed;
-    width: 240vmax;
-    height: 240vmax;
+    inset: 0;
     z-index: 2147483646;
     pointer-events: none;
-    transform: translate(-50%, -50%) translateZ(0) scale(0.02);
+    animation-timing-function: cubic-bezier(0.2, 0.72, 0.2, 1);
+    animation-fill-mode: forwards;
+    will-change: opacity;
+  }
+
+  .theme-bat-transition--dark {
     -webkit-mask-image: url("/svgwaves_io_batman.svg");
     mask-image: url("/svgwaves_io_batman.svg");
     -webkit-mask-repeat: no-repeat;
     mask-repeat: no-repeat;
     -webkit-mask-position: center center;
     mask-position: center center;
-    -webkit-mask-size: contain;
-    mask-size: contain;
-    will-change: opacity, transform;
-    animation: batman-theme-sweep 860ms
-      cubic-bezier(0.2, 0.72, 0.2, 1) forwards;
-  }
-
-  .theme-bat-transition--dark {
+    -webkit-mask-size: 4vmax;
+    mask-size: 4vmax;
+    will-change: opacity, -webkit-mask-size, mask-size;
+    animation-name: batman-theme-sweep;
     background-image:
       radial-gradient(circle at 12% 16%, rgba(204, 170, 112, 0.14), transparent 48%),
       radial-gradient(circle at 84% 10%, rgba(222, 198, 155, 0.1), transparent 56%),
@@ -135,8 +154,14 @@
       linear-gradient(140deg, rgba(20, 17, 14, 0.95), rgba(13, 11, 9, 0.96));
   }
 
-  .theme-bat-transition--light {
+  .theme-circle-transition--light {
+    animation-name: circle-theme-sweep;
     background-image:
+      repeating-radial-gradient(
+        circle at 50% 50%,
+        rgba(255, 255, 255, 0.26) 0 14px,
+        rgba(214, 187, 141, 0.2) 14px 28px
+      ),
       radial-gradient(circle at 10% 16%, rgba(204, 170, 112, 0.17), transparent 48%),
       radial-gradient(circle at 86% 8%, rgba(20, 20, 20, 0.12), transparent 52%),
       radial-gradient(circle at 72% 92%, rgba(208, 179, 124, 0.16), transparent 45%),
@@ -144,7 +169,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .theme-bat-transition {
+    .theme-theme-transition {
       display: none;
     }
   }
