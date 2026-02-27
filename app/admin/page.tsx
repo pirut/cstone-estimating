@@ -1,13 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AdminMappingDashboard from "@/components/admin-mapping-dashboard";
 import { ConvexAuthSync } from "@/components/convex-auth-sync";
 import TeamAdminDashboard from "@/components/team-admin-dashboard";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Card,
   CardContent,
@@ -16,6 +17,12 @@ import {
 } from "@/components/ui/card";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SignInButton, clerkEnabled, useOptionalAuth } from "@/lib/clerk";
+import {
+  BATMAN_GIF_TRANSITION_CHANCE_STORAGE_KEY,
+  DEFAULT_BATMAN_GIF_TRANSITION_CHANCE,
+  MAX_BATMAN_GIF_TRANSITION_CHANCE,
+  normalizeBatmanGifTransitionChance,
+} from "@/lib/theme-transition";
 import {
   ArrowRight,
   FileStack,
@@ -31,6 +38,28 @@ export default function UnifiedAdminPage() {
   const { isLoaded, isSignedIn } = useOptionalAuth();
   const [convexSetupError, setConvexSetupError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<AdminTab>("workspace");
+  const [batmanGifBoostEnabled, setBatmanGifBoostEnabled] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const currentChance = normalizeBatmanGifTransitionChance(
+      window.localStorage.getItem(BATMAN_GIF_TRANSITION_CHANCE_STORAGE_KEY)
+    );
+    setBatmanGifBoostEnabled(currentChance >= MAX_BATMAN_GIF_TRANSITION_CHANCE);
+  }, []);
+
+  function handleBatmanGifBoostToggle(checked: boolean) {
+    setBatmanGifBoostEnabled(checked);
+    if (typeof window === "undefined") return;
+    window.localStorage.setItem(
+      BATMAN_GIF_TRANSITION_CHANCE_STORAGE_KEY,
+      String(
+        checked
+          ? MAX_BATMAN_GIF_TRANSITION_CHANCE
+          : DEFAULT_BATMAN_GIF_TRANSITION_CHANCE
+      )
+    );
+  }
 
   if (!clerkEnabled) {
     return (
@@ -188,6 +217,19 @@ export default function UnifiedAdminPage() {
               Focus Tabs
             </p>
             <div className="flex items-center gap-2">
+              <label
+                htmlFor="batman-gif-boost"
+                className="inline-flex items-center gap-2 rounded-full border border-border/70 bg-background/70 px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-foreground"
+              >
+                <Checkbox
+                  id="batman-gif-boost"
+                  checked={batmanGifBoostEnabled}
+                  onCheckedChange={(value) =>
+                    handleBatmanGifBoostToggle(value === true)
+                  }
+                />
+                <span>Batman GIF 100%</span>
+              </label>
               <ThemeToggle className="bg-background/70" />
               <Button asChild variant="accent" size="sm">
                 <Link href="/">

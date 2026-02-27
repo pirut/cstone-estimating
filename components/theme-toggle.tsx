@@ -4,6 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import { useTheme } from "next-themes";
 import { Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  BATMAN_GIF_TRANSITION_CHANCE_STORAGE_KEY,
+  DEFAULT_BATMAN_GIF_TRANSITION_CHANCE,
+  normalizeBatmanGifTransitionChance,
+} from "@/lib/theme-transition";
 import { cn } from "@/lib/utils";
 
 type ThemeToggleProps = { className?: string };
@@ -22,7 +27,6 @@ const BATMAN_THEME_ANIMATION_DURATION_MS = 1320;
 const CIRCLE_THEME_ANIMATION_DURATION_MS = 860;
 const BATMAN_SVG_TRANSITION_MASK = "/svgwaves_io_batman.svg";
 const BATMAN_GIF_TRANSITION_MASK = "/theme-transition/batman-gif-1.gif";
-const BATMAN_GIF_TRANSITION_CHANCE = 0.1;
 const BATMAN_TRANSITION_MASK_ASSETS = [
   BATMAN_SVG_TRANSITION_MASK,
   BATMAN_GIF_TRANSITION_MASK,
@@ -76,7 +80,13 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
   }
 
   function pickBatmanTransitionMask() {
-    return Math.random() < BATMAN_GIF_TRANSITION_CHANCE
+    const batmanGifTransitionChance =
+      typeof window === "undefined"
+        ? DEFAULT_BATMAN_GIF_TRANSITION_CHANCE
+        : normalizeBatmanGifTransitionChance(
+            window.localStorage.getItem(BATMAN_GIF_TRANSITION_CHANCE_STORAGE_KEY)
+          );
+    return Math.random() < batmanGifTransitionChance
       ? BATMAN_GIF_TRANSITION_MASK
       : BATMAN_SVG_TRANSITION_MASK;
   }
