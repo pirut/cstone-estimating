@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Image from "next/image";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -42,15 +41,21 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
         )}
         aria-hidden="true"
       >
-        <Image
-          src="/svgwaves_io_batman.svg"
-          alt=""
-          width={18}
-          height={18}
+        <span
           className={cn(
-            "h-[18px] w-[18px] object-contain",
-            isDark ? "brightness-0 contrast-125" : "brightness-0 contrast-110"
+            "h-[18px] w-[18px]",
+            isDark ? "bg-accent-foreground" : "bg-foreground/80"
           )}
+          style={{
+            WebkitMaskImage: "url('/svgwaves_io_batman.svg')",
+            maskImage: "url('/svgwaves_io_batman.svg')",
+            WebkitMaskRepeat: "no-repeat",
+            maskRepeat: "no-repeat",
+            WebkitMaskPosition: "center",
+            maskPosition: "center",
+            WebkitMaskSize: "contain",
+            maskSize: "contain",
+          }}
         />
       </span>
       <span className="text-foreground">Dark Knight Mode</span>
