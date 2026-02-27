@@ -2915,7 +2915,12 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
               <span>Clerk auth is not configured yet.</span>
             ) : authLoaded ? (
               isSignedIn ? (
-                <UserButton />
+                <div className="flex items-center gap-2">
+                  <UserButton />
+                  <span className="text-sm text-foreground">
+                    {preparedByName || user?.primaryEmailAddress?.emailAddress}
+                  </span>
+                </div>
               ) : (
                 <span>Sign in to access the proposal studio.</span>
               )

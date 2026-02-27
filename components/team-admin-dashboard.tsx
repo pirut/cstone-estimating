@@ -1813,7 +1813,7 @@ export default function TeamAdminPage({
             <CardContent>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <UserButton />
-                <span>{user?.primaryEmailAddress?.emailAddress}</span>
+                <span>{clerkName}</span>
               </div>
             </CardContent>
           </Card>
