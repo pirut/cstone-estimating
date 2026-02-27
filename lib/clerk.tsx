@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { useMemo } from "react";
 import {
   ClerkProvider,
   SignInButton,
@@ -9,15 +10,27 @@ import {
   useAuth,
   useUser,
 } from "@clerk/nextjs";
+import { dark } from "@clerk/themes";
+import { useTheme } from "next-themes";
 
 export const clerkPublishableKey =
   process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY ?? "";
 export const clerkEnabled = Boolean(clerkPublishableKey);
 
 export function OptionalClerkProvider({ children }: { children: ReactNode }) {
+  const { resolvedTheme } = useTheme();
+  const appearance = useMemo(
+    () => ({
+      baseTheme: resolvedTheme === "dark" ? dark : undefined,
+    }),
+    [resolvedTheme]
+  );
+
   if (!clerkEnabled) return <>{children}</>;
   return (
-    <ClerkProvider publishableKey={clerkPublishableKey}>{children}</ClerkProvider>
+    <ClerkProvider publishableKey={clerkPublishableKey} appearance={appearance}>
+      {children}
+    </ClerkProvider>
   );
 }
 
