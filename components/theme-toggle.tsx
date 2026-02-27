@@ -34,12 +34,26 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
     >
       <span
         className={cn(
-          "inline-flex h-6 w-6 items-center justify-center rounded-full text-sm leading-none",
-          isDark ? "bg-accent text-accent-foreground" : "bg-muted text-foreground"
+          "inline-flex h-6 w-6 items-center justify-center rounded-full border",
+          isDark
+            ? "border-accent/40 bg-accent/15"
+            : "border-border/70 bg-muted/70"
         )}
         aria-hidden="true"
       >
-        🦇
+        <span
+          className={cn("h-4 w-4", isDark ? "bg-accent" : "bg-muted-foreground")}
+          style={{
+            WebkitMaskImage: "url('/batman-5-logo-svgrepo-com.svg')",
+            maskImage: "url('/batman-5-logo-svgrepo-com.svg')",
+            WebkitMaskRepeat: "no-repeat",
+            maskRepeat: "no-repeat",
+            WebkitMaskPosition: "center",
+            maskPosition: "center",
+            WebkitMaskSize: "contain",
+            maskSize: "contain",
+          }}
+        />
       </span>
       <span className="text-foreground">Dark Knight Mode</span>
       <span
