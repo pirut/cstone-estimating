@@ -20,6 +20,11 @@ type DocumentWithViewTransition = Document & {
 
 const BATMAN_THEME_ANIMATION_DURATION_MS = 1080;
 const CIRCLE_THEME_ANIMATION_DURATION_MS = 860;
+const BATMAN_TRANSITION_MASK_ASSETS = [
+  "/svgwaves_io_batman.svg",
+  "/theme-transition/batman-gif-1.gif",
+  "/theme-transition/batman-gif-2.gif",
+] as const;
 
 export function ThemeToggle({ className }: ThemeToggleProps) {
   const { resolvedTheme, setTheme } = useTheme();
@@ -39,6 +44,13 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
     };
   }, []);
 
+  useEffect(() => {
+    for (const src of BATMAN_TRANSITION_MASK_ASSETS) {
+      const image = new Image();
+      image.src = src;
+    }
+  }, []);
+
   const isDark = mounted && resolvedTheme === "dark";
   const stateLabel = isDark ? "DARK" : "LIGHT";
   const nextModeLabel = isDark ? "Switch to light mode" : "Switch to dark mode";
@@ -56,8 +68,14 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
       const root = document.documentElement;
       delete root.dataset.themeTransition;
       root.style.removeProperty("--theme-transition-duration");
+      root.style.removeProperty("--theme-transition-batman-mask");
     }
     setIsAnimating(false);
+  }
+
+  function pickBatmanTransitionMask() {
+    const index = Math.floor(Math.random() * BATMAN_TRANSITION_MASK_ASSETS.length);
+    return BATMAN_TRANSITION_MASK_ASSETS[index];
   }
 
   function applyTheme(nextTheme: ThemeName) {
@@ -98,6 +116,14 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
       "--theme-transition-duration",
       `${transitionDurationMs}ms`
     );
+    if (transitionMode === "batman") {
+      root.style.setProperty(
+        "--theme-transition-batman-mask",
+        `url("${pickBatmanTransitionMask()}")`
+      );
+    } else {
+      root.style.removeProperty("--theme-transition-batman-mask");
+    }
 
     fallbackUnlockTimeoutRef.current = window.setTimeout(() => {
       finalizeTransition();

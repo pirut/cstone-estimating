@@ -119,8 +119,11 @@
     }
 
     html[data-theme-transition="batman"]::view-transition-new(root) {
-      -webkit-mask-image: url("/svgwaves_io_batman.svg");
-      mask-image: url("/svgwaves_io_batman.svg");
+      -webkit-mask-image: var(
+        --theme-transition-batman-mask,
+        url("/svgwaves_io_batman.svg")
+      );
+      mask-image: var(--theme-transition-batman-mask, url("/svgwaves_io_batman.svg"));
       -webkit-mask-repeat: no-repeat;
       mask-repeat: no-repeat;
       -webkit-mask-position: center center;
