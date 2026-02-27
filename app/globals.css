@@ -91,11 +91,19 @@
   }
 
   @keyframes batman-theme-reveal {
-    from {
+    0% {
       -webkit-mask-size: 4vmax;
       mask-size: 4vmax;
     }
-    to {
+    24% {
+      -webkit-mask-size: 56vmax;
+      mask-size: 56vmax;
+    }
+    58% {
+      -webkit-mask-size: 56vmax;
+      mask-size: 56vmax;
+    }
+    100% {
       -webkit-mask-size: 420vmax;
       mask-size: 420vmax;
     }

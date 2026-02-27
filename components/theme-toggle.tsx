@@ -18,7 +18,7 @@ type DocumentWithViewTransition = Document & {
   ) => ViewTransitionLike;
 };
 
-const BATMAN_THEME_ANIMATION_DURATION_MS = 1080;
+const BATMAN_THEME_ANIMATION_DURATION_MS = 1320;
 const CIRCLE_THEME_ANIMATION_DURATION_MS = 860;
 const BATMAN_TRANSITION_MASK_ASSETS = [
   "/svgwaves_io_batman.svg",
