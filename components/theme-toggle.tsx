@@ -23,7 +23,6 @@ const CIRCLE_THEME_ANIMATION_DURATION_MS = 860;
 const BATMAN_TRANSITION_MASK_ASSETS = [
   "/svgwaves_io_batman.svg",
   "/theme-transition/batman-gif-1.gif",
-  "/theme-transition/batman-gif-2.gif",
 ] as const;
 
 export function ThemeToggle({ className }: ThemeToggleProps) {
