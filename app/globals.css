@@ -89,4 +89,65 @@
   .text-balance {
     text-wrap: balance;
   }
+
+  @keyframes batman-theme-sweep {
+    0% {
+      opacity: 0;
+      -webkit-mask-size: 4vmax;
+      mask-size: 4vmax;
+      transform: translateZ(0) scale(0.9);
+    }
+    12% {
+      opacity: 1;
+    }
+    74% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      -webkit-mask-size: 240vmax;
+      mask-size: 240vmax;
+      transform: translateZ(0) scale(1);
+    }
+  }
+
+  .theme-bat-transition {
+    position: fixed;
+    inset: 0;
+    z-index: 2147483646;
+    pointer-events: none;
+    -webkit-mask-image: url("/svgwaves_io_batman.svg");
+    mask-image: url("/svgwaves_io_batman.svg");
+    -webkit-mask-repeat: no-repeat;
+    mask-repeat: no-repeat;
+    -webkit-mask-position: var(--bat-x, 50%) var(--bat-y, 50%);
+    mask-position: var(--bat-x, 50%) var(--bat-y, 50%);
+    -webkit-mask-size: 4vmax;
+    mask-size: 4vmax;
+    will-change: opacity, -webkit-mask-size, mask-size, transform;
+    animation: batman-theme-sweep var(--bat-transition-duration, 860ms)
+      cubic-bezier(0.2, 0.72, 0.2, 1) forwards;
+  }
+
+  .theme-bat-transition--dark {
+    background-image:
+      radial-gradient(circle at 12% 16%, rgba(204, 170, 112, 0.14), transparent 48%),
+      radial-gradient(circle at 84% 10%, rgba(222, 198, 155, 0.1), transparent 56%),
+      radial-gradient(circle at 74% 92%, rgba(130, 95, 49, 0.2), transparent 45%),
+      linear-gradient(140deg, rgba(20, 17, 14, 0.95), rgba(13, 11, 9, 0.96));
+  }
+
+  .theme-bat-transition--light {
+    background-image:
+      radial-gradient(circle at 10% 16%, rgba(204, 170, 112, 0.17), transparent 48%),
+      radial-gradient(circle at 86% 8%, rgba(20, 20, 20, 0.12), transparent 52%),
+      radial-gradient(circle at 72% 92%, rgba(208, 179, 124, 0.16), transparent 45%),
+      linear-gradient(140deg, rgba(255, 255, 255, 0.9), rgba(245, 238, 230, 0.92));
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .theme-bat-transition {
+      display: none;
+    }
+  }
 }
