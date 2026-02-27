@@ -5,6 +5,7 @@ import {
   ClerkProvider,
   SignInButton,
   SignOutButton,
+  UserButton,
   useAuth,
   useUser,
 } from "@clerk/nextjs";
@@ -39,4 +40,4 @@ export function useOptionalUser() {
   return useUser();
 }
 
-export { SignInButton, SignOutButton };
+export { SignInButton, SignOutButton, UserButton };

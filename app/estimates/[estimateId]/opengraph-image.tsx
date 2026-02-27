@@ -312,7 +312,7 @@ export default async function OpenGraphImage({ params }: OpenGraphImageProps) {
             color: "rgba(241, 223, 191, 0.68)",
           }}
         >
-          estimating.jrbussard.com
+          estimating.cornerstonecompaniesfl.com
         </div>
       </div>
     ),

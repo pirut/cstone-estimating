@@ -43,6 +43,7 @@ import {
 import { db, convexAppUrl } from "@/lib/convex";
 import {
   SignInButton,
+  UserButton,
   clerkEnabled,
   useOptionalAuth,
   useOptionalUser,
@@ -1810,8 +1811,9 @@ export default function TeamAdminPage({
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-sm text-muted-foreground">
-                Signed in as {user?.primaryEmailAddress?.emailAddress}
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <UserButton />
+                <span>{user?.primaryEmailAddress?.emailAddress}</span>
               </div>
             </CardContent>
           </Card>

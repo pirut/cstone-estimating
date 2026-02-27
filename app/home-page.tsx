@@ -98,6 +98,7 @@ import {
 import {
   SignInButton,
   SignOutButton,
+  UserButton,
   clerkEnabled,
   useOptionalAuth,
   useOptionalUser,
@@ -2909,12 +2910,12 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
       </div>
       <div className="relative w-full px-4 py-8 sm:px-6 md:py-10 lg:px-8 xl:px-10 2xl:px-12">
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-card/70 px-4 py-3 backdrop-blur-sm">
-          <div className="text-xs text-muted-foreground">
+          <div className="flex items-center text-xs text-muted-foreground">
             {!clerkEnabled ? (
               <span>Clerk auth is not configured yet.</span>
             ) : authLoaded ? (
               isSignedIn ? (
-                <span>Signed in as {user?.primaryEmailAddress?.emailAddress}</span>
+                <UserButton />
               ) : (
                 <span>Sign in to access the proposal studio.</span>
               )

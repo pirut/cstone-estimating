@@ -17,7 +17,7 @@ const workSans = Work_Sans({
   display: "swap",
 });
 
-const DEFAULT_APP_URL = "https://estimating.jrbussard.com";
+const DEFAULT_APP_URL = "https://estimating.cornerstonecompaniesfl.com";
 
 function resolveMetadataBase() {
   const raw =

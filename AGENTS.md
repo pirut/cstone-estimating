@@ -9,7 +9,7 @@
 
 - Vercel with Next.js builder; `vercel.json` present.
 - Production alias: `https://cstone-estimating.vercel.app`.
-- Production Domain: `https://estimating.jrbussard.com`.
+- Production Domain: `https://estimating.cornerstonecompaniesfl.com`.
 
 ## Agent workflow requirement
 
