@@ -18,7 +18,8 @@ type DocumentWithViewTransition = Document & {
   ) => ViewTransitionLike;
 };
 
-const THEME_ANIMATION_DURATION_MS = 860;
+const BATMAN_THEME_ANIMATION_DURATION_MS = 1080;
+const CIRCLE_THEME_ANIMATION_DURATION_MS = 860;
 
 export function ThemeToggle({ className }: ThemeToggleProps) {
   const { resolvedTheme, setTheme } = useTheme();
@@ -85,18 +86,22 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
 
     const transitionMode: ThemeTransitionMode =
       nextTheme === "dark" ? "batman" : "circle";
+    const transitionDurationMs =
+      transitionMode === "batman"
+        ? BATMAN_THEME_ANIMATION_DURATION_MS
+        : CIRCLE_THEME_ANIMATION_DURATION_MS;
     const root = document.documentElement;
     setIsAnimating(true);
     clearFallbackUnlockTimeout();
     root.dataset.themeTransition = transitionMode;
     root.style.setProperty(
       "--theme-transition-duration",
-      `${THEME_ANIMATION_DURATION_MS}ms`
+      `${transitionDurationMs}ms`
     );
 
     fallbackUnlockTimeoutRef.current = window.setTimeout(() => {
       finalizeTransition();
-    }, THEME_ANIMATION_DURATION_MS + 180);
+    }, transitionDurationMs + 180);
 
     try {
       const transition = startViewTransition(() => {
