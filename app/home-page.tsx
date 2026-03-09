@@ -78,6 +78,7 @@ import {
   Archive,
   ArchiveRestore,
   ArrowDownToLine,
+  ArrowLeft,
   ArrowRightLeft,
   CheckCircle2,
   Clock3,
@@ -88,6 +89,7 @@ import {
   History,
   LayoutTemplate,
   Loader2,
+  LockKeyhole,
   PencilLine,
   Plus,
   Save,
@@ -2772,19 +2774,12 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
   const templateCard = (
     <Card
       id="step-template"
-      className="rounded-3xl border-border/60 bg-card/80 shadow-elevated"
+      className="shadow-elevated"
     >
-      <CardHeader>
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-2">
-            <Badge variant="muted" className="bg-muted/80 text-[10px]">
-              Step 2
-            </Badge>
-            <CardTitle className="text-2xl font-serif">Generation Presets</CardTitle>
-          </div>
-          <Badge variant="outline" className="bg-background/80">
-            Optional
-          </Badge>
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg">Presets</CardTitle>
+          <span className="text-xs text-muted-foreground">Optional</span>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -2803,7 +2798,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
             Loading template configuration...
           </div>
         ) : activeTemplateConfigItem ? (
-          <div className="rounded-xl border border-border/70 bg-background/70 px-4 py-3">
+          <div className="rounded-xl border border-border bg-muted/30 px-4 py-3">
             <p className="text-sm font-medium text-foreground">
               {activeTemplateConfigItem.name}
             </p>
@@ -2849,55 +2844,51 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
         onDomainError={setAuthError}
         onAuthError={setConvexSetupError}
       />
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-28 left-1/2 h-80 w-[560px] -translate-x-1/2 rounded-full bg-accent/20 blur-3xl" />
-        <div className="absolute top-20 right-0 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
-        <div className="absolute -bottom-24 left-10 h-72 w-72 rounded-full bg-accent/15 blur-3xl" />
-      </div>
-      <div className="relative w-full px-4 py-8 sm:px-6 md:py-10 lg:px-8 xl:px-10 2xl:px-12">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border/60 bg-card/70 px-4 py-3 backdrop-blur-sm">
-          <div className="flex items-center text-xs text-muted-foreground">
-            {!clerkEnabled ? (
-              <span>Clerk auth is not configured yet.</span>
-            ) : authLoaded ? (
-              isSignedIn ? (
-                <div className="flex items-center gap-2">
-                  <UserButton />
-                  <span className="text-sm text-foreground">
-                    {preparedByName || user?.primaryEmailAddress?.emailAddress}
-                  </span>
-                </div>
+      <div className="relative w-full">
+        <header className="sticky top-0 z-30 border-b border-border/50 bg-card backdrop-blur-xl">
+          <div className="mx-auto flex h-14 max-w-[1400px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+            <div className="flex items-center gap-3">
+              <BrandMark tone="auto" size="sm" />
+              <span className="hidden text-sm font-medium text-foreground sm:inline">
+                Proposal Studio
+              </span>
+              <span className="hidden text-xs text-muted-foreground md:inline">
+                v{APP_VERSION}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {!clerkEnabled ? (
+                <span className="text-xs text-muted-foreground">Auth not configured</span>
+              ) : authLoaded ? (
+                isSignedIn ? (
+                  <div className="flex items-center gap-2.5">
+                    <span className="hidden text-sm text-muted-foreground sm:inline">
+                      {preparedByName || user?.primaryEmailAddress?.emailAddress}
+                    </span>
+                    <UserButton />
+                  </div>
+                ) : (
+                  <SignInButton mode="modal">
+                    <Button variant="accent" size="sm">
+                      Sign in
+                    </Button>
+                  </SignInButton>
+                )
               ) : (
-                <span>Sign in to access the proposal studio.</span>
-              )
-            ) : (
-              <span>Loading account...</span>
-            )}
+                <span className="text-xs text-muted-foreground">Loading...</span>
+              )}
+              <ThemeToggle />
+              {clerkEnabled && isSignedIn ? (
+                <SignOutButton>
+                  <Button variant="ghost" size="sm" className="text-muted-foreground">
+                    Sign out
+                  </Button>
+                </SignOutButton>
+              ) : null}
+            </div>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <ThemeToggle />
-            <Badge variant="outline" className="hidden bg-background/80 sm:inline-flex">
-              v{APP_VERSION}
-            </Badge>
-            {clerkEnabled && isSignedIn ? (
-              <SignOutButton>
-                <Button variant="outline" size="sm">
-                  Sign out
-                </Button>
-              </SignOutButton>
-            ) : clerkEnabled ? (
-              <SignInButton mode="modal">
-                <Button variant="accent" size="sm">
-                  Sign in
-                </Button>
-              </SignInButton>
-            ) : (
-              <Button variant="outline" size="sm" disabled>
-                Sign in
-              </Button>
-            )}
-          </div>
-        </div>
+        </header>
+        <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8">
         {authError ? (
           <div className="mb-6 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
             {authError}
@@ -2909,181 +2900,121 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
           </div>
         ) : null}
         {!convexAppUrl ? (
-          <div className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
+          <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-50/80 px-3 py-2 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-400">
             Convex is not configured. Add `NEXT_PUBLIC_CONVEX_URL` to
             enable the project library.
           </div>
         ) : null}
-        <section className="relative overflow-hidden rounded-[32px] border border-border/60 bg-[#18120d] text-[#f8efe2] shadow-elevated dark:bg-[#120e0b]">
-          <div className="absolute -right-28 -top-24 h-72 w-72 rounded-full bg-accent/25 blur-3xl" />
-          <div className="absolute bottom-0 left-10 h-56 w-56 rounded-full bg-white/10 blur-3xl" />
-          <div className="relative p-8">
-            <div className="space-y-4">
-              <BrandMark tone="dark" />
-              <div className="space-y-3">
-                <Badge variant="outline" className={statusClassName}>
-                  {status.label}
-                </Badge>
-                <h1 className="text-4xl font-serif tracking-tight md:text-5xl">
-                  Cornerstone Proposal Generator
-                </h1>
-              </div>
-            </div>
+        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-serif tracking-tight sm:text-3xl">
+              {isEstimateMode ? "Estimate Editor" : "Dashboard"}
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {isEstimateMode ? "Build and generate proposals" : "Manage projects and estimates"}
+            </p>
           </div>
-        </section>
+          <Badge variant="outline" className={cn("h-fit", statusClassName)}>
+            {status.label}
+          </Badge>
+        </div>
 
         {appLocked ? (
-          <section className="mt-10">
-            <Card className="rounded-3xl border-border/60 bg-card/80 shadow-elevated">
-              <CardHeader>
-                <CardTitle className="text-2xl font-serif">
-                  Sign in required
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {authLoaded ? (
-                  <div className="text-sm text-muted-foreground">Microsoft sign-in</div>
-                ) : (
-                  <div className="text-sm text-muted-foreground">
-                    Checking your account status...
-                  </div>
-                )}
-                <div className="flex flex-wrap gap-2">
-                  {clerkEnabled ? (
-                    <SignInButton mode="modal">
-                      <Button variant="accent" size="sm">
-                        Sign in with Microsoft
-                      </Button>
-                    </SignInButton>
-                  ) : (
-                    <Button variant="accent" size="sm" disabled>
+          <section className="mt-6">
+            <Card className="shadow-elevated">
+              <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
+                <div className="rounded-full bg-muted p-3">
+                  <LockKeyhole className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-semibold">Sign in to continue</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {authLoaded ? "Use your Microsoft account to access the proposal studio." : "Checking your account status..."}
+                  </p>
+                </div>
+                {clerkEnabled ? (
+                  <SignInButton mode="modal">
+                    <Button variant="accent">
                       Sign in with Microsoft
                     </Button>
-                  )}
-                  {!clerkEnabled ? (
-                    <Button variant="outline" size="sm" disabled>
-                      Clerk not configured
-                    </Button>
-                  ) : null}
-                </div>
+                  </SignInButton>
+                ) : (
+                  <Button variant="accent" disabled>
+                    Sign in with Microsoft
+                  </Button>
+                )}
               </CardContent>
             </Card>
           </section>
         ) : (
           <>
         {authLoaded && isSignedIn ? (
-          <section className="mt-10 space-y-4">
-            <Card className="rounded-2xl border-border/60 bg-card/80 shadow-elevated">
-              <CardContent className="space-y-3 p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="muted" className="bg-muted/80 text-[10px]">
-                      Workspace
-                    </Badge>
-                    {teamReady ? (
-                      <>
-                        <span className="text-sm font-semibold text-foreground">
-                          {orgTeam?.name}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          Domain: {orgTeam?.domain}
-                        </span>
-                        <Badge variant="outline" className="bg-background/80">
-                          {orgRole === "owner"
-                            ? "Owner"
-                            : orgRole === "admin"
-                              ? "Admin"
-                              : "Member"}
-                        </Badge>
-                      </>
-                    ) : (
-                      <>
-                        <span className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                          {orgTeam
-                            ? "Joining organization workspace..."
-                            : "Creating organization workspace..."}
-                        </span>
-                        <span className="text-xs text-muted-foreground">
-                          Domain: {teamDomain || "Unknown"}
-                        </span>
-                      </>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    {hasTeamAdminAccess ? (
-                      <Button asChild variant="outline" size="sm">
-                        <Link href="/team-admin">Org owner dashboard</Link>
-                      </Button>
-                    ) : null}
-                    {teamError ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleRetryTeamSetup}
-                        disabled={teamSaving}
-                      >
-                        Retry setup
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
+          <section className="space-y-6">
+            {(convexAuthError || convexSetupBanner || teamError || convexLoading || (!convexLoading && !convexUser && !convexSetupError)) ? (
+              <div className="space-y-2">
                 {convexAuthError ? (
                   <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                     {convexAuthError.message}
                   </div>
                 ) : null}
+                {teamError ? (
+                  <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    <span>{teamError}</span>
+                    <Button variant="outline" size="sm" onClick={handleRetryTeamSetup} disabled={teamSaving}>Retry</Button>
+                  </div>
+                ) : null}
                 {convexSetupBanner ? (
-                  <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
+                  <div className="rounded-lg border border-amber-500/40 bg-amber-50/80 px-3 py-2 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-400">
                     {convexSetupBanner}
                   </div>
                 ) : null}
-                {teamError ? (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                    {teamError}
-                  </div>
-                ) : null}
                 {convexLoading ? (
-                  <div className="text-xs text-muted-foreground">
-                    Connecting to Convex...
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Connecting...
                   </div>
                 ) : null}
                 {!convexLoading && !convexUser && !convexSetupError ? (
                   <div className="text-xs text-muted-foreground">
-                    Waiting for Convex auth. If this persists, verify the Clerk
-                    client name and session token email claim.
+                    Waiting for auth sync...
                   </div>
                 ) : null}
-              </CardContent>
-            </Card>
+              </div>
+            ) : null}
+            {teamReady ? (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="font-medium text-foreground">{orgTeam?.name}</span>
+                  <span>&middot;</span>
+                  <span className="capitalize">{orgRole === "owner" ? "Owner" : orgRole === "admin" ? "Admin" : "Member"}</span>
+                </div>
+                {hasTeamAdminAccess ? (
+                  <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
+                    <Link href="/team-admin">Manage team</Link>
+                  </Button>
+                ) : null}
+              </div>
+            ) : !teamError ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                {orgTeam ? "Joining workspace..." : "Setting up workspace..."}
+              </div>
+            ) : null}
 
             {!isEstimateMode ? (
-            <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.42fr)_minmax(0,0.58fr)] 2xl:grid-cols-[minmax(360px,0.38fr)_minmax(0,0.62fr)]">
-              <div className="xl:sticky xl:top-6 xl:self-start">
-                <Card className="h-fit rounded-3xl border-border/60 bg-card/80 shadow-elevated">
-                <CardHeader className="space-y-4">
-                  <div className="space-y-2">
-                    <Badge variant="muted" className="bg-muted/80 text-[10px]">
-                      Shared
-                    </Badge>
-                    <CardTitle className="text-2xl font-serif">
-                      Project Management
-                    </CardTitle>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge variant="outline" className="bg-background/80">
-                      {teamProjects.length} projects
-                    </Badge>
-                    <Badge variant="outline" className="bg-background/80">
-                      {teamEstimates.length} estimates
-                    </Badge>
+            <div className="grid gap-6 xl:grid-cols-[minmax(300px,0.38fr)_minmax(0,0.62fr)]">
+              <div className="xl:sticky xl:top-[72px] xl:self-start">
+                <Card className="shadow-elevated">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg">Projects</CardTitle>
+                    <span className="text-xs text-muted-foreground">
+                      {teamProjects.length} projects &middot; {teamEstimates.length} estimates
+                    </span>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-3">
                   <div className="space-y-2">
-                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                      Team scope
-                    </p>
                     {memberTeams.length > 1 ? (
                       <Select
                         value={activeTeam?.id ?? undefined}
@@ -3100,16 +3031,9 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                           ))}
                         </SelectContent>
                       </Select>
-                    ) : (
-                      <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-2 text-sm text-foreground">
-                        Active team: {activeTeam?.name ?? "N/A"}
-                      </div>
-                    )}
+                    ) : null}
                   </div>
                   <div className="space-y-2">
-                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                      Project library
-                    </p>
                     <div className="flex items-center gap-2">
                       <div className="relative flex-1">
                         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -3122,11 +3046,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                           placeholder="Search projects..."
                         />
                       </div>
-                      <div className="group relative">
-                        <span className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md border border-border/60 bg-card/95 px-2 py-1 text-xs font-medium text-foreground opacity-0 shadow-md transition-all duration-150 group-hover:-translate-y-1 group-hover:opacity-100 group-focus-within:-translate-y-1 group-focus-within:opacity-100">
-                          Create project
-                        </span>
-                        <Popover
+                      <Popover
                           open={projectCreatePopoverOpen}
                           onOpenChange={(open) => {
                             setProjectCreatePopoverOpen(open);
@@ -3143,19 +3063,17 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                             <Button
                               variant="accent"
                               size="icon"
-                              className="h-11 w-11 shrink-0 rounded-full border border-accent/40 shadow-md transition-transform duration-150 hover:scale-105 disabled:hover:scale-100"
+                              className="h-10 w-10 shrink-0"
                               disabled={!isSignedIn || !teamReady}
                             >
-                              <Plus className="h-5 w-5" />
+                              <Plus className="h-4 w-4" />
                               <span className="sr-only">Create project</span>
                             </Button>
                           </PopoverTrigger>
-                          <PopoverContent align="end" className="w-80 space-y-3">
-                        <div className="space-y-1">
-                          <p className="text-sm font-semibold text-foreground">
-                            New project
-                          </p>
-                        </div>
+                          <PopoverContent align="end" className="w-72 space-y-3">
+                        <p className="text-sm font-semibold text-foreground">
+                          New project
+                        </p>
                           <div className="space-y-2">
                             <label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                               Project name
@@ -3172,9 +3090,6 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                               }}
                               placeholder="Project name..."
                             />
-                          </div>
-                          <div className="rounded-lg border border-border/60 bg-background/70 px-3 py-2 text-xs text-muted-foreground">
-                            Team: {activeTeam?.name ?? "Select a team first"}
                           </div>
                           <div className="flex justify-end gap-2">
                             <Button
@@ -3204,7 +3119,6 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                           </div>
                           </PopoverContent>
                         </Popover>
-                      </div>
                     </div>
                     <div className="flex items-center justify-between">
                       <button
@@ -3216,8 +3130,8 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                       </button>
                     </div>
                     {filteredProjectLibraryItems.length ? (
-                      <ScrollArea className="h-60 rounded-xl border border-border/60 bg-background/70">
-                        <div className="space-y-2 p-2">
+                      <ScrollArea className="h-64 -mx-1">
+                        <div className="space-y-0.5 px-1">
                           {filteredProjectLibraryItems.map((project) => {
                             const isActive = activeProjectId === project.id;
                             const isProjectArchived = project.status === "archived";
@@ -3227,11 +3141,11 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                               <div
                                 key={project.id}
                                 className={cn(
-                                  "rounded-lg border px-3 py-2 transition",
+                                  "group rounded-lg px-3 py-2 transition-colors",
                                   isActive
-                                    ? "border-accent/60 bg-accent/10"
-                                    : "border-border/60 bg-card/80 hover:border-accent/40 hover:bg-accent/5",
-                                  isProjectArchived && "opacity-60"
+                                    ? "bg-accent/10"
+                                    : "hover:bg-muted/60",
+                                  isProjectArchived && "opacity-50"
                                 )}
                               >
                                 <div className="flex items-center justify-between gap-2">
@@ -3240,28 +3154,24 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                                     className="flex-1 text-left"
                                     onClick={() => setActiveProjectId(project.id)}
                                   >
-                                    <p className="text-sm font-medium text-foreground">
+                                    <p className={cn("text-sm", isActive ? "font-semibold text-foreground" : "text-foreground")}>
                                       {project.name}
                                     </p>
+                                    <p className="text-[11px] text-muted-foreground">
+                                      {project.estimateCount} estimate{project.estimateCount === 1 ? "" : "s"}
+                                      {project.updatedAt ? ` · ${formatRelativeTime(project.updatedAt)}` : ""}
+                                    </p>
                                   </button>
-                                  <div className="flex items-center gap-1">
+                                  <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                                     {isProjectArchived ? (
-                                      <Badge variant="muted" className="text-[10px]">Archived</Badge>
-                                    ) : null}
-                                    {isActive ? (
-                                      <Badge
-                                        variant="outline"
-                                        className="border-accent/40 bg-accent/10 text-foreground"
-                                      >
-                                        Active
-                                      </Badge>
+                                      <Badge variant="muted" className="mr-1 text-[10px]">Archived</Badge>
                                     ) : null}
                                     {!isUnassigned ? (
                                       <>
                                         <Button
                                           variant="ghost"
                                           size="icon"
-                                          className="h-7 w-7"
+                                          className="h-7 w-7 text-muted-foreground"
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             setRenamingProjectId(project.id);
@@ -3273,7 +3183,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                                         <Button
                                           variant="ghost"
                                           size="icon"
-                                          className="h-7 w-7"
+                                          className="h-7 w-7 text-muted-foreground"
                                           disabled={archivingId === project.id}
                                           onClick={(e) => {
                                             e.stopPropagation();
@@ -3307,185 +3217,103 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                                       className="h-8 text-sm"
                                       autoFocus
                                     />
-                                    <Button
-                                      size="sm"
-                                      className="h-8"
-                                      onClick={() => void handleRenameProject(project.id, renameProjectValue)}
-                                    >
+                                    <Button size="sm" className="h-8" onClick={() => void handleRenameProject(project.id, renameProjectValue)}>
                                       Save
                                     </Button>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="h-8"
-                                      onClick={() => setRenamingProjectId(null)}
-                                    >
+                                    <Button variant="ghost" size="sm" className="h-8" onClick={() => setRenamingProjectId(null)}>
                                       Cancel
                                     </Button>
                                   </div>
-                                ) : (
-                                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                                    <span className="inline-flex items-center gap-1">
-                                      <FolderKanban className="h-3 w-3" />
-                                      {project.estimateCount} estimate
-                                      {project.estimateCount === 1 ? "" : "s"}
-                                    </span>
-                                    <span>
-                                      Updated{" "}
-                                      {project.updatedAt
-                                        ? formatRelativeTime(project.updatedAt)
-                                        : "never"}
-                                    </span>
-                                  </div>
-                                )}
+                                ) : null}
                               </div>
                             );
                           })}
                         </div>
                       </ScrollArea>
                     ) : (
-                      <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-4 text-sm text-muted-foreground">
+                      <p className="py-6 text-center text-sm text-muted-foreground">
                         {projectLibraryItems.length
                           ? "No projects match your search."
-                          : "No projects."}
-                      </div>
+                          : "No projects yet."}
+                      </p>
                     )}
-                  </div>
-                  <div className="rounded-xl border border-border/60 bg-background/70 px-3 py-3">
-                    <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
-                      Current destination
-                    </p>
-                    <Badge variant="outline" className="mt-2 bg-background/80">
-                      <FolderKanban className="mr-1 h-3.5 w-3.5" />
-                      {activeProject?.name ??
-                        (activeProjectId === UNASSIGNED_PROJECT_KEY
-                          ? "Unassigned estimates"
-                          : "No project selected")}
-                    </Badge>
                   </div>
                 </CardContent>
                 </Card>
               </div>
 
-              <Card className="rounded-3xl border-border/60 bg-card/80 shadow-elevated">
-                <CardHeader className="space-y-4">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="space-y-2">
-                      <Badge variant="muted" className="bg-muted/80 text-[10px]">
-                        Shared
-                      </Badge>
-                      <CardTitle className="text-2xl font-serif">
-                        Estimates & History
-                      </CardTitle>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge variant="outline" className="bg-background/80">
-                        {filteredTeamEstimates.length} shown
-                      </Badge>
-                      <Badge variant="outline" className="bg-background/80">
-                        {teamEstimates.length} in view
-                      </Badge>
-                    </div>
+              <Card className="shadow-elevated">
+                <CardHeader className="space-y-3 pb-3">
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-lg">
+                      {activeProject?.name ? `${activeProject.name}` : "Estimates"}
+                    </CardTitle>
+                    <span className="text-xs text-muted-foreground">
+                      {filteredTeamEstimates.length} of {teamEstimates.length}
+                    </span>
                   </div>
                   <div className="relative">
                     <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       value={teamEstimateQuery}
                       onChange={(event) => setTeamEstimateQuery(event.target.value)}
-                      placeholder="Search estimates by name..."
+                      placeholder="Search estimates..."
                       className="pl-9"
                     />
                   </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      variant={teamEstimateScope === "all" ? "secondary" : "outline"}
-                      size="sm"
-                      onClick={() => setTeamEstimateScope("all")}
-                    >
-                      All
-                    </Button>
-                    <Button
-                      variant={teamEstimateScope === "mine" ? "secondary" : "outline"}
-                      size="sm"
-                      onClick={() => setTeamEstimateScope("mine")}
-                    >
-                      Mine
-                    </Button>
-                    <Button
-                      variant={teamEstimateScope === "recent" ? "secondary" : "outline"}
-                      size="sm"
-                      onClick={() => setTeamEstimateScope("recent")}
-                    >
-                      Updated 14d
-                    </Button>
-                    <Button
-                      variant={teamEstimateScope === "archived" ? "secondary" : "outline"}
-                      size="sm"
-                      onClick={() => setTeamEstimateScope("archived")}
-                    >
-                      <Archive className="mr-1 h-3 w-3" />
-                      Archived
-                    </Button>
-                    {teamEstimateQuery.trim() ? (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {(["all", "mine", "recent", "archived"] as const).map((scope) => (
                       <Button
-                        variant="ghost"
+                        key={scope}
+                        variant={teamEstimateScope === scope ? "secondary" : "ghost"}
                         size="sm"
-                        onClick={() => setTeamEstimateQuery("")}
+                        className={cn("h-8 text-xs", teamEstimateScope !== scope && "text-muted-foreground")}
+                        onClick={() => setTeamEstimateScope(scope)}
                       >
-                        Clear search
+                        {scope === "all" ? "All" : scope === "mine" ? "Mine" : scope === "recent" ? "Recent" : "Archived"}
+                      </Button>
+                    ))}
+                    {teamEstimateQuery.trim() ? (
+                      <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground" onClick={() => setTeamEstimateQuery("")}>
+                        Clear
                       </Button>
                     ) : null}
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-4">
+                <CardContent className="space-y-3">
                   {projectActionNotice ? (
-                    <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-800">
+                    <div className="rounded-lg border border-emerald-500/20 bg-emerald-50/80 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-400">
                       {projectActionNotice}
                     </div>
                   ) : null}
-                  {!bidFlowStarted ? (
-                    <div className="rounded-xl border border-accent/30 bg-accent/10 px-4 py-3 text-sm text-foreground">
-                      Load an existing bid or click New estimate to unlock the
-                      builder and generation steps.
-                    </div>
-                  ) : null}
-                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border/60 bg-background/70 px-3 py-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-                        Viewing project
-                      </span>
-                      <Badge variant="outline" className="bg-background/80">
-                        <FolderKanban className="mr-1 h-3.5 w-3.5" />
-                        {activeProjectLabel}
-                      </Badge>
-                    </div>
-                    <div className="group relative">
-                      <span className="pointer-events-none absolute -top-9 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md border border-border/60 bg-card/95 px-2 py-1 text-xs font-medium text-foreground opacity-0 shadow-md transition-all duration-150 group-hover:-translate-y-1 group-hover:opacity-100 group-focus-within:-translate-y-1 group-focus-within:opacity-100">
-                        New estimate
-                      </span>
-                      <Button
-                        variant="accent"
-                        size="icon"
-                        className="h-11 w-11 rounded-full border border-accent/40 shadow-md transition-transform duration-150 hover:scale-105"
-                        onClick={resetEstimateWorkspace}
-                      >
-                        <Plus className="h-5 w-5" />
-                        <span className="sr-only">New estimate</span>
-                      </Button>
-                    </div>
+                  <div className="flex items-center justify-between gap-3">
+                    {!bidFlowStarted ? (
+                      <p className="text-sm text-muted-foreground">
+                        Open an estimate or start a new one.
+                      </p>
+                    ) : (
+                      <div />
+                    )}
+                    <Button
+                      variant="accent"
+                      size="sm"
+                      onClick={resetEstimateWorkspace}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      New estimate
+                    </Button>
                   </div>
                   {!teamReady ? (
                     <div className="text-sm text-muted-foreground">
                       Preparing your team workspace...
                     </div>
                   ) : !activeProjectId ? (
-                    <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-4 text-sm text-muted-foreground">
+                    <div className="rounded-xl border border-border bg-muted/30 px-4 py-4 text-sm text-muted-foreground">
                       Create your first project to start organizing estimates.
                     </div>
                   ) : filteredTeamEstimates.length ? (
-                    <ScrollArea className="h-[28rem] rounded-xl border border-border/70 bg-background/70 xl:h-[35rem]">
-                      <div className="space-y-2 p-2">
-                        {filteredTeamEstimates.map((estimate) => {
+                    <div className="space-y-1">
+                      {filteredTeamEstimates.map((estimate) => {
                           const currentVersion = getCurrentVersionForEstimate(estimate);
                           const historyOpen = historyEstimateId === estimate.id;
                           const editingCurrent = editingEstimateId === estimate.id;
@@ -3521,13 +3349,13 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                             <div
                               key={estimate.id}
                               className={cn(
-                                "rounded-lg border border-border/60 bg-card/80 px-3 py-3",
-                                historyOpen && "border-accent/40 bg-accent/5",
-                                isEstimateArchived && "opacity-60"
+                                "group rounded-lg border border-transparent px-3 py-2.5 transition-colors",
+                                historyOpen ? "border-border bg-muted/50" : "hover:bg-muted/40",
+                                isEstimateArchived && "opacity-50"
                               )}
                             >
-                              <div className="flex flex-wrap items-start justify-between gap-3">
-                                <div className="min-w-0 flex-1 space-y-1">
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0 flex-1">
                                   {isRenamingThisEstimate ? (
                                     <div className="flex items-center gap-2">
                                       <Input
@@ -3543,93 +3371,55 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                                         className="h-8 text-sm"
                                         autoFocus
                                       />
-                                      <Button
-                                        size="sm"
-                                        className="h-8"
-                                        onClick={() => void handleRenameEstimate(estimate.id, renameEstimateValue)}
-                                      >
-                                        Save
-                                      </Button>
-                                      <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        className="h-8"
-                                        onClick={() => setRenamingEstimateId(null)}
-                                      >
-                                        Cancel
-                                      </Button>
+                                      <Button size="sm" className="h-8" onClick={() => void handleRenameEstimate(estimate.id, renameEstimateValue)}>Save</Button>
+                                      <Button variant="ghost" size="sm" className="h-8" onClick={() => setRenamingEstimateId(null)}>Cancel</Button>
                                     </div>
                                   ) : (
-                                    <p className="flex items-center gap-1">
-                                      <Link
-                                        href={estimateHref}
-                                        target="_blank"
-                                        rel="noreferrer"
-                                        className="text-sm font-semibold text-foreground hover:text-accent"
-                                      >
-                                        {estimate.title ?? "Untitled"}
-                                      </Link>
-                                      <Button
-                                        variant="ghost"
-                                        size="icon"
-                                        className="h-6 w-6 shrink-0"
-                                        onClick={() => {
-                                          setRenamingEstimateId(estimate.id);
-                                          setRenameEstimateValue(String(estimate.title ?? ""));
-                                        }}
-                                      >
-                                        <PencilLine className="h-3 w-3" />
-                                      </Button>
-                                    </p>
+                                    <Link
+                                      href={estimateHref}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      className="text-sm font-medium text-foreground hover:text-accent transition-colors"
+                                    >
+                                      {estimate.title ?? "Untitled"}
+                                    </Link>
                                   )}
-                                  <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                                    <Badge variant="outline" className="bg-background/80">
-                                      v{currentVersion}
-                                    </Badge>
+                                  <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[11px] text-muted-foreground">
+                                    <span>v{currentVersion}</span>
                                     {projectType ? (
-                                      <Badge variant="muted" className="bg-muted/80">
-                                        {projectType}
-                                      </Badge>
+                                      <>
+                                        <span>&middot;</span>
+                                        <span>{projectType}</span>
+                                      </>
                                     ) : null}
+                                    <span>&middot;</span>
+                                    <span>{formatRelativeTime(estimate.updatedAt)}</span>
                                     {isEstimateArchived ? (
-                                      <Badge variant="muted" className="text-[10px]">Archived</Badge>
+                                      <>
+                                        <span>&middot;</span>
+                                        <span className="text-muted-foreground/70">Archived</span>
+                                      </>
                                     ) : null}
                                     {editingCurrent ? (
-                                      <Badge
-                                        variant="outline"
-                                        className="border-accent/40 bg-accent/10 text-foreground"
-                                      >
-                                        Editing
-                                      </Badge>
+                                      <>
+                                        <span>&middot;</span>
+                                        <span className="text-accent">Editing</span>
+                                      </>
                                     ) : null}
-                                    <span className="inline-flex items-center gap-1">
-                                      <Clock3 className="h-3 w-3" />
-                                      {formatRelativeTime(estimate.updatedAt)}
-                                    </span>
                                   </div>
                                   {tags.length ? (
                                     <div className="mt-1 flex flex-wrap gap-1">
                                       {tags.map((tag) => (
-                                        <Badge
-                                          key={`${estimate.id}-${tag}`}
-                                          variant="muted"
-                                          className="text-[10px]"
-                                        >
+                                        <Badge key={`${estimate.id}-${tag}`} variant="muted" className="text-[10px]">
                                           {tag}
                                         </Badge>
                                       ))}
                                     </div>
                                   ) : null}
                                 </div>
-                                <div className="flex flex-wrap items-center justify-end gap-1.5">
-                                  <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    asChild
-                                  >
-                                    <Link href={estimateHref} target="_blank" rel="noreferrer">
-                                      Open
-                                    </Link>
+                                <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => { setRenamingEstimateId(estimate.id); setRenameEstimateValue(String(estimate.title ?? "")); }}>
+                                    <PencilLine className="h-3 w-3" />
                                   </Button>
                                   {destinationProjects.length ? (
                                     <Popover>
@@ -3690,8 +3480,9 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                                     </Popover>
                                   ) : null}
                                   <Button
-                                    variant={historyOpen ? "secondary" : "ghost"}
-                                    size="sm"
+                                    variant="ghost"
+                                    size="icon"
+                                    className={cn("h-7 w-7", historyOpen ? "text-accent" : "text-muted-foreground")}
                                     disabled={isDeletingEstimate}
                                     onClick={() => {
                                       setHistoryError(null);
@@ -3701,36 +3492,37 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                                       );
                                     }}
                                   >
-                                    <History className="h-3.5 w-3.5" />
+                                    <History className="h-3 w-3" />
                                   </Button>
                                   <Button
                                     variant="ghost"
-                                    size="sm"
+                                    size="icon"
+                                    className="h-7 w-7 text-muted-foreground"
                                     disabled={archivingId === estimate.id || isDeletingEstimate}
                                     onClick={() => void handleArchiveEstimate(estimate.id, !isEstimateArchived)}
                                   >
                                     {archivingId === estimate.id ? (
-                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      <Loader2 className="h-3 w-3 animate-spin" />
                                     ) : isEstimateArchived ? (
-                                      <ArchiveRestore className="h-3.5 w-3.5" />
+                                      <ArchiveRestore className="h-3 w-3" />
                                     ) : (
-                                      <Archive className="h-3.5 w-3.5" />
+                                      <Archive className="h-3 w-3" />
                                     )}
                                   </Button>
                                   {canDeleteEstimate ? (
                                     <Button
                                       variant="ghost"
-                                      size="sm"
-                                      className="text-destructive hover:text-destructive"
+                                      size="icon"
+                                      className="h-7 w-7 text-muted-foreground hover:text-destructive"
                                       disabled={isDeletingEstimate}
                                       onClick={() =>
                                         void handleDeleteTeamEstimate(estimate)
                                       }
                                     >
                                       {isDeletingEstimate ? (
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        <Loader2 className="h-3 w-3 animate-spin" />
                                       ) : (
-                                        <Trash2 className="h-3.5 w-3.5" />
+                                        <Trash2 className="h-3 w-3" />
                                       )}
                                     </Button>
                                   ) : null}
@@ -3739,16 +3531,15 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                             </div>
                           );
                         })}
-                      </div>
-                    </ScrollArea>
+                    </div>
                   ) : (
-                    <div className="rounded-xl border border-border/60 bg-background/70 px-4 py-4 text-sm text-muted-foreground">
+                    <p className="py-8 text-center text-sm text-muted-foreground">
                       {teamEstimates.length
-                        ? "No estimates match your current filters."
+                        ? "No estimates match your filters."
                         : activeProjectId === UNASSIGNED_PROJECT_KEY
                           ? "No unassigned estimates."
                           : "No estimates in this project yet."}
-                    </div>
+                    </p>
                   )}
                   {historyError ? (
                     <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
@@ -3756,27 +3547,25 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                     </div>
                   ) : null}
                   {selectedHistoryEstimate ? (
-                    <div className="space-y-2 rounded-lg border border-border/60 bg-background/70 p-3">
+                    <div className="space-y-2 rounded-lg border border-border bg-card p-3">
                       <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <p className="text-sm font-medium text-foreground">
-                            Version history:{" "}
-                            {selectedHistoryEstimate.title ?? "Untitled"}
-                          </p>
-                        </div>
+                        <p className="text-sm font-medium text-foreground">
+                          History: {selectedHistoryEstimate.title ?? "Untitled"}
+                        </p>
                         <Button
                           variant="ghost"
                           size="sm"
+                          className="h-7 text-xs text-muted-foreground"
                           onClick={() => {
                             setHistoryEstimateId(null);
                             setPreviewVersionEntry(null);
                           }}
                         >
-                          Close
+                          <X className="h-3 w-3" />
                         </Button>
                       </div>
                       {selectedHistoryEntries.length ? (
-                        <ScrollArea className="h-52 rounded-md border border-border/60 bg-background/70">
+                        <ScrollArea className="h-48 rounded-md border border-border">
                           <div className="divide-y divide-border/60">
                             {selectedHistoryEntries.map((entry) => {
                               const actionId = `${selectedHistoryEstimate.id}:${entry.id}`;
@@ -3804,7 +3593,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                                     </div>
                                     <div className="flex items-center gap-1.5">
                                       {isCurrent ? (
-                                        <Badge variant="outline" className="bg-background/80">
+                                        <Badge variant="outline" className="bg-card">
                                           Current
                                         </Badge>
                                       ) : null}
@@ -3894,7 +3683,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                               Comparing current with v{previewVersionEntry.version}
                             </p>
                             {diffs.length ? (
-                              <div className="rounded-md border border-border/60 bg-background/70 overflow-hidden">
+                              <div className="rounded-md border border-border bg-muted/30 overflow-hidden">
                                 <div className="grid grid-cols-3 gap-px bg-border/40 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                                   <div className="bg-card/90 px-2 py-1.5">Field</div>
                                   <div className="bg-card/90 px-2 py-1.5">Current</div>
@@ -3902,7 +3691,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                                 </div>
                                 {diffs.map((diff) => (
                                   <div key={diff.field} className="grid grid-cols-3 gap-px bg-border/40 text-xs">
-                                    <div className="bg-card/70 px-2 py-1.5 text-muted-foreground capitalize">{diff.field}</div>
+                                    <div className="bg-card/50 px-2 py-1.5 text-muted-foreground capitalize">{diff.field}</div>
                                     <div className="bg-red-500/5 px-2 py-1.5 text-foreground">{diff.current}</div>
                                     <div className="bg-emerald-500/5 px-2 py-1.5 text-foreground">{diff.version}</div>
                                   </div>
@@ -3932,15 +3721,15 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
           <section
             id="step-input"
             className={cn(
-              "grid gap-6 xl:grid-cols-[minmax(0,1.28fr)_minmax(360px,0.72fr)] 2xl:grid-cols-[minmax(0,1.38fr)_minmax(440px,0.62fr)]",
-              !isEstimateMode && "mt-12"
+              "grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(340px,0.7fr)]",
+              !isEstimateMode && "mt-8"
             )}
           >
           {isEstimateMode ? (
-            <div className="col-span-full mb-4">
-              <Button variant="outline" size="sm" asChild>
+            <div className="col-span-full">
+              <Button variant="ghost" size="sm" className="text-muted-foreground" asChild>
                 <Link href="/">
-                  <ArrowDownToLine className="h-3.5 w-3.5 rotate-90" />
+                  <ArrowLeft className="h-3.5 w-3.5" />
                   Back to Dashboard
                 </Link>
               </Button>
@@ -3967,9 +3756,9 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                 setError(null);
               }}
             />
-            <Card className="rounded-2xl border-border/60 bg-card/70">
+            <Card>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">Estimate Tags</CardTitle>
+                <CardTitle className="text-sm font-medium">Tags</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex flex-wrap gap-2">
@@ -4028,84 +3817,43 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
           </div>
 
           <div className="space-y-6">
-            <Card className="rounded-3xl border-border/60 bg-card/85 shadow-elevated">
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-1.5">
-                    <Badge variant="muted" className="bg-muted/80 text-[10px]">
-                      Workspace
-                    </Badge>
-                    <CardTitle className="text-xl font-serif">At a glance</CardTitle>
-                  </div>
-                  <FileText className="mt-1 h-5 w-5 text-muted-foreground" />
+            <Card className="shadow-elevated">
+              <CardContent className="space-y-4 pt-5">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">Progress</span>
+                  <span className="text-sm font-semibold text-accent">{workflowPercent}%</span>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="rounded-xl border border-border/60 bg-background/75 px-3 py-2">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                      Readiness
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-foreground">
-                      {canGenerate
-                        ? "Ready to generate"
-                        : hasEstimateInput
-                          ? "Needs required fields"
-                          : "Not started"}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-border/60 bg-background/75 px-3 py-2">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                      Workflow
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-foreground">
-                      {workflowPercent}% complete
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-border/60 bg-background/75 px-3 py-2">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                      Active Project
-                    </p>
-                    <p className="mt-1 text-sm font-semibold leading-tight text-foreground">
-                      {activeProject?.name ??
-                        (activeProjectId === UNASSIGNED_PROJECT_KEY
-                          ? "Unassigned estimates"
-                          : "Not selected")}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-border/60 bg-background/75 px-3 py-2">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                      Tagged Options
-                    </p>
-                    <p className="mt-1 text-sm font-semibold text-foreground">
-                      {estimateTags.length}
-                    </p>
-                  </div>
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full bg-accent transition-all duration-500"
+                    style={{ width: `${workflowPercent}%` }}
+                  />
                 </div>
-                <div className="space-y-2 rounded-xl border border-border/60 bg-muted/35 px-3 py-3">
-                  <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
-                    <span>Milestone progress</span>
-                    <span>{workflowPercent}%</span>
-                  </div>
-                  <div className="h-2 w-full overflow-hidden rounded-full bg-border/60">
-                    <div
-                      className="h-full rounded-full bg-accent transition-all duration-500"
-                      style={{ width: `${workflowPercent}%` }}
-                    />
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {workflowMilestones.map((milestone) => (
-                      <Badge
-                        key={`quick-${milestone.id}`}
-                        variant={milestone.done ? "outline" : "muted"}
-                        className={cn(
-                          "text-[10px]",
-                          milestone.done && "border-accent/40 bg-accent/10"
-                        )}
-                      >
+                <div className="space-y-1.5">
+                  {workflowMilestones.map((milestone) => (
+                    <div key={`quick-${milestone.id}`} className="flex items-center gap-2 text-sm">
+                      {milestone.done ? (
+                        <CheckCircle2 className="h-3.5 w-3.5 text-accent" />
+                      ) : (
+                        <CircleDashed className="h-3.5 w-3.5 text-muted-foreground/50" />
+                      )}
+                      <span className={milestone.done ? "text-foreground" : "text-muted-foreground"}>
                         {milestone.label}
-                      </Badge>
-                    ))}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <Separator />
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Project</span>
+                    <span className="font-medium text-foreground">
+                      {activeProject?.name ?? "Not selected"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Tags</span>
+                    <span className="font-medium text-foreground">{estimateTags.length}</span>
                   </div>
                 </div>
               </CardContent>
@@ -4115,20 +3863,10 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
 
             <Card
               id="step-generate"
-              className="h-fit rounded-3xl border-border/60 bg-card/85 shadow-elevated xl:sticky xl:top-6 xl:self-start"
+              className="h-fit shadow-elevated xl:sticky xl:top-[72px] xl:self-start"
             >
-              <CardHeader>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="space-y-2">
-                    <Badge variant="muted" className="bg-muted/80 text-[10px]">
-                      Step 3
-                    </Badge>
-                    <CardTitle className="text-2xl font-serif">
-                      Generate PandaDoc
-                    </CardTitle>
-                  </div>
-                  <LayoutTemplate className="mt-1 h-5 w-5 text-muted-foreground" />
-                </div>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-lg">Generate</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {error ? (
@@ -4136,31 +3874,13 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                     {error}
                   </div>
                 ) : null}
-                <div className="space-y-2 rounded-xl border border-border/60 bg-muted/30 p-3">
-                  {workflowMilestones.map((milestone) => (
-                    <div key={milestone.id} className="flex items-center gap-2 text-sm">
-                      {milestone.done ? (
-                        <CheckCircle2 className="h-4 w-4 text-accent" />
-                      ) : (
-                        <CircleDashed className="h-4 w-4 text-muted-foreground" />
-                      )}
-                      <span
-                        className={cn(
-                          milestone.done ? "text-foreground" : "text-muted-foreground"
-                        )}
-                      >
-                        {milestone.label}
-                      </span>
-                    </div>
-                  ))}
-                </div>
                 {showProgress ? (
-                  <div className="space-y-2 rounded-lg border border-border/60 bg-muted/40 px-4 py-3">
-                    <div className="flex items-center justify-between text-[11px] uppercase tracking-[0.24em] text-muted-foreground">
+                  <div className="space-y-2 rounded-lg bg-muted/50 px-3 py-2.5">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span>{progressLabel ?? "Working..."}</span>
                       <span>{progressPercent}%</span>
                     </div>
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-border/60">
+                    <div className="h-1.5 w-full overflow-hidden rounded-full bg-border">
                       <div
                         className="h-full rounded-full bg-accent transition-all duration-500"
                         style={{ width: `${progressPercent}%` }}
@@ -4168,7 +3888,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                     </div>
                   </div>
                 ) : null}
-                <div className="space-y-3 text-sm">
+                <div className="space-y-2 text-sm">
                   <div className="flex items-center justify-between gap-4">
                     <span className="text-muted-foreground">Input source</span>
                     <span className="text-right font-medium text-foreground">
@@ -4294,7 +4014,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                   </Button>
                 </div>
                 {lastGeneration?.document?.id ? (
-                  <div className="space-y-2 rounded-lg border border-border/60 bg-muted/30 px-4 py-3 text-sm">
+                  <div className="space-y-2 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm">
                     <p className="font-medium text-foreground">
                       Last document: {lastGeneration.document.name ?? lastGeneration.document.id}
                     </p>
@@ -4354,27 +4074,16 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
           </div>
           </section>
         ) : (
-          <section className="mt-12">
-            <Card className="rounded-3xl border-border/60 bg-card/80 shadow-elevated">
-              <CardHeader className="space-y-2">
-                <Badge variant="muted" className="w-fit bg-muted/80 text-[10px]">
-                  Next step
-                </Badge>
-                <CardTitle className="text-2xl font-serif">
-                  Select or create a bid
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4 text-sm text-muted-foreground">
-                <p>
-                  Choose a project in Project Management, then load an existing bid
-                  from Estimates &amp; History or start a new bid.
+          <section className="mt-8">
+            <Card className="shadow-elevated">
+              <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
+                <p className="text-sm text-muted-foreground">
+                  Select an estimate above or start a new one.
                 </p>
-                <div className="flex flex-wrap gap-2">
-                  <Button variant="accent" onClick={resetEstimateWorkspace}>
-                    <Plus className="h-4 w-4" />
-                    Start new bid
-                  </Button>
-                </div>
+                <Button variant="accent" onClick={resetEstimateWorkspace}>
+                  <Plus className="h-4 w-4" />
+                  New estimate
+                </Button>
               </CardContent>
             </Card>
           </section>
@@ -4425,21 +4134,15 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
           </AlertDialogContent>
         </AlertDialog>
 
-        <Separator className="my-12" />
-
-        <footer className="flex flex-wrap items-center justify-between gap-4 text-xs text-muted-foreground">
-          <span>
-            Estimate snapshots and PandaDoc generation are the primary flow.
-          </span>
-          <div className="flex items-center gap-4">
-            {hasTeamAdminAccess ? (
-              <Link className="hover:text-foreground" href="/admin">
-                PandaDoc mapping dashboard
-              </Link>
-            ) : null}
-            <span>Cornerstone Proposal Generator · v{APP_VERSION}</span>
-          </div>
+        <footer className="mt-12 flex flex-wrap items-center justify-between gap-4 border-t border-border/50 py-6 text-xs text-muted-foreground">
+          <span>Cornerstone Proposal Studio · v{APP_VERSION}</span>
+          {hasTeamAdminAccess ? (
+            <Link className="hover:text-foreground transition-colors" href="/admin">
+              PandaDoc mapping
+            </Link>
+          ) : null}
         </footer>
+        </div>
       </div>
     </main>
   );

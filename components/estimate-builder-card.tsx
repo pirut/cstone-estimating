@@ -1083,56 +1083,43 @@ export function EstimateBuilderCard({
     (!isChangeOrderMode && showInstall);
 
   return (
-    <Card className="relative overflow-hidden rounded-3xl border-border/60 bg-card/80 shadow-elevated">
-      <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-accent/10 to-transparent" />
-      <CardHeader className="relative space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="space-y-2">
-            <Badge variant="muted" className="bg-muted/80 text-[10px]">
-              Step 1
-            </Badge>
-            <CardTitle className="text-2xl font-serif">Manual Estimate Builder</CardTitle>
-          </div>
+    <Card className="relative overflow-hidden shadow-elevated">
+      <CardHeader className="space-y-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-lg">Estimate Builder</CardTitle>
+          <span className="text-sm font-medium text-accent">{completionPercent}%</span>
         </div>
-
-        <div className="space-y-2 rounded-xl border border-border/60 bg-background/65 p-3">
-          <div className="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-muted-foreground">
-            <span>Completion</span>
-            <span>{completionPercent}%</span>
-          </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-            <div
-              className="h-full rounded-full bg-accent transition-all duration-300"
-              style={{ width: `${completionPercent}%` }}
-            />
-          </div>
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
           <div
-            className={cn(
-              "grid gap-2",
-              isChangeOrderMode ? "md:grid-cols-3" : "md:grid-cols-5"
-            )}
-          >
-            {stepProgress.map((step) => (
-              <div
-                key={step.id}
-                className={cn(
-                  "flex items-center gap-2 rounded-lg border px-2 py-2 text-xs",
-                  step.done && "border-accent/40 bg-accent/10 text-foreground",
-                  !step.done && !step.locked && "border-border/60 bg-muted/20 text-muted-foreground",
-                  step.locked && "border-border/50 bg-background/80 text-muted-foreground/80"
-                )}
-              >
-                {step.done ? (
-                  <CheckCircle2 className="h-3.5 w-3.5 text-accent" />
-                ) : step.locked ? (
-                  <LockKeyhole className="h-3.5 w-3.5" />
-                ) : (
-                  <CircleDashed className="h-3.5 w-3.5" />
-                )}
-                <span className="truncate">{step.label}</span>
-              </div>
-            ))}
-          </div>
+            className="h-full rounded-full bg-accent transition-all duration-300"
+            style={{ width: `${completionPercent}%` }}
+          />
+        </div>
+        <div
+          className={cn(
+            "flex flex-wrap gap-1.5",
+          )}
+        >
+          {stepProgress.map((step) => (
+            <div
+              key={step.id}
+              className={cn(
+                "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs",
+                step.done && "bg-accent/10 text-foreground",
+                !step.done && !step.locked && "text-muted-foreground",
+                step.locked && "text-muted-foreground/60"
+              )}
+            >
+              {step.done ? (
+                <CheckCircle2 className="h-3 w-3 text-accent" />
+              ) : step.locked ? (
+                <LockKeyhole className="h-3 w-3" />
+              ) : (
+                <CircleDashed className="h-3 w-3" />
+              )}
+              <span className="truncate">{step.label}</span>
+            </div>
+          ))}
         </div>
       </CardHeader>
 
@@ -1152,7 +1139,7 @@ export function EstimateBuilderCard({
           </div>
         ) : null}
 
-        <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
+        <section className="space-y-4 rounded-lg border border-border bg-card/50 p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-sm font-semibold text-foreground">Estimate Session</p>
@@ -1184,7 +1171,7 @@ export function EstimateBuilderCard({
           </div>
         </section>
 
-        <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
+        <section className="space-y-4 rounded-lg border border-border bg-card/50 p-4">
           <SectionHeader title="Project Details" done={projectStepComplete} />
           <div className="grid gap-3 md:grid-cols-2">
             {groupList.flatMap((group) =>
@@ -1319,12 +1306,12 @@ export function EstimateBuilderCard({
                               </p>
                             ) : null}
                             {addressLookupOpen && addressSuggestions.length ? (
-                              <div className="max-h-48 overflow-auto rounded-lg border border-border/60 bg-card/90">
+                              <div className="max-h-48 overflow-auto rounded-lg border border-border bg-card">
                                 {addressSuggestions.map((suggestion) => (
                                   <button
                                     key={suggestion.id}
                                     type="button"
-                                    className="block w-full border-b border-border/60 px-3 py-2 text-left last:border-b-0 hover:bg-muted/40"
+                                    className="block w-full border-b border-border px-3 py-2 text-left last:border-b-0 hover:bg-muted/40"
                                     onMouseDown={(event) => event.preventDefault()}
                                     onClick={() =>
                                       handleSelectAddressSuggestion(suggestion)
@@ -1361,7 +1348,7 @@ export function EstimateBuilderCard({
         </section>
 
         {showChangeOrder ? (
-          <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
+          <section className="space-y-4 rounded-lg border border-border bg-card/50 p-4">
             <SectionHeader
               title="Change Order Pricing"
               done={changeOrderStepComplete}
@@ -1438,7 +1425,7 @@ export function EstimateBuilderCard({
             </div>
 
             <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-lg border border-border/60 bg-card/70 px-3 py-2">
+              <div className="rounded-lg border border-border bg-card/50 px-3 py-2">
                 <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
                   Vendor Total
                 </p>
@@ -1446,7 +1433,7 @@ export function EstimateBuilderCard({
                   {formatCurrency(changeOrderVendorTotal)}
                 </p>
               </div>
-              <div className="rounded-lg border border-border/60 bg-card/70 px-3 py-2">
+              <div className="rounded-lg border border-border bg-card/50 px-3 py-2">
                 <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
                   Labor Total
                 </p>
@@ -1454,7 +1441,7 @@ export function EstimateBuilderCard({
                   {formatCurrency(changeOrderLaborTotal)}
                 </p>
               </div>
-              <div className="rounded-lg border border-border/60 bg-card/70 px-3 py-2">
+              <div className="rounded-lg border border-border bg-card/50 px-3 py-2">
                 <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
                   Change Order Total
                 </p>
@@ -1468,7 +1455,7 @@ export function EstimateBuilderCard({
         ) : null}
 
         {showProducts ? (
-          <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
+          <section className="space-y-4 rounded-lg border border-border bg-card/50 p-4">
             <SectionHeader title="Product Pricing" done={productStepComplete} />
 
             <div className="grid gap-3 md:grid-cols-3">
@@ -1554,7 +1541,7 @@ export function EstimateBuilderCard({
                 return (
                   <div
                     key={item.id}
-                    className="rounded-xl border border-border/60 bg-card/70 p-3"
+                    className="rounded-xl border border-border bg-card/50 p-3"
                   >
                     <div className="grid gap-3 lg:grid-cols-[1.8fr_0.8fr_0.8fr_auto]">
                       <div className="space-y-1">
@@ -1630,14 +1617,14 @@ export function EstimateBuilderCard({
                         />
                       </div>
                       <div className="flex items-end justify-end">
-                        <div className="rounded-lg border border-border/60 bg-background px-3 py-2 text-sm font-semibold text-foreground">
+                        <div className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground">
                           {Number.isFinite(total) ? formatCurrency(total) : "-"}
                         </div>
                       </div>
                     </div>
 
                     {usesEuroPricing ? (
-                      <div className="mt-3 space-y-3 rounded-lg border border-border/60 bg-background/80 p-3">
+                      <div className="mt-3 space-y-3 rounded-lg border border-border bg-background/80 p-3">
                         <div className="flex flex-wrap items-start justify-between gap-2">
                           <div>
                             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -1756,7 +1743,7 @@ export function EstimateBuilderCard({
                                     disabled={Boolean(legacyValues)}
                                   />
                                 ) : (
-                                  <div className="flex items-center rounded-md border border-border/60 bg-muted/30 px-3 text-sm text-foreground">
+                                  <div className="flex items-center rounded-md border border-border bg-muted/30 px-3 text-sm text-foreground">
                                     {section.label}
                                   </div>
                                 )}
@@ -1839,7 +1826,7 @@ export function EstimateBuilderCard({
                       </div>
                     ) : null}
 
-                    <div className="mt-3 space-y-3 rounded-lg border border-border/60 bg-background/80 p-3">
+                    <div className="mt-3 space-y-3 rounded-lg border border-border bg-background/80 p-3">
                       <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                           Features
@@ -1889,7 +1876,7 @@ export function EstimateBuilderCard({
                       </div>
 
                       <div className="grid gap-3 md:grid-cols-3">
-                        <label className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/80 px-3 py-2 text-xs text-foreground">
+                        <label className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-2 text-xs text-foreground">
                           <Checkbox
                             checked={item.split_finish}
                             onCheckedChange={(checked) =>
@@ -1904,7 +1891,7 @@ export function EstimateBuilderCard({
                           />
                           <span>Split finish</span>
                         </label>
-                        <label className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/80 px-3 py-2 text-xs text-foreground">
+                        <label className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-2 text-xs text-foreground">
                           <Checkbox
                             checked={item.stainless_operating_hardware}
                             onCheckedChange={(checked) =>
@@ -1916,7 +1903,7 @@ export function EstimateBuilderCard({
                           />
                           <span>Stainless steel operating hardware</span>
                         </label>
-                        <label className="flex items-center gap-2 rounded-lg border border-border/60 bg-card/80 px-3 py-2 text-xs text-foreground">
+                        <label className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-2 text-xs text-foreground">
                           <Checkbox
                             checked={item.has_screens}
                             onCheckedChange={(checked) =>
@@ -1930,7 +1917,7 @@ export function EstimateBuilderCard({
                         </label>
                       </div>
 
-                      <div className="rounded-lg border border-border/60 bg-card/70 px-3 py-2">
+                      <div className="rounded-lg border border-border bg-card/50 px-3 py-2">
                         <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                           Features list (ordered)
                         </p>
@@ -1956,7 +1943,7 @@ export function EstimateBuilderCard({
         ) : null}
 
         {showBucking ? (
-          <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
+          <section className="space-y-4 rounded-lg border border-border bg-card/50 p-4">
             <SectionHeader title="Bucking & Waterproof" done={buckingStepComplete} />
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -2014,7 +2001,7 @@ export function EstimateBuilderCard({
                 return (
                   <div
                     key={item.id}
-                    className="rounded-xl border border-border/60 bg-card/70 p-3"
+                    className="rounded-xl border border-border bg-card/50 p-3"
                   >
                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
                       <div className="space-y-1">
@@ -2132,7 +2119,7 @@ export function EstimateBuilderCard({
                         />
                       </div>
                       <div className="flex items-end justify-between gap-2">
-                        <div className="rounded-lg border border-border/60 bg-background px-3 py-2 text-sm font-semibold text-foreground">
+                        <div className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground">
                           {lineal ? `${lineal.toFixed(2)} ft` : "-"}
                         </div>
                         <Button
@@ -2192,7 +2179,7 @@ export function EstimateBuilderCard({
         ) : null}
 
         {showInstall ? (
-          <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
+          <section className="space-y-4 rounded-lg border border-border bg-card/50 p-4">
             <SectionHeader title="Install Calculator" done={installStepComplete} />
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -2226,7 +2213,7 @@ export function EstimateBuilderCard({
               Use `+` or `-` to adjust from the calculated install total.
             </p>
 
-            <div className="rounded-xl border border-border/60 bg-card/70 p-3">
+            <div className="rounded-xl border border-border bg-card/50 p-3">
               <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 Panel count summary
               </p>
@@ -2239,7 +2226,7 @@ export function EstimateBuilderCard({
                   return (
                     <div
                       key={panel.id}
-                      className="rounded-lg border border-border/60 bg-background px-3 py-2"
+                      className="rounded-lg border border-border bg-background px-3 py-2"
                     >
                       <p className="text-sm font-semibold text-foreground">{panel.label}</p>
                       <p className="text-xs text-muted-foreground">
@@ -2282,10 +2269,10 @@ export function EstimateBuilderCard({
         ) : null}
 
         {showReview ? (
-          <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
+          <section className="space-y-4 rounded-lg border border-border bg-card/50 p-4">
             <SectionHeader title="Pricing Breakdown" done={installStepComplete} />
 
-            <div className="rounded-xl border border-border/60 bg-card/70 overflow-hidden">
+            <div className="rounded-xl border border-border bg-card/50 overflow-hidden">
               <div className="grid grid-cols-4 gap-px bg-border/40 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
                 <div className="bg-card/90 px-3 py-2">Line Item</div>
                 <div className="bg-card/90 px-3 py-2 text-right">Cost</div>
@@ -2388,7 +2375,7 @@ export function EstimateBuilderCard({
                 ].map(([label, value, ok, threshold]) => (
                   <div
                     key={String(label)}
-                    className="rounded-lg border border-border/60 bg-card/70 px-3 py-2"
+                    className="rounded-lg border border-border bg-card/50 px-3 py-2"
                   >
                     <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
                       {label}
@@ -2434,7 +2421,7 @@ export function EstimateBuilderCard({
                     ].map(([label, value]) => (
                       <div
                         key={label}
-                        className="flex items-center justify-between rounded-lg border border-border/60 bg-card/70 px-3 py-2"
+                        className="flex items-center justify-between rounded-lg border border-border bg-card/50 px-3 py-2"
                       >
                         <span className="text-sm text-muted-foreground">{label}</span>
                         <span className="text-sm font-semibold text-foreground">

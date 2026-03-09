@@ -6,48 +6,52 @@
 
 @layer base {
   :root {
-    --background: 36 20% 97%;
-    --foreground: 24 10% 8%;
-    --card: 0 0% 100%;
-    --card-foreground: 24 10% 10%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 24 10% 10%;
-    --primary: 24 12% 8%;
-    --primary-foreground: 40 30% 96%;
-    --secondary: 30 18% 91%;
-    --secondary-foreground: 24 10% 16%;
-    --accent: 37 48% 57%;
-    --accent-foreground: 24 12% 12%;
-    --muted: 32 16% 93%;
-    --muted-foreground: 24 8% 40%;
-    --destructive: 0 70% 46%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 30 12% 82%;
-    --input: 30 12% 82%;
-    --ring: 37 48% 57%;
-    --radius: 16px;
+    --background: 40 18% 97%;
+    --foreground: 25 14% 11%;
+    --card: 40 20% 99%;
+    --card-foreground: 25 14% 11%;
+    --popover: 40 20% 99%;
+    --popover-foreground: 25 14% 11%;
+    --primary: 25 14% 11%;
+    --primary-foreground: 40 30% 97%;
+    --secondary: 34 16% 92%;
+    --secondary-foreground: 25 12% 18%;
+    --accent: 33 56% 52%;
+    --accent-foreground: 25 20% 10%;
+    --muted: 36 14% 94%;
+    --muted-foreground: 25 8% 46%;
+    --destructive: 0 65% 48%;
+    --destructive-foreground: 0 0% 99%;
+    --border: 34 10% 86%;
+    --input: 34 10% 86%;
+    --ring: 33 56% 52%;
+    --radius: 12px;
+    --success: 152 56% 40%;
+    --success-foreground: 0 0% 99%;
   }
 
   .dark {
-    --background: 24 8% 8%;
-    --foreground: 40 18% 96%;
-    --card: 24 8% 10%;
-    --card-foreground: 40 18% 96%;
-    --popover: 24 8% 10%;
-    --popover-foreground: 40 18% 96%;
-    --primary: 40 18% 96%;
-    --primary-foreground: 24 10% 8%;
-    --secondary: 24 6% 18%;
-    --secondary-foreground: 40 18% 96%;
-    --accent: 38 44% 55%;
-    --accent-foreground: 24 10% 8%;
-    --muted: 24 6% 18%;
-    --muted-foreground: 40 10% 70%;
-    --destructive: 0 62% 35%;
-    --destructive-foreground: 40 18% 96%;
-    --border: 24 6% 20%;
-    --input: 24 6% 20%;
-    --ring: 38 44% 55%;
+    --background: 25 10% 7%;
+    --foreground: 38 20% 95%;
+    --card: 25 8% 10%;
+    --card-foreground: 38 20% 95%;
+    --popover: 25 8% 10%;
+    --popover-foreground: 38 20% 95%;
+    --primary: 38 20% 95%;
+    --primary-foreground: 25 12% 8%;
+    --secondary: 25 6% 16%;
+    --secondary-foreground: 38 20% 95%;
+    --accent: 35 50% 53%;
+    --accent-foreground: 25 14% 8%;
+    --muted: 25 6% 15%;
+    --muted-foreground: 38 10% 62%;
+    --destructive: 0 58% 38%;
+    --destructive-foreground: 38 20% 95%;
+    --border: 25 6% 18%;
+    --input: 25 6% 18%;
+    --ring: 35 50% 53%;
+    --success: 152 48% 36%;
+    --success-foreground: 0 0% 99%;
   }
 
   * {
@@ -57,19 +61,15 @@
   body {
     @apply bg-background text-foreground antialiased;
     background-image:
-      radial-gradient(circle at 10% 16%, rgba(204, 170, 112, 0.17), transparent 48%),
-      radial-gradient(circle at 86% 8%, rgba(20, 20, 20, 0.12), transparent 52%),
-      radial-gradient(circle at 72% 92%, rgba(208, 179, 124, 0.16), transparent 45%),
-      linear-gradient(140deg, rgba(255, 255, 255, 0.9), rgba(245, 238, 230, 0.92));
+      radial-gradient(ellipse at 0% 0%, rgba(204, 170, 112, 0.08), transparent 50%),
+      radial-gradient(ellipse at 100% 100%, rgba(208, 179, 124, 0.06), transparent 50%);
     background-attachment: fixed;
   }
 
   .dark body {
     background-image:
-      radial-gradient(circle at 12% 16%, rgba(204, 170, 112, 0.14), transparent 48%),
-      radial-gradient(circle at 84% 10%, rgba(222, 198, 155, 0.1), transparent 56%),
-      radial-gradient(circle at 74% 92%, rgba(130, 95, 49, 0.2), transparent 45%),
-      linear-gradient(140deg, rgba(20, 17, 14, 0.95), rgba(13, 11, 9, 0.96));
+      radial-gradient(ellipse at 0% 0%, rgba(204, 170, 112, 0.06), transparent 50%),
+      radial-gradient(ellipse at 100% 100%, rgba(130, 95, 49, 0.08), transparent 50%);
   }
 
   h1,
