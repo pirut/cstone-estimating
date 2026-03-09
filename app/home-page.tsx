@@ -2878,7 +2878,12 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
         ) : (
           <>
         {authLoaded && isSignedIn ? (
-          <section className="space-y-6 lg:min-h-[calc(100dvh-12rem)]">
+          <section
+            className={cn(
+              "space-y-6",
+              !isEstimateMode && "lg:min-h-[calc(100dvh-12rem)]"
+            )}
+          >
             {(convexAuthError || teamError) ? (
               <div className="space-y-2">
                 {convexAuthError ? (
