@@ -89,7 +89,6 @@ import {
   History,
   LayoutTemplate,
   Loader2,
-  LockKeyhole,
   PencilLine,
   Plus,
   Save,
@@ -2778,8 +2777,8 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
     >
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg">Presets</CardTitle>
-          <span className="text-xs text-muted-foreground">Optional</span>
+          <CardTitle className="text-base font-serif font-light tracking-tight">Presets</CardTitle>
+          <Badge variant="outline" className="text-[10px] text-muted-foreground">Optional</Badge>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -2844,25 +2843,24 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
         onDomainError={setAuthError}
         onAuthError={setConvexSetupError}
       />
-      <div className="relative w-full">
-        <header className="sticky top-0 z-30 border-b border-border/50 bg-card backdrop-blur-xl">
-          <div className="mx-auto flex h-14 max-w-[1400px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center gap-3">
+      <div className="relative w-full min-h-screen flex flex-col">
+        <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
+          <div className="mx-auto flex h-16 max-w-[1400px] items-center justify-between gap-4 px-5 sm:px-8">
+            <div className="flex items-center gap-4">
               <BrandMark tone="auto" size="sm" />
-              <span className="hidden text-sm font-medium text-foreground sm:inline">
+              <div className="hidden h-6 w-px bg-border sm:block" />
+              <span className="hidden text-[13px] font-medium tracking-wide uppercase text-muted-foreground sm:inline">
                 Proposal Studio
               </span>
-              <span className="hidden text-xs text-muted-foreground md:inline">
-                v{APP_VERSION}
-              </span>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-3">
+              <ThemeToggle />
               {!clerkEnabled ? (
                 <span className="text-xs text-muted-foreground">Auth not configured</span>
               ) : authLoaded ? (
                 isSignedIn ? (
-                  <div className="flex items-center gap-2.5">
-                    <span className="hidden text-sm text-muted-foreground sm:inline">
+                  <div className="flex items-center gap-3">
+                    <span className="hidden text-sm text-muted-foreground lg:inline">
                       {preparedByName || user?.primaryEmailAddress?.emailAddress}
                     </span>
                     <UserButton />
@@ -2877,69 +2875,61 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
               ) : (
                 <span className="text-xs text-muted-foreground">Loading...</span>
               )}
-              <ThemeToggle />
-              {clerkEnabled && isSignedIn ? (
-                <SignOutButton>
-                  <Button variant="ghost" size="sm" className="text-muted-foreground">
-                    Sign out
-                  </Button>
-                </SignOutButton>
-              ) : null}
             </div>
           </div>
         </header>
-        <div className="mx-auto max-w-[1400px] px-4 py-6 sm:px-6 lg:px-8">
+        <div className="flex-1 mx-auto w-full max-w-[1400px] px-5 py-8 sm:px-8">
         {authError ? (
-          <div className="mb-6 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <div className="mb-6 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
             {authError}
           </div>
         ) : null}
         {convexSetupBanner ? (
-          <div className="mb-6 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700">
+          <div className="mb-6 rounded-lg border border-amber-600/20 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
             {convexSetupBanner}
           </div>
         ) : null}
         {!convexAppUrl ? (
-          <div className="mb-4 rounded-lg border border-amber-500/40 bg-amber-50/80 px-3 py-2 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-400">
+          <div className="mb-6 rounded-lg border border-amber-600/20 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:bg-amber-900/20 dark:text-amber-200">
             Convex is not configured. Add `NEXT_PUBLIC_CONVEX_URL` to
             enable the project library.
           </div>
         ) : null}
-        <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-serif tracking-tight sm:text-3xl">
-              {isEstimateMode ? "Estimate Editor" : "Dashboard"}
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {isEstimateMode ? "Build and generate proposals" : "Manage projects and estimates"}
+        <div className="mb-8">
+          <h1 className="text-3xl font-serif font-light tracking-tight sm:text-4xl">
+            {isEstimateMode ? "Estimate Editor" : "Dashboard"}
+          </h1>
+          <div className="mt-2 flex flex-wrap items-center gap-3">
+            <p className="text-sm text-muted-foreground">
+              {isEstimateMode ? "Build and generate proposals" : "Manage your projects and estimates"}
             </p>
+            <Badge variant="outline" className={cn("text-[10px]", statusClassName)}>
+              {status.label}
+            </Badge>
           </div>
-          <Badge variant="outline" className={cn("h-fit", statusClassName)}>
-            {status.label}
-          </Badge>
         </div>
 
         {appLocked ? (
-          <section className="mt-6">
-            <Card className="shadow-elevated">
-              <CardContent className="flex flex-col items-center gap-4 py-12 text-center">
-                <div className="rounded-full bg-muted p-3">
-                  <LockKeyhole className="h-6 w-6 text-muted-foreground" />
-                </div>
+          <section className="mt-4">
+            <Card className="shadow-elevated overflow-hidden">
+              <div className="bg-cs-gunmetal px-8 py-10 text-center dark:bg-card">
+                <BrandMark tone="dark" className="justify-center" />
+              </div>
+              <CardContent className="flex flex-col items-center gap-5 py-10 text-center">
                 <div>
-                  <h2 className="text-lg font-semibold">Sign in to continue</h2>
-                  <p className="mt-1 text-sm text-muted-foreground">
-                    {authLoaded ? "Use your Microsoft account to access the proposal studio." : "Checking your account status..."}
+                  <h2 className="text-xl font-serif font-light">Welcome to Proposal Studio</h2>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {authLoaded ? "Sign in with your Microsoft account to get started." : "Checking your account..."}
                   </p>
                 </div>
                 {clerkEnabled ? (
                   <SignInButton mode="modal">
-                    <Button variant="accent">
+                    <Button variant="accent" size="lg" className="shadow-glow">
                       Sign in with Microsoft
                     </Button>
                   </SignInButton>
                 ) : (
-                  <Button variant="accent" disabled>
+                  <Button variant="accent" size="lg" disabled>
                     Sign in with Microsoft
                   </Button>
                 )}
@@ -2950,65 +2940,62 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
           <>
         {authLoaded && isSignedIn ? (
           <section className="space-y-6">
-            {(convexAuthError || convexSetupBanner || teamError || convexLoading || (!convexLoading && !convexUser && !convexSetupError)) ? (
+            {(convexAuthError || teamError) ? (
               <div className="space-y-2">
                 {convexAuthError ? (
-                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  <div className="rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
                     {convexAuthError.message}
                   </div>
                 ) : null}
                 {teamError ? (
-                  <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                  <div className="flex items-center justify-between gap-3 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm text-destructive">
                     <span>{teamError}</span>
                     <Button variant="outline" size="sm" onClick={handleRetryTeamSetup} disabled={teamSaving}>Retry</Button>
                   </div>
                 ) : null}
-                {convexSetupBanner ? (
-                  <div className="rounded-lg border border-amber-500/40 bg-amber-50/80 px-3 py-2 text-sm text-amber-800 dark:bg-amber-500/10 dark:text-amber-400">
-                    {convexSetupBanner}
-                  </div>
-                ) : null}
-                {convexLoading ? (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    Connecting...
-                  </div>
-                ) : null}
-                {!convexLoading && !convexUser && !convexSetupError ? (
-                  <div className="text-xs text-muted-foreground">
-                    Waiting for auth sync...
-                  </div>
-                ) : null}
+              </div>
+            ) : null}
+            {convexLoading ? (
+              <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin text-accent" />
+                Connecting to workspace...
+              </div>
+            ) : !convexUser && !convexSetupError && !convexAuthError ? (
+              <div className="text-sm text-muted-foreground">
+                Waiting for auth sync...
               </div>
             ) : null}
             {teamReady ? (
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <span className="font-medium text-foreground">{orgTeam?.name}</span>
-                  <span>&middot;</span>
-                  <span className="capitalize">{orgRole === "owner" ? "Owner" : orgRole === "admin" ? "Admin" : "Member"}</span>
+              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-5 py-3 shadow-subtle">
+                <div className="flex items-center gap-2.5 text-sm">
+                  <div className="h-2 w-2 rounded-full bg-accent" />
+                  <span className="font-medium">{orgTeam?.name}</span>
+                  <span className="text-muted-foreground">&middot;</span>
+                  <span className="text-muted-foreground capitalize">{orgRole === "owner" ? "Owner" : orgRole === "admin" ? "Admin" : "Member"}</span>
                 </div>
-                {hasTeamAdminAccess ? (
-                  <Button asChild variant="ghost" size="sm" className="text-muted-foreground">
-                    <Link href="/team-admin">Manage team</Link>
-                  </Button>
-                ) : null}
+                <div className="ml-auto flex items-center gap-2">
+                  {hasTeamAdminAccess ? (
+                    <Button asChild variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground">
+                      <Link href="/team-admin">Manage team</Link>
+                    </Button>
+                  ) : null}
+                </div>
               </div>
-            ) : !teamError ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : !teamError && !convexLoading ? (
+              <div className="flex items-center gap-2.5 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin text-accent" />
                 {orgTeam ? "Joining workspace..." : "Setting up workspace..."}
               </div>
             ) : null}
 
             {!isEstimateMode ? (
-            <div className="grid gap-6 xl:grid-cols-[minmax(300px,0.38fr)_minmax(0,0.62fr)]">
-              <div className="xl:sticky xl:top-[72px] xl:self-start">
+            <div className="grid gap-6 lg:grid-cols-[minmax(280px,0.35fr)_minmax(0,0.65fr)] xl:grid-cols-[minmax(320px,0.35fr)_minmax(0,0.65fr)]">
+              <div className="lg:sticky lg:top-[80px] lg:self-start">
                 <Card className="shadow-elevated">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">Projects</CardTitle>
-                    <span className="text-xs text-muted-foreground">
+                    <CardTitle className="text-base font-serif font-light tracking-tight">Projects</CardTitle>
+                    <span className="text-[11px] text-muted-foreground tabular-nums">
                       {teamProjects.length} projects &middot; {teamEstimates.length} estimates
                     </span>
                   </div>
@@ -3130,8 +3117,8 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                       </button>
                     </div>
                     {filteredProjectLibraryItems.length ? (
-                      <ScrollArea className="h-64 -mx-1">
-                        <div className="space-y-0.5 px-1">
+                      <ScrollArea className="h-72">
+                        <div className="space-y-0.5">
                           {filteredProjectLibraryItems.map((project) => {
                             const isActive = activeProjectId === project.id;
                             const isProjectArchived = project.status === "archived";
@@ -3141,11 +3128,11 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                               <div
                                 key={project.id}
                                 className={cn(
-                                  "group rounded-lg px-3 py-2 transition-colors",
+                                  "group relative rounded-lg px-3 py-2.5 transition-colors",
                                   isActive
-                                    ? "bg-accent/10"
-                                    : "hover:bg-muted/60",
-                                  isProjectArchived && "opacity-50"
+                                    ? "bg-accent/8 before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-full before:bg-accent"
+                                    : "hover:bg-muted/50",
+                                  isProjectArchived && "opacity-40"
                                 )}
                               >
                                 <div className="flex items-center justify-between gap-2">
@@ -3245,10 +3232,10 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
               <Card className="shadow-elevated">
                 <CardHeader className="space-y-3 pb-3">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">
-                      {activeProject?.name ? `${activeProject.name}` : "Estimates"}
+                    <CardTitle className="text-base font-serif font-light tracking-tight">
+                      {activeProject?.name ? activeProject.name : "Estimates"}
                     </CardTitle>
-                    <span className="text-xs text-muted-foreground">
+                    <span className="text-[11px] text-muted-foreground tabular-nums">
                       {filteredTeamEstimates.length} of {teamEstimates.length}
                     </span>
                   </div>
@@ -3282,21 +3269,18 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {projectActionNotice ? (
-                    <div className="rounded-lg border border-emerald-500/20 bg-emerald-50/80 px-3 py-2 text-sm text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-400">
+                    <div className="rounded-lg border border-emerald-600/20 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
                       {projectActionNotice}
                     </div>
                   ) : null}
-                  <div className="flex items-center justify-between gap-3">
-                    {!bidFlowStarted ? (
-                      <p className="text-sm text-muted-foreground">
-                        Open an estimate or start a new one.
-                      </p>
-                    ) : (
-                      <div />
-                    )}
+                  <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/50 px-4 py-3">
+                    <p className="text-sm text-muted-foreground">
+                      {!bidFlowStarted ? "Select an estimate or create a new one." : `${filteredTeamEstimates.length} estimates`}
+                    </p>
                     <Button
                       variant="accent"
                       size="sm"
+                      className="shadow-glow/50"
                       onClick={resetEstimateWorkspace}
                     >
                       <Plus className="h-3.5 w-3.5" />
@@ -3722,15 +3706,15 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
             id="step-input"
             className={cn(
               "grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(340px,0.7fr)]",
-              !isEstimateMode && "mt-8"
+              !isEstimateMode && "mt-10"
             )}
           >
           {isEstimateMode ? (
             <div className="col-span-full">
-              <Button variant="ghost" size="sm" className="text-muted-foreground" asChild>
+              <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground" asChild>
                 <Link href="/">
-                  <ArrowLeft className="h-3.5 w-3.5" />
-                  Back to Dashboard
+                  <ArrowLeft className="h-3 w-3" />
+                  Dashboard
                 </Link>
               </Button>
             </div>
@@ -3756,9 +3740,9 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                 setError(null);
               }}
             />
-            <Card>
+            <Card className="shadow-subtle">
               <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-medium">Tags</CardTitle>
+                <CardTitle className="text-sm font-sans font-medium">Tags</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex flex-wrap gap-2">
@@ -3817,37 +3801,37 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
           </div>
 
           <div className="space-y-6">
-            <Card className="shadow-elevated">
-              <CardContent className="space-y-4 pt-5">
+            <Card className="shadow-elevated overflow-hidden">
+              <div className="bg-cs-gunmetal px-5 py-4 dark:bg-card dark:border-b dark:border-border">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium">Progress</span>
-                  <span className="text-sm font-semibold text-accent">{workflowPercent}%</span>
+                  <span className="text-sm font-semibold uppercase tracking-wider text-white/80 dark:text-muted-foreground">Progress</span>
+                  <span className="text-lg font-serif font-light text-cs-gold">{workflowPercent}%</span>
                 </div>
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-white/15 dark:bg-muted">
                   <div
-                    className="h-full rounded-full bg-accent transition-all duration-500"
+                    className="h-full rounded-full bg-cs-gold transition-all duration-500"
                     style={{ width: `${workflowPercent}%` }}
                   />
                 </div>
-                <div className="space-y-1.5">
-                  {workflowMilestones.map((milestone) => (
-                    <div key={`quick-${milestone.id}`} className="flex items-center gap-2 text-sm">
-                      {milestone.done ? (
-                        <CheckCircle2 className="h-3.5 w-3.5 text-accent" />
-                      ) : (
-                        <CircleDashed className="h-3.5 w-3.5 text-muted-foreground/50" />
-                      )}
-                      <span className={milestone.done ? "text-foreground" : "text-muted-foreground"}>
-                        {milestone.label}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                <Separator />
+              </div>
+              <CardContent className="space-y-3 pt-4">
+                {workflowMilestones.map((milestone) => (
+                  <div key={`quick-${milestone.id}`} className="flex items-center gap-2.5 text-sm">
+                    {milestone.done ? (
+                      <CheckCircle2 className="h-4 w-4 text-accent" />
+                    ) : (
+                      <CircleDashed className="h-4 w-4 text-muted-foreground/40" />
+                    )}
+                    <span className={milestone.done ? "text-foreground" : "text-muted-foreground"}>
+                      {milestone.label}
+                    </span>
+                  </div>
+                ))}
+                <Separator className="my-2" />
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Project</span>
-                    <span className="font-medium text-foreground">
+                    <span className="font-medium text-foreground truncate ml-4 text-right">
                       {activeProject?.name ?? "Not selected"}
                     </span>
                   </div>
@@ -3863,10 +3847,10 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
 
             <Card
               id="step-generate"
-              className="h-fit shadow-elevated xl:sticky xl:top-[72px] xl:self-start"
+              className="h-fit shadow-elevated xl:sticky xl:top-[80px] xl:self-start"
             >
               <CardHeader className="pb-3">
-                <CardTitle className="text-lg">Generate</CardTitle>
+                <CardTitle className="text-base font-serif font-light tracking-tight">Generate PandaDoc</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {error ? (
@@ -4074,18 +4058,22 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
           </div>
           </section>
         ) : (
-          <section className="mt-8">
-            <Card className="shadow-elevated">
-              <CardContent className="flex flex-col items-center gap-3 py-10 text-center">
-                <p className="text-sm text-muted-foreground">
-                  Select an estimate above or start a new one.
+          <section className="mt-10">
+            <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed border-border py-16 text-center">
+              <div className="rounded-full bg-accent/10 p-4">
+                <FileText className="h-6 w-6 text-accent" />
+              </div>
+              <div>
+                <p className="text-base font-serif font-light">Ready to build a proposal?</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Select an existing estimate above or create a new one.
                 </p>
-                <Button variant="accent" onClick={resetEstimateWorkspace}>
-                  <Plus className="h-4 w-4" />
-                  New estimate
-                </Button>
-              </CardContent>
-            </Card>
+              </div>
+              <Button variant="accent" className="mt-2 shadow-glow/50" onClick={resetEstimateWorkspace}>
+                <Plus className="h-4 w-4" />
+                New estimate
+              </Button>
+            </div>
           </section>
         )}
 
@@ -4134,13 +4122,26 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
           </AlertDialogContent>
         </AlertDialog>
 
-        <footer className="mt-12 flex flex-wrap items-center justify-between gap-4 border-t border-border/50 py-6 text-xs text-muted-foreground">
-          <span>Cornerstone Proposal Studio · v{APP_VERSION}</span>
-          {hasTeamAdminAccess ? (
-            <Link className="hover:text-foreground transition-colors" href="/admin">
-              PandaDoc mapping
-            </Link>
-          ) : null}
+        <footer className="mt-16 border-t border-border pt-6 pb-8">
+          <div className="flex flex-wrap items-center justify-between gap-4 text-xs text-muted-foreground">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold uppercase tracking-[0.2em] text-muted-foreground/70">Cornerstone</span>
+              <span>&middot;</span>
+              <span>Proposal Studio v{APP_VERSION}</span>
+            </div>
+            <div className="flex items-center gap-4">
+              {hasTeamAdminAccess ? (
+                <Link className="hover:text-foreground transition-colors" href="/admin">
+                  PandaDoc mapping
+                </Link>
+              ) : null}
+              {hasTeamAdminAccess ? (
+                <Link className="hover:text-foreground transition-colors" href="/team-admin">
+                  Team admin
+                </Link>
+              ) : null}
+            </div>
+          </div>
         </footer>
         </div>
       </div>

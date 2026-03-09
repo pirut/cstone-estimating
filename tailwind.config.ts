@@ -12,7 +12,7 @@ const config: Config = {
       center: true,
       padding: "2rem",
       screens: {
-        "2xl": "1200px",
+        "2xl": "1400px",
       },
     },
     extend: {
@@ -50,6 +50,12 @@ const config: Config = {
           DEFAULT: "hsl(var(--popover))",
           foreground: "hsl(var(--popover-foreground))",
         },
+        /* Cornerstone brand direct-access */
+        cs: {
+          gold: "#D1A35A",
+          limestone: "#F8F4E4",
+          gunmetal: "#343D42",
+        },
       },
       borderRadius: {
         lg: "var(--radius)",
@@ -58,13 +64,13 @@ const config: Config = {
       },
       fontFamily: {
         sans: ["var(--font-body)", "Work Sans", "system-ui", "sans-serif"],
-        serif: ["var(--font-display)", "Playfair Display", "serif"],
+        serif: ["var(--font-display)", "Playfair Display", "Georgia", "serif"],
       },
       boxShadow: {
-        elevated: "0 1px 3px rgba(0, 0, 0, 0.06), 0 8px 24px rgba(0, 0, 0, 0.06)",
-        "elevated-lg": "0 2px 6px rgba(0, 0, 0, 0.04), 0 16px 48px rgba(0, 0, 0, 0.08)",
-        glow: "0 8px 32px rgba(196, 164, 106, 0.18)",
-        subtle: "0 1px 2px rgba(0, 0, 0, 0.04)",
+        elevated: "0 1px 3px rgba(0,0,0,0.04), 0 6px 20px rgba(0,0,0,0.06)",
+        "elevated-lg": "0 4px 12px rgba(0,0,0,0.05), 0 20px 50px rgba(0,0,0,0.08)",
+        glow: "0 4px 24px rgba(209,163,90,0.2)",
+        subtle: "0 1px 2px rgba(0,0,0,0.04)",
       },
       keyframes: {
         "fade-up": {

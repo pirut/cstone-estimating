@@ -1084,40 +1084,36 @@ export function EstimateBuilderCard({
 
   return (
     <Card className="relative overflow-hidden shadow-elevated">
-      <CardHeader className="space-y-3">
+      <CardHeader className="space-y-4 pb-4">
         <div className="flex items-center justify-between">
-          <CardTitle className="text-lg">Estimate Builder</CardTitle>
-          <span className="text-sm font-medium text-accent">{completionPercent}%</span>
+          <CardTitle className="text-base font-serif font-light tracking-tight">Estimate Builder</CardTitle>
+          <span className="text-lg font-serif font-light text-accent tabular-nums">{completionPercent}%</span>
         </div>
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+        <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
           <div
-            className="h-full rounded-full bg-accent transition-all duration-300"
+            className="h-full rounded-full bg-accent transition-all duration-500"
             style={{ width: `${completionPercent}%` }}
           />
         </div>
-        <div
-          className={cn(
-            "flex flex-wrap gap-1.5",
-          )}
-        >
+        <div className="flex flex-wrap gap-x-4 gap-y-1">
           {stepProgress.map((step) => (
             <div
               key={step.id}
               className={cn(
-                "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs",
-                step.done && "bg-accent/10 text-foreground",
+                "flex items-center gap-1.5 text-xs",
+                step.done && "text-foreground",
                 !step.done && !step.locked && "text-muted-foreground",
-                step.locked && "text-muted-foreground/60"
+                step.locked && "text-muted-foreground/50"
               )}
             >
               {step.done ? (
-                <CheckCircle2 className="h-3 w-3 text-accent" />
+                <CheckCircle2 className="h-3.5 w-3.5 text-accent" />
               ) : step.locked ? (
-                <LockKeyhole className="h-3 w-3" />
+                <LockKeyhole className="h-3.5 w-3.5" />
               ) : (
-                <CircleDashed className="h-3 w-3" />
+                <CircleDashed className="h-3.5 w-3.5" />
               )}
-              <span className="truncate">{step.label}</span>
+              <span>{step.label}</span>
             </div>
           ))}
         </div>

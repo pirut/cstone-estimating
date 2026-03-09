@@ -10,37 +10,35 @@ type BrandMarkProps = {
 
 export function BrandMark({ tone = "light", size = "default", className }: BrandMarkProps) {
   const isDark = tone === "dark";
-  const isAuto = tone === "auto";
   const isSmall = size === "sm";
 
   return (
-    <div className={cn("flex items-center gap-2.5", className)}>
+    <div className={cn("flex items-center gap-3", className)}>
       <div
         className={cn(
-          "flex items-center justify-center rounded-xl border",
-          isSmall ? "h-8 w-8" : "h-12 w-12 rounded-2xl shadow-glow",
-          isDark ? "border-white/40 bg-white" : isAuto ? "border-border/60 bg-card" : "border-border bg-background"
+          "flex shrink-0 items-center justify-center",
+          isSmall ? "h-8 w-8" : "h-11 w-11",
         )}
       >
         <img
           src="/brand/cornerstone-logo.png"
           alt="Cornerstone"
-          className={cn("object-contain", isSmall ? "h-5 w-5" : "h-8 w-8")}
+          className={cn("object-contain", isSmall ? "h-7 w-7" : "h-10 w-10")}
         />
       </div>
       {!isSmall ? (
         <div>
           <p
             className={cn(
-              "text-[11px] uppercase tracking-[0.4em]",
-              isDark ? "text-white/70" : "text-muted-foreground"
+              "text-[10px] font-semibold uppercase tracking-[0.35em]",
+              isDark ? "text-white/60" : "text-muted-foreground"
             )}
           >
             Cornerstone
           </p>
           <p
             className={cn(
-              "text-2xl font-serif",
+              "text-xl font-serif font-light tracking-tight",
               isDark ? "text-white" : "text-foreground"
             )}
           >

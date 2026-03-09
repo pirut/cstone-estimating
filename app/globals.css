@@ -6,52 +6,54 @@
 
 @layer base {
   :root {
-    --background: 40 18% 97%;
-    --foreground: 25 14% 11%;
-    --card: 40 20% 99%;
-    --card-foreground: 25 14% 11%;
-    --popover: 40 20% 99%;
-    --popover-foreground: 25 14% 11%;
-    --primary: 25 14% 11%;
-    --primary-foreground: 40 30% 97%;
-    --secondary: 34 16% 92%;
-    --secondary-foreground: 25 12% 18%;
-    --accent: 33 56% 52%;
-    --accent-foreground: 25 20% 10%;
-    --muted: 36 14% 94%;
-    --muted-foreground: 25 8% 46%;
-    --destructive: 0 65% 48%;
-    --destructive-foreground: 0 0% 99%;
-    --border: 34 10% 86%;
-    --input: 34 10% 86%;
-    --ring: 33 56% 52%;
-    --radius: 12px;
+    /* Cornerstone Brand: Limestone (#F8F4E4) background, Black text, Gold (#D1A35A) accents */
+    --background: 43 65% 93%;
+    --foreground: 0 0% 0%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 0%;
+    --primary: 0 0% 0%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 40 30% 90%;
+    --secondary-foreground: 0 0% 8%;
+    --accent: 38 55% 59%;
+    --accent-foreground: 0 0% 0%;
+    --muted: 40 25% 92%;
+    --muted-foreground: 200 5% 38%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 38 18% 84%;
+    --input: 38 18% 84%;
+    --ring: 38 55% 59%;
+    --radius: 10px;
     --success: 152 56% 40%;
-    --success-foreground: 0 0% 99%;
+    --success-foreground: 0 0% 100%;
   }
 
   .dark {
-    --background: 25 10% 7%;
-    --foreground: 38 20% 95%;
-    --card: 25 8% 10%;
-    --card-foreground: 38 20% 95%;
-    --popover: 25 8% 10%;
-    --popover-foreground: 38 20% 95%;
-    --primary: 38 20% 95%;
-    --primary-foreground: 25 12% 8%;
-    --secondary: 25 6% 16%;
-    --secondary-foreground: 38 20% 95%;
-    --accent: 35 50% 53%;
-    --accent-foreground: 25 14% 8%;
-    --muted: 25 6% 15%;
-    --muted-foreground: 38 10% 62%;
-    --destructive: 0 58% 38%;
-    --destructive-foreground: 38 20% 95%;
-    --border: 25 6% 18%;
-    --input: 25 6% 18%;
-    --ring: 35 50% 53%;
+    /* Cornerstone Brand: Gunmetal (#343D42) base, White text, Gold accents */
+    --background: 198 11% 10%;
+    --foreground: 40 30% 96%;
+    --card: 198 10% 13%;
+    --card-foreground: 40 30% 96%;
+    --popover: 198 10% 13%;
+    --popover-foreground: 40 30% 96%;
+    --primary: 40 30% 96%;
+    --primary-foreground: 198 11% 10%;
+    --secondary: 198 8% 18%;
+    --secondary-foreground: 40 30% 96%;
+    --accent: 38 55% 57%;
+    --accent-foreground: 0 0% 0%;
+    --muted: 198 6% 16%;
+    --muted-foreground: 38 12% 58%;
+    --destructive: 0 62% 42%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 198 6% 20%;
+    --input: 198 6% 20%;
+    --ring: 38 55% 57%;
     --success: 152 48% 36%;
-    --success-foreground: 0 0% 99%;
+    --success-foreground: 0 0% 100%;
   }
 
   * {
@@ -60,16 +62,6 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    background-image:
-      radial-gradient(ellipse at 0% 0%, rgba(204, 170, 112, 0.08), transparent 50%),
-      radial-gradient(ellipse at 100% 100%, rgba(208, 179, 124, 0.06), transparent 50%);
-    background-attachment: fixed;
-  }
-
-  .dark body {
-    background-image:
-      radial-gradient(ellipse at 0% 0%, rgba(204, 170, 112, 0.06), transparent 50%),
-      radial-gradient(ellipse at 100% 100%, rgba(130, 95, 49, 0.08), transparent 50%);
   }
 
   h1,
@@ -80,7 +72,7 @@
   }
 
   ::selection {
-    background-color: hsl(var(--accent) / 0.35);
+    background-color: hsl(var(--accent) / 0.3);
     color: hsl(var(--foreground));
   }
 }
