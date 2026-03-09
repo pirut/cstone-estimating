@@ -856,12 +856,27 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
 
   useEffect(() => {
     if (typeof window === "undefined") return;
+    if (isEstimateMode) return; // handled by the back-block effect below
     const onPopState = () => {
       setUrlEstimateId(parseEstimateIdFromPathname(window.location.pathname));
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
-  }, []);
+  }, [isEstimateMode]);
+
+  // Block browser back navigation when viewing an estimate in its own tab.
+  // The user should close the tab instead of navigating away.
+  useEffect(() => {
+    if (typeof window === "undefined" || !isEstimateMode) return;
+    // Push a duplicate entry so pressing back stays on this page
+    window.history.pushState(null, "", window.location.href);
+    const onPopState = () => {
+      // Re-push to prevent actually going back
+      window.history.pushState(null, "", window.location.href);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, [isEstimateMode]);
 
   useEffect(() => {
     if (!teamName && teamDomain) {
