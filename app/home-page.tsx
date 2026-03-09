@@ -2941,9 +2941,9 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
             ) : null}
 
             {!isEstimateMode ? (
-            <div className="grid gap-6 lg:grid-cols-[minmax(280px,0.35fr)_minmax(0,0.65fr)] xl:grid-cols-[minmax(320px,0.35fr)_minmax(0,0.65fr)] items-start">
-              <div className="lg:sticky lg:top-[80px]" ref={projectsCardRef}>
-                <Card className="shadow-elevated flex flex-col overflow-hidden" style={{ maxHeight: estimatesCardHeight ? `${estimatesCardHeight}px` : undefined }}>
+            <div className="grid gap-6 lg:grid-cols-[minmax(280px,0.35fr)_minmax(0,0.65fr)] xl:grid-cols-[minmax(320px,0.35fr)_minmax(0,0.65fr)]">
+              <div ref={projectsCardRef} className="min-h-0">
+                <Card className="shadow-elevated flex flex-col overflow-hidden" style={{ height: estimatesCardHeight ? `${estimatesCardHeight}px` : undefined }}>
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base font-serif font-light tracking-tight">Projects</CardTitle>
@@ -2952,7 +2952,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                     </span>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-3 flex-1 flex flex-col">
+                <CardContent className="space-y-3 flex-1 flex flex-col min-h-0 overflow-hidden">
                   <div className="space-y-2">
                     {memberTeams.length > 1 ? (
                       <Select
@@ -3069,7 +3069,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                       </button>
                     </div>
                     {filteredProjectLibraryItems.length ? (
-                      <ScrollArea className="flex-1">
+                      <ScrollArea className="flex-1 min-h-0">
                         <div className="space-y-0.5">
                           {filteredProjectLibraryItems.map((project) => {
                             const isActive = activeProjectId === project.id;
