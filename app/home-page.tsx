@@ -2928,9 +2928,9 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
             ) : null}
 
             {!isEstimateMode ? (
-            <div className="grid gap-6 lg:grid-cols-[minmax(280px,0.35fr)_minmax(0,0.65fr)] xl:grid-cols-[minmax(320px,0.35fr)_minmax(0,0.65fr)]">
-              <div className="lg:sticky lg:top-[80px] lg:self-start">
-                <Card className="shadow-elevated">
+            <div className="grid gap-6 lg:grid-cols-[minmax(280px,0.35fr)_minmax(0,0.65fr)] xl:grid-cols-[minmax(320px,0.35fr)_minmax(0,0.65fr)] items-stretch">
+              <div className="flex flex-col">
+                <Card className="shadow-elevated flex-1 flex flex-col">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base font-serif font-light tracking-tight">Projects</CardTitle>
@@ -2939,7 +2939,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                     </span>
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="space-y-3 flex-1 flex flex-col">
                   <div className="space-y-2">
                     {memberTeams.length > 1 ? (
                       <Select
@@ -2959,7 +2959,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                       </Select>
                     ) : null}
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2 flex-1 flex flex-col min-h-0">
                     <div className="flex items-center gap-2">
                       <div className="relative flex-1">
                         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -3056,7 +3056,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                       </button>
                     </div>
                     {filteredProjectLibraryItems.length ? (
-                      <ScrollArea className="h-72">
+                      <ScrollArea className="flex-1 min-h-[200px]">
                         <div className="space-y-0.5">
                           {filteredProjectLibraryItems.map((project) => {
                             const isActive = activeProjectId === project.id;
