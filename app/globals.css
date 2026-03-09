@@ -140,6 +140,59 @@
     }
   }
 
+  @keyframes estimate-route-enter {
+    from {
+      opacity: 0;
+      transform: translate3d(28px, 0, 0);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0);
+    }
+  }
+
+  @keyframes route-forward-old {
+    to {
+      opacity: 0.72;
+      transform: translate3d(-34px, 0, 0) scale(0.985);
+    }
+  }
+
+  @keyframes route-forward-new {
+    from {
+      opacity: 0;
+      transform: translate3d(42px, 0, 0) scale(0.992);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+  }
+
+  @keyframes route-back-old {
+    to {
+      opacity: 0.72;
+      transform: translate3d(34px, 0, 0) scale(0.985);
+    }
+  }
+
+  @keyframes route-back-new {
+    from {
+      opacity: 0;
+      transform: translate3d(-42px, 0, 0) scale(0.992);
+    }
+    to {
+      opacity: 1;
+      transform: translate3d(0, 0, 0) scale(1);
+    }
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .estimate-route-enter {
+      animation: estimate-route-enter 420ms cubic-bezier(0.2, 0.78, 0.2, 1) both;
+    }
+  }
+
   @supports (view-transition-name: root) {
     html[data-theme-transition]::view-transition-group(root),
     html[data-theme-transition]::view-transition-old(root),
@@ -168,6 +221,22 @@
       clip-path: circle(0 at 50% 50%);
       animation: circle-theme-reveal var(--theme-transition-duration, 860ms)
         cubic-bezier(0.2, 0.72, 0.2, 1) both;
+    }
+
+    html[data-route-transition="forward"]::view-transition-old(root) {
+      animation: route-forward-old 220ms cubic-bezier(0.4, 0, 1, 1) both;
+    }
+
+    html[data-route-transition="forward"]::view-transition-new(root) {
+      animation: route-forward-new 360ms cubic-bezier(0.2, 0.78, 0.2, 1) both;
+    }
+
+    html[data-route-transition="back"]::view-transition-old(root) {
+      animation: route-back-old 220ms cubic-bezier(0.4, 0, 1, 1) both;
+    }
+
+    html[data-route-transition="back"]::view-transition-new(root) {
+      animation: route-back-new 360ms cubic-bezier(0.2, 0.78, 0.2, 1) both;
     }
   }
 }

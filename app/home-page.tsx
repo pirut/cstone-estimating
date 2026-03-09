@@ -2,6 +2,7 @@
 "use client";
 
 import {
+  startTransition,
   useCallback,
   useEffect,
   useMemo,
@@ -9,6 +10,7 @@ import {
   useState,
 } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { BrandMark } from "@/components/brand-mark";
 import { EstimateBuilderCard } from "@/components/estimate-builder-card";
 import {
@@ -149,6 +151,18 @@ function parseEstimateIdFromPathname(pathname: string) {
   }
 }
 
+function isPlainLeftClick(event: any) {
+  return Boolean(
+    event &&
+      !event.defaultPrevented &&
+      event.button === 0 &&
+      !event.metaKey &&
+      !event.ctrlKey &&
+      !event.shiftKey &&
+      !event.altKey
+  );
+}
+
 function mergeTotalsWithPandaDocValue(
   totals: Record<string, any> | null | undefined,
   generation: PandaDocGenerationResponse | null | undefined
@@ -178,6 +192,7 @@ function mergeTotalsWithPandaDocValue(
 }
 
 export default function HomePage({ routeEstimateId = null, mode = "dashboard" }: HomePageProps = {}) {
+  const router = useRouter();
   const isEstimateMode = mode === "estimate" && Boolean(routeEstimateId);
   const normalizedRouteEstimateId = String(routeEstimateId ?? "").trim();
   const [urlEstimateId, setUrlEstimateId] = useState<string | null>(
@@ -842,11 +857,18 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
 
   const updateEstimateUrl = useCallback(
     (estimateId: string | null, mode: "push" | "replace" = "push") => {
-      if (typeof window === "undefined") return;
       const nextPath = estimateId
         ? `/estimates/${encodeURIComponent(estimateId)}`
         : "/";
-      if (window.location.pathname !== nextPath) {
+      if (isEstimateMode) {
+        startTransition(() => {
+          if (mode === "replace") {
+            router.replace(nextPath);
+          } else {
+            router.push(nextPath);
+          }
+        });
+      } else if (typeof window !== "undefined" && window.location.pathname !== nextPath) {
         if (mode === "replace") {
           window.history.replaceState(window.history.state, "", nextPath);
         } else {
@@ -855,7 +877,38 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
       }
       setUrlEstimateId(estimateId);
     },
-    []
+    [isEstimateMode, router]
+  );
+
+  const navigateWithRouteTransition = useCallback(
+    (href: string, direction: "forward" | "back" = "forward") => {
+      const navigate = () => {
+        startTransition(() => {
+          router.push(href);
+        });
+      };
+
+      if (typeof document === "undefined") {
+        navigate();
+        return;
+      }
+
+      const root = document.documentElement;
+      root.setAttribute("data-route-transition", direction);
+      const cleanup = () => root.removeAttribute("data-route-transition");
+
+      if (typeof document.startViewTransition === "function") {
+        const transition = document.startViewTransition(() => {
+          navigate();
+        });
+        transition.finished.finally(cleanup);
+        return;
+      }
+
+      navigate();
+      window.setTimeout(cleanup, 420);
+    },
+    [router]
   );
 
   useEffect(() => {
@@ -864,23 +917,9 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    if (isEstimateMode) return; // handled by the back-block effect below
+    if (isEstimateMode) return;
     const onPopState = () => {
       setUrlEstimateId(parseEstimateIdFromPathname(window.location.pathname));
-    };
-    window.addEventListener("popstate", onPopState);
-    return () => window.removeEventListener("popstate", onPopState);
-  }, [isEstimateMode]);
-
-  // Block browser back navigation when viewing an estimate in its own tab.
-  // The user should close the tab instead of navigating away.
-  useEffect(() => {
-    if (typeof window === "undefined" || !isEstimateMode) return;
-    // Push a duplicate entry so pressing back stays on this page
-    window.history.pushState(null, "", window.location.href);
-    const onPopState = () => {
-      // Re-push to prevent actually going back
-      window.history.pushState(null, "", window.location.href);
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -3318,9 +3357,15 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                                   ) : (
                                     <Link
                                       href={estimateHref}
-                                      target="_blank"
-                                      rel="noreferrer"
                                       className="text-sm font-medium text-foreground hover:text-accent transition-colors"
+                                      onClick={(event) => {
+                                        if (!isPlainLeftClick(event)) return;
+                                        event.preventDefault();
+                                        navigateWithRouteTransition(
+                                          estimateHref,
+                                          "forward"
+                                        );
+                                      }}
                                     >
                                       {estimate.title ?? "Untitled"}
                                     </Link>
@@ -3808,12 +3853,23 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
         {(isEstimateMode || bidFlowStarted) ? (
           <section
             id="step-input"
-            className={cn("space-y-6", !isEstimateMode && "mt-10")}
+            className={cn(
+              "space-y-6",
+              !isEstimateMode && "mt-10",
+              isEstimateMode && "estimate-route-enter"
+            )}
           >
           {isEstimateMode ? (
             <div>
               <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground" asChild>
-                <Link href="/">
+                <Link
+                  href="/"
+                  onClick={(event) => {
+                    if (!isPlainLeftClick(event)) return;
+                    event.preventDefault();
+                    navigateWithRouteTransition("/", "back");
+                  }}
+                >
                   <ArrowLeft className="h-3 w-3" />
                   Dashboard
                 </Link>
