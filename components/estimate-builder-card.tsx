@@ -373,7 +373,6 @@ export function EstimateBuilderCard({
     Record<string, boolean>
   >({});
   const [editingSections, setEditingSections] = useState<Set<string>>(new Set());
-  const [isPanelSummaryOpen, setIsPanelSummaryOpen] = useState(false);
   const [expandedProductDetails, setExpandedProductDetails] = useState<Set<string>>(
     new Set()
   );
@@ -593,7 +592,7 @@ export function EstimateBuilderCard({
     setExchangeRateStatusByProduct({});
     setSectionOpenOverrides({});
     setEditingSections(new Set());
-    setIsPanelSummaryOpen(false);
+
   }, [loadPayload]);
 
   useEffect(() => {
@@ -996,7 +995,7 @@ export function EstimateBuilderCard({
     setExchangeRateStatusByProduct({});
     setSectionOpenOverrides({});
     setEditingSections(new Set());
-    setIsPanelSummaryOpen(false);
+
     onValuesChange(EMPTY_VALUES);
     onNameChange("");
     onSelectEstimate?.(null);
@@ -1284,32 +1283,26 @@ export function EstimateBuilderCard({
           </div>
         ) : null}
 
-        <section className="space-y-4">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-base font-serif font-light tracking-tight text-foreground">Estimate Session</p>
-            <Button variant="outline" size="sm" onClick={handleClear}>
-              Clear
-            </Button>
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-xs text-muted-foreground">
-              Estimate name
-            </label>
+        <section className="space-y-3">
+          <div className="flex items-center gap-3">
             <Input
-              className={inputClassName}
+              className={cn(inputClassName, "flex-1 text-base font-medium")}
               value={name}
               onChange={(event) => {
                 onNameChange(event.target.value);
                 onActivate?.();
               }}
-              placeholder="Smith Residence - January"
+              placeholder="Estimate name..."
             />
-            {selectedEstimate ? (
-              <p className="text-xs text-muted-foreground">
-                Loaded from: <span className="text-foreground">{selectedEstimate.name}</span>
-              </p>
-            ) : null}
+            <Button variant="ghost" size="sm" className="text-xs text-muted-foreground shrink-0" onClick={handleClear}>
+              Clear
+            </Button>
           </div>
+          {selectedEstimate ? (
+            <p className="text-xs text-muted-foreground">
+              Loaded from: <span className="text-foreground">{selectedEstimate.name}</span>
+            </p>
+          ) : null}
         </section>
 
         <Separator />
@@ -1692,9 +1685,9 @@ export function EstimateBuilderCard({
                     key={item.id}
                     className="rounded-lg border border-border/60 p-4"
                   >
-                    <div className="grid gap-3 lg:grid-cols-[1.8fr_0.8fr_0.8fr_auto]">
+                    <div className="grid gap-2 md:grid-cols-[1.8fr_0.8fr_0.8fr_auto]">
                       <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">Vendor</label>
+                        <label className="text-[11px] text-muted-foreground">Vendor</label>
                         <Select
                           value={selectedVendor}
                           onValueChange={(value) => {
@@ -1737,8 +1730,8 @@ export function EstimateBuilderCard({
                         </Select>
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">
-                          {usesEuroPricing ? "Price (USD, auto)" : "Price"}
+                        <label className="text-[11px] text-muted-foreground">
+                          {usesEuroPricing ? "Price (auto)" : "Price"}
                         </label>
                         <MoneyInput
                           className={inputSmClassName}
@@ -1752,7 +1745,7 @@ export function EstimateBuilderCard({
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">Markup</label>
+                        <label className="text-[11px] text-muted-foreground">Markup</label>
                         <PercentInput
                           className={inputSmClassName}
                           value={item.markup}
@@ -1999,30 +1992,8 @@ export function EstimateBuilderCard({
                       </div>
                     ) : null}
 
-                    <div className="mt-3 border-t border-border/40 pt-3">
-                      <button
-                        type="button"
-                        className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
-                        onClick={() => {
-                          setExpandedProductDetails((prev) => {
-                            const next = new Set(prev);
-                            const key = `${item.id}-features`;
-                            if (next.has(key)) next.delete(key); else next.add(key);
-                            return next;
-                          });
-                        }}
-                      >
-                        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", !expandedProductDetails.has(`${item.id}-features`) && "-rotate-90")} />
-                        Features
-                        {!expandedProductDetails.has(`${item.id}-features`) ? (
-                          <span className="text-foreground/60 ml-1">
-                            {[item.interior_frame_color, item.glass_type].filter(Boolean).join(", ") || "Not configured"}
-                          </span>
-                        ) : null}
-                      </button>
-                      {expandedProductDetails.has(`${item.id}-features`) ? (
-                      <div className="mt-3 space-y-3">
-                      <div className="grid gap-3 md:grid-cols-2">
+                    <div className="mt-3 border-t border-border/40 pt-3 space-y-3">
+                      <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
                         {visibleFeatureFields.map((field) => {
                           const options =
                             field.key === "interior_frame_color" &&
@@ -2033,7 +2004,7 @@ export function EstimateBuilderCard({
                           const isDisabled = Boolean(legacyValues);
                           return (
                             <div key={`${item.id}-${field.key}`} className="space-y-1">
-                              <label className="text-xs text-muted-foreground">
+                              <label className="text-[11px] text-muted-foreground">
                                 {field.label}
                               </label>
                               <FeatureOptionCombobox
@@ -2054,7 +2025,7 @@ export function EstimateBuilderCard({
                                 }}
                                 placeholder={
                                   options.length
-                                    ? `Select or type ${field.label.toLowerCase()}`
+                                    ? field.label
                                     : `Type ${field.label.toLowerCase()}`
                                 }
                                 disabled={isDisabled}
@@ -2063,9 +2034,8 @@ export function EstimateBuilderCard({
                           );
                         })}
                       </div>
-
                       <div className="flex flex-wrap gap-x-5 gap-y-2">
-                        <label className="flex items-center gap-2 text-sm text-foreground">
+                        <label className="flex items-center gap-2 text-xs text-foreground">
                           <Checkbox
                             checked={item.split_finish}
                             onCheckedChange={(checked) =>
@@ -2080,7 +2050,7 @@ export function EstimateBuilderCard({
                           />
                           Split finish
                         </label>
-                        <label className="flex items-center gap-2 text-sm text-foreground">
+                        <label className="flex items-center gap-2 text-xs text-foreground">
                           <Checkbox
                             checked={item.stainless_operating_hardware}
                             onCheckedChange={(checked) =>
@@ -2092,7 +2062,7 @@ export function EstimateBuilderCard({
                           />
                           SS hardware
                         </label>
-                        <label className="flex items-center gap-2 text-sm text-foreground">
+                        <label className="flex items-center gap-2 text-xs text-foreground">
                           <Checkbox
                             checked={item.has_screens}
                             onCheckedChange={(checked) =>
@@ -2105,8 +2075,6 @@ export function EstimateBuilderCard({
                           Screens
                         </label>
                       </div>
-                      </div>
-                      ) : null}
                     </div>
                   </div>
                 );
@@ -2200,11 +2168,10 @@ export function EstimateBuilderCard({
                 return (
                   <div
                     key={item.id}
-                    className="rounded-lg border border-border/60 p-3"
+                    className="rounded-lg border border-border/60 p-3 space-y-2"
                   >
-                    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
-                      <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">Vendor</label>
+                    <div className="flex items-start gap-2">
+                      <div className="grid flex-1 gap-2 md:grid-cols-2">
                         <Select
                           value={
                             vendorOptions.some(
@@ -2221,7 +2188,7 @@ export function EstimateBuilderCard({
                           disabled={Boolean(legacyValues) || !vendorOptions.length}
                         >
                           <SelectTrigger className={inputSmClassName}>
-                            <SelectValue placeholder="Select vendor" />
+                            <SelectValue placeholder="Vendor" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="__none__">Select vendor</SelectItem>
@@ -2232,9 +2199,6 @@ export function EstimateBuilderCard({
                             ))}
                           </SelectContent>
                         </Select>
-                      </div>
-                      <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">Unit Type</label>
                         <Select
                           value={
                             panelTypeOptions.some((panel) => panel.id === item.unit_type)
@@ -2249,7 +2213,7 @@ export function EstimateBuilderCard({
                           disabled={Boolean(legacyValues) || !panelTypeOptions.length}
                         >
                           <SelectTrigger className={inputSmClassName}>
-                            <SelectValue placeholder="Select unit type" />
+                            <SelectValue placeholder="Unit type" />
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="__none__">Select unit type</SelectItem>
@@ -2261,8 +2225,26 @@ export function EstimateBuilderCard({
                           </SelectContent>
                         </Select>
                       </div>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 shrink-0 text-muted-foreground"
+                        onClick={() => {
+                          const next = draft.bucking.filter((_, idx) => idx !== index);
+                          handleDraftChange({
+                            ...draft,
+                            bucking: next.length ? next : DEFAULT_DRAFT.bucking,
+                          });
+                        }}
+                        disabled={draft.bucking.length === 1 || Boolean(legacyValues)}
+                        aria-label="Remove bucking line"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
                       <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">Qty</label>
+                        <label className="text-[11px] text-muted-foreground">Qty</label>
                         <Input
                           className={inputSmClassName}
                           value={item.qty}
@@ -2275,7 +2257,7 @@ export function EstimateBuilderCard({
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">SqFt</label>
+                        <label className="text-[11px] text-muted-foreground">SqFt</label>
                         <Input
                           className={inputSmClassName}
                           value={item.sqft}
@@ -2288,7 +2270,7 @@ export function EstimateBuilderCard({
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">Replacement</label>
+                        <label className="text-[11px] text-muted-foreground">Replacement</label>
                         <Input
                           className={inputSmClassName}
                           value={item.replacement_qty}
@@ -2303,7 +2285,7 @@ export function EstimateBuilderCard({
                         />
                       </div>
                       <div className="space-y-1">
-                        <label className="text-xs text-muted-foreground">Clerestory</label>
+                        <label className="text-[11px] text-muted-foreground">Clerestory</label>
                         <Input
                           className={inputSmClassName}
                           value={item.clerestory_qty}
@@ -2317,25 +2299,10 @@ export function EstimateBuilderCard({
                           disabled={Boolean(legacyValues)}
                         />
                       </div>
-                      <div className="flex items-end justify-between gap-2">
-                        <p className="px-1 py-2 text-sm font-semibold text-foreground tabular-nums">
-                          {lineal ? `${lineal.toFixed(2)} ft` : "-"}
+                      <div className="flex items-end">
+                        <p className="px-1 py-2 text-sm font-semibold text-foreground tabular-nums whitespace-nowrap">
+                          {lineal ? `${lineal.toFixed(1)} ft` : "-"}
                         </p>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => {
-                            const next = draft.bucking.filter((_, idx) => idx !== index);
-                            handleDraftChange({
-                              ...draft,
-                              bucking: next.length ? next : DEFAULT_DRAFT.bucking,
-                            });
-                          }}
-                          disabled={draft.bucking.length === 1 || Boolean(legacyValues)}
-                          aria-label="Remove bucking line"
-                        >
-                          <X className="h-4 w-4" />
-                        </Button>
                       </div>
                     </div>
                   </div>
@@ -2431,68 +2398,41 @@ export function EstimateBuilderCard({
               Use `+` or `-` to adjust from the calculated install total.
             </p>
 
-            <div className="space-y-3 rounded-lg border border-border/60 p-3">
-              <button
-                type="button"
-                className="flex w-full items-center justify-between gap-3 text-left"
-                onClick={() => setIsPanelSummaryOpen((prev) => !prev)}
-              >
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">
-                    Panel count summary
-                  </p>
-                  {!isPanelSummaryOpen ? (
-                    <p className="text-[11px] text-muted-foreground">
-                      Expand to review counts and set unit cost overrides.
-                    </p>
-                  ) : null}
-                </div>
-                <ChevronDown
-                  className={cn(
-                    "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
-                    !isPanelSummaryOpen && "-rotate-90"
-                  )}
-                />
-              </button>
-              {isPanelSummaryOpen ? (
-              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                {panelTypeOptions.map((panel) => {
-                  const counts = computed.panelCounts[panel.id];
-                  return (
-                    <div
-                      key={panel.id}
-                      className="rounded-lg border border-border/60 px-3 py-2.5"
-                    >
+            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              {panelTypeOptions.map((panel) => {
+                const counts = computed.panelCounts[panel.id];
+                return (
+                  <div
+                    key={panel.id}
+                    className="rounded-lg border border-border/60 px-3 py-2"
+                  >
+                    <div className="flex items-center justify-between gap-2">
                       <p className="text-sm font-medium text-foreground">{panel.label}</p>
-                      <p className="text-xs text-muted-foreground">
-                        Qty {counts.total_qty} &middot; Clerestory {counts.clerestory_qty} &middot; Replacement {counts.replacement_qty}
+                      <p className="text-[11px] text-muted-foreground tabular-nums">
+                        {counts.total_qty} qty
                       </p>
-                      <div className="mt-2 space-y-1">
-                        <label className="text-xs text-muted-foreground">
-                          Cost override
-                        </label>
-                        <MoneyInput
-                          className={inputSmClassName}
-                          value={
-                            draft.calculator.unit_type_cost_overrides[panel.id] ?? ""
-                          }
-                          onValueChange={(value) =>
-                            handleUnitTypeCostOverrideChange(panel.id, value)
-                          }
-                          currency="USD"
-                          placeholder={
-                            Number.isFinite(panel.price) && panel.price > 0
-                              ? panel.price.toFixed(2)
-                              : "0"
-                          }
-                          disabled={Boolean(legacyValues)}
-                        />
-                      </div>
                     </div>
-                  );
-                })}
-              </div>
-              ) : null}
+                    <div className="mt-1.5">
+                      <MoneyInput
+                        className={inputSmClassName}
+                        value={
+                          draft.calculator.unit_type_cost_overrides[panel.id] ?? ""
+                        }
+                        onValueChange={(value) =>
+                          handleUnitTypeCostOverrideChange(panel.id, value)
+                        }
+                        currency="USD"
+                        placeholder={
+                          Number.isFinite(panel.price) && panel.price > 0
+                            ? `${panel.price.toFixed(2)} default`
+                            : "Cost override"
+                        }
+                        disabled={Boolean(legacyValues)}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
             <div className="text-xs text-muted-foreground">

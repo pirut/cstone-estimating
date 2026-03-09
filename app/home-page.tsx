@@ -80,14 +80,10 @@ import {
   ArrowDownToLine,
   ArrowLeft,
   ArrowRightLeft,
-  CheckCircle2,
   Clock3,
-  CircleDashed,
   Eye,
   FileText,
-  FolderKanban,
   History,
-  LayoutTemplate,
   Loader2,
   PencilLine,
   Plus,
@@ -1416,23 +1412,6 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
     status.tone === "idle" && "border-white/20 bg-white/5 text-white/70"
   );
 
-  const workflowMilestones = [
-    {
-      id: "input",
-      label: "Manual estimate is complete",
-      done: hasEstimateValues,
-    },
-    {
-      id: "generate",
-      label: "PandaDoc is ready to generate",
-      done: canGenerate,
-    },
-  ] as const;
-  const workflowPercent = Math.round(
-    (workflowMilestones.filter((item) => item.done).length /
-      workflowMilestones.length) *
-      100
-  );
   const progressPercent = Math.max(0, Math.min(Math.round(progress * 100), 100));
 
   const buildCurrentEstimateSnapshot = useCallback((): EstimateSnapshot => {
@@ -2797,73 +2776,6 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
     templateConfigLoading,
   ]);
 
-  const templateCard = (
-    <Card
-      id="step-template"
-      className="shadow-elevated"
-    >
-      <CardHeader className="pb-3">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-base font-serif font-light tracking-tight">Presets</CardTitle>
-          <Badge variant="outline" className="text-[10px] text-muted-foreground">Optional</Badge>
-        </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        {templateConfigError ? (
-          <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-            {templateConfigError}
-          </div>
-        ) : null}
-        {templateConfigLoading ? (
-          <div className="text-sm text-muted-foreground">
-            Loading template configuration...
-          </div>
-        ) : null}
-        {library.template_config.loading ? (
-          <div className="text-sm text-muted-foreground">
-            Loading template configuration...
-          </div>
-        ) : activeTemplateConfigItem ? (
-          <div className="rounded-xl border border-border bg-muted/30 px-4 py-3">
-            <p className="text-sm font-medium text-foreground">
-              {activeTemplateConfigItem.name}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              Active team preset. Updated{" "}
-              {new Date(activeTemplateConfigItem.uploadedAt).toLocaleString()}.
-            </p>
-          </div>
-        ) : (
-          <div className="text-sm text-muted-foreground">No preset.</div>
-        )}
-        <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-          <span>
-            Active preset:{" "}
-            <span className="text-foreground">
-              {templateConfig
-                ? formatTemplateDisplayName(
-                    templateConfig.name,
-                    templateConfig.templateVersion
-                  )
-                : "None"}
-            </span>
-          </span>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              setTemplateConfigError(null);
-              setLoadedTemplateConfigKey(null);
-              void loadLibrary("template_config");
-            }}
-          >
-            Refresh
-          </Button>
-        </div>
-      </CardContent>
-    </Card>
-  );
-
   return (
     <main className="relative min-h-screen">
       <ConvexAuthSync
@@ -3854,13 +3766,10 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
         {(isEstimateMode || bidFlowStarted) ? (
           <section
             id="step-input"
-            className={cn(
-              "grid gap-6 xl:grid-cols-[minmax(0,1.3fr)_minmax(340px,0.7fr)]",
-              !isEstimateMode && "mt-10"
-            )}
+            className={cn("space-y-6", !isEstimateMode && "mt-10")}
           >
           {isEstimateMode ? (
-            <div className="col-span-full">
+            <div>
               <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground" asChild>
                 <Link href="/">
                   <ArrowLeft className="h-3 w-3" />
@@ -3869,7 +3778,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
               </Button>
             </div>
           ) : null}
-          <div className="space-y-6">
+
             <EstimateBuilderCard
               values={estimateValues}
               onValuesChange={setEstimateValues}
@@ -3890,115 +3799,9 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                 setError(null);
               }}
             />
-            <Card className="shadow-subtle">
-              <CardContent className="pt-4 space-y-3">
-                <div className="flex items-center gap-2">
-                  <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                  <Input
-                    value={estimateTagInput}
-                    onChange={(event) => setEstimateTagInput(event.target.value)}
-                    onKeyDown={(event) => {
-                      if (event.key !== "Enter" && event.key !== ",") return;
-                      event.preventDefault();
-                      if (addEstimateTag(estimateTagInput)) {
-                        setEstimateTagInput("");
-                      }
-                    }}
-                    placeholder="Add tag..."
-                    className="flex-1"
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => {
-                      if (addEstimateTag(estimateTagInput)) {
-                        setEstimateTagInput("");
-                      }
-                    }}
-                    disabled={!estimateTagInput.trim()}
-                  >
-                    Add
-                  </Button>
-                </div>
-                {estimateTags.length ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {estimateTags.map((tag) => (
-                      <Badge
-                        key={tag}
-                        variant="muted"
-                        className="inline-flex items-center gap-1"
-                      >
-                        {tag}
-                        <button
-                          type="button"
-                          className="rounded-full p-0.5 hover:bg-black/10"
-                          onClick={() => removeEstimateTag(tag)}
-                          aria-label={`Remove ${tag}`}
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    ))}
-                  </div>
-                ) : null}
-              </CardContent>
-            </Card>
-          </div>
 
-          <div className="space-y-6">
-            <Card className="shadow-elevated overflow-hidden">
-              <div className="bg-cs-gunmetal px-5 py-4 dark:bg-card dark:border-b dark:border-border">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-white/80 dark:text-muted-foreground">Progress</span>
-                  <span className="text-lg font-serif font-light text-cs-gold">{workflowPercent}%</span>
-                </div>
-                <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-white/15 dark:bg-muted">
-                  <div
-                    className="h-full rounded-full bg-cs-gold transition-all duration-500"
-                    style={{ width: `${workflowPercent}%` }}
-                  />
-                </div>
-              </div>
-              <CardContent className="space-y-3 pt-4">
-                {workflowMilestones.map((milestone) => (
-                  <div key={`quick-${milestone.id}`} className="flex items-center gap-2.5 text-sm">
-                    {milestone.done ? (
-                      <CheckCircle2 className="h-4 w-4 text-accent" />
-                    ) : (
-                      <CircleDashed className="h-4 w-4 text-muted-foreground/40" />
-                    )}
-                    <span className={milestone.done ? "text-foreground" : "text-muted-foreground"}>
-                      {milestone.label}
-                    </span>
-                  </div>
-                ))}
-                <Separator className="my-2" />
-                <div className="space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Project</span>
-                    <span className="font-medium text-foreground truncate ml-4 text-right">
-                      {activeProject?.name ?? "Not selected"}
-                    </span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Tags</span>
-                    <span className="font-medium text-foreground">{estimateTags.length}</span>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {templateCard}
-
-            <Card
-              id="step-generate"
-              className="h-fit shadow-elevated xl:sticky xl:top-[80px] xl:self-start"
-            >
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base font-serif font-light tracking-tight">Generate PandaDoc</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
+            <Card id="step-generate" className="shadow-elevated">
+              <CardContent className="pt-5 space-y-4">
                 {error ? (
                   <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
                     {error}
@@ -4018,72 +3821,10 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                     </div>
                   </div>
                 ) : null}
-                <div className="space-y-1.5 text-sm">
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-muted-foreground">Estimate</span>
-                    <span className="truncate text-right font-medium text-foreground ml-4">
-                      {estimateName.trim() ||
-                        selectedEstimate?.name ||
-                        (hasEstimateInput ? "Manual entry" : "Not started")}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-muted-foreground">Preset</span>
-                    <span className="truncate text-right font-medium text-foreground ml-4">
-                      {templateConfig
-                        ? formatTemplateDisplayName(
-                            templateConfig.name,
-                            templateConfig.templateVersion
-                          )
-                        : "Not selected"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-muted-foreground">PandaDoc</span>
-                    <span className="truncate text-right font-medium text-foreground ml-4">
-                      {activeTrackedPandaDocDocument?.documentId
-                        ? `Revising ${activeTrackedPandaDocDocument.name ?? activeTrackedPandaDocDocument.documentId}`
-                        : "New document"}
-                    </span>
-                  </div>
-                  {activeTrackedPandaDocDocument?.documentId ? (
-                    <div className="flex items-center justify-between gap-4">
-                      <span className="text-muted-foreground">Status</span>
-                      <span className="text-right font-medium text-foreground">
-                        {linkedDocumentLive?.loading
-                          ? "Checking..."
-                          : formatPandaDocStatus(resolvedTrackedDocumentStatus)}
-                      </span>
-                    </div>
-                  ) : null}
-                </div>
-                <Separator />
-                {activeTrackedPandaDocDocument?.documentId &&
-                trackedDocumentNeedsDraftRevert ? (
-                  <p className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-900">
-                    Current document status is{" "}
-                    {formatPandaDocStatus(resolvedTrackedDocumentStatus)}. Regenerate
-                    will move it back to Draft so revisions can be applied.
-                  </p>
-                ) : null}
-                {activeTrackedPandaDocDocument?.documentId &&
-                trackedDocumentIsArchived ? (
-                  <p className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-900">
-                    The linked document is no longer accessible (assumed archived).
-                    Regenerate will create a replacement document and continue
-                    tracking from there.
-                  </p>
-                ) : null}
-                {activeTrackedPandaDocDocument?.documentId &&
-                linkedDocumentLive?.error ? (
-                  <p className="text-xs text-muted-foreground">
-                    Unable to refresh PandaDoc status: {linkedDocumentLive.error}
-                  </p>
-                ) : null}
-                <div className="flex flex-col gap-3">
+
+                <div className="flex flex-wrap items-center gap-3">
                   <Button
                     variant="secondary"
-                    size="lg"
                     onClick={() => void handleSaveEstimateToDb()}
                     disabled={!isSignedIn || !teamReady || !hasSelectedProject}
                   >
@@ -4092,7 +3833,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                   </Button>
                   <Button
                     variant="accent"
-                    size="lg"
+                    className="shadow-glow/50"
                     onClick={handleGenerate}
                     disabled={!canGenerate || isGenerating}
                   >
@@ -4105,6 +3846,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                   </Button>
                   <Button
                     variant="secondary"
+                    size="sm"
                     onClick={() => void handleCopyPlanningLines()}
                     disabled={
                       !canDownloadPlanningLines ||
@@ -4113,74 +3855,124 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                     }
                   >
                     {isPlanningLinesCopying ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     ) : (
-                      <FileText className="h-4 w-4" />
+                      <FileText className="h-3.5 w-3.5" />
                     )}
                     {isPlanningLinesCopying
-                      ? "Copying planning lines..."
-                      : "Copy _SYNC rows now"}
+                      ? "Copying..."
+                      : "Copy _SYNC rows"}
                   </Button>
                 </div>
-                {lastGeneration?.document?.id ? (
-                  <div className="space-y-2 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm">
-                    <p className="font-medium text-foreground">
-                      Last document: {lastGeneration.document.name ?? lastGeneration.document.id}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {lastGeneration.operation === "updated"
-                        ? "Operation: revised existing document"
-                        : lastGeneration.fallbackFromDocumentId
-                          ? "Operation: created replacement document"
-                          : "Operation: created new document"}
-                    </p>
-                    {lastGeneration.revision?.revertedToDraft ? (
-                      <p className="text-xs text-muted-foreground">
-                        Reverted from{" "}
-                        {formatPandaDocStatus(
-                          lastGeneration.revision.previousStatus
-                        )}{" "}
-                        to Draft before applying updates.
-                      </p>
-                    ) : null}
-                    <p className="text-xs text-muted-foreground">
-                      Status: {formatPandaDocStatus(lastGeneration.document.status)}
-                      {lastGeneration.businessCentralSync?.status
-                        ? ` · Business Central sync: ${lastGeneration.businessCentralSync.status}`
-                        : ""}
-                    </p>
-                    <div className="flex flex-wrap gap-2">
-                      {lastGeneration.session?.url ? (
-                        <Button asChild size="sm" variant="outline">
-                          <a href={lastGeneration.session.url} target="_blank" rel="noreferrer">
-                            Open signing session
-                          </a>
-                        </Button>
-                      ) : null}
-                      {lastGeneration.document?.sharedLink ? (
-                        <Button asChild size="sm" variant="outline">
-                          <a
-                            href={lastGeneration.document.sharedLink}
-                            target="_blank"
-                            rel="noreferrer"
+
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                  {activeTrackedPandaDocDocument?.documentId ? (
+                    <span>
+                      PandaDoc: <span className="text-foreground">{activeTrackedPandaDocDocument.name ?? activeTrackedPandaDocDocument.documentId}</span>
+                      {" · "}
+                      {linkedDocumentLive?.loading
+                        ? "checking..."
+                        : formatPandaDocStatus(resolvedTrackedDocumentStatus)}
+                    </span>
+                  ) : null}
+                  {templateConfig ? (
+                    <span>
+                      Preset: <span className="text-foreground">{formatTemplateDisplayName(templateConfig.name, templateConfig.templateVersion)}</span>
+                    </span>
+                  ) : null}
+                </div>
+
+                {activeTrackedPandaDocDocument?.documentId &&
+                trackedDocumentNeedsDraftRevert ? (
+                  <p className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-900">
+                    Document status is{" "}
+                    {formatPandaDocStatus(resolvedTrackedDocumentStatus)}. Regenerate
+                    will move it back to Draft.
+                  </p>
+                ) : null}
+                {activeTrackedPandaDocDocument?.documentId &&
+                trackedDocumentIsArchived ? (
+                  <p className="rounded-lg border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs text-amber-900">
+                    The linked document is archived. Regenerate will create a replacement.
+                  </p>
+                ) : null}
+                {activeTrackedPandaDocDocument?.documentId &&
+                linkedDocumentLive?.error ? (
+                  <p className="text-xs text-muted-foreground">
+                    Unable to refresh PandaDoc status: {linkedDocumentLive.error}
+                  </p>
+                ) : null}
+
+                <div className="flex items-center gap-2">
+                  <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                  <Input
+                    value={estimateTagInput}
+                    onChange={(event) => setEstimateTagInput(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== ",") return;
+                      event.preventDefault();
+                      if (addEstimateTag(estimateTagInput)) {
+                        setEstimateTagInput("");
+                      }
+                    }}
+                    placeholder="Add tag..."
+                    className="flex-1 max-w-xs"
+                  />
+                  {estimateTags.length ? (
+                    <div className="flex flex-wrap gap-1.5">
+                      {estimateTags.map((tag) => (
+                        <Badge
+                          key={tag}
+                          variant="muted"
+                          className="inline-flex items-center gap-1"
+                        >
+                          {tag}
+                          <button
+                            type="button"
+                            className="rounded-full p-0.5 hover:bg-black/10"
+                            onClick={() => removeEstimateTag(tag)}
+                            aria-label={`Remove ${tag}`}
                           >
-                            Open recipient link
-                          </a>
-                        </Button>
-                      ) : null}
-                      {lastGeneration.document?.appUrl ? (
-                        <Button asChild size="sm" variant="outline">
-                          <a href={lastGeneration.document.appUrl} target="_blank" rel="noreferrer">
-                            Open PandaDoc
-                          </a>
-                        </Button>
-                      ) : null}
+                            <X className="h-3 w-3" />
+                          </button>
+                        </Badge>
+                      ))}
                     </div>
+                  ) : null}
+                </div>
+
+                {lastGeneration?.document?.id ? (
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-border bg-muted/30 px-4 py-3 text-sm">
+                    <span className="text-xs text-muted-foreground">
+                      Last: {lastGeneration.document.name ?? lastGeneration.document.id}
+                      {" · "}
+                      {formatPandaDocStatus(lastGeneration.document.status)}
+                    </span>
+                    {lastGeneration.session?.url ? (
+                      <Button asChild size="sm" variant="outline" className="h-7 text-xs">
+                        <a href={lastGeneration.session.url} target="_blank" rel="noreferrer">
+                          Signing session
+                        </a>
+                      </Button>
+                    ) : null}
+                    {lastGeneration.document?.sharedLink ? (
+                      <Button asChild size="sm" variant="outline" className="h-7 text-xs">
+                        <a href={lastGeneration.document.sharedLink} target="_blank" rel="noreferrer">
+                          Recipient link
+                        </a>
+                      </Button>
+                    ) : null}
+                    {lastGeneration.document?.appUrl ? (
+                      <Button asChild size="sm" variant="outline" className="h-7 text-xs">
+                        <a href={lastGeneration.document.appUrl} target="_blank" rel="noreferrer">
+                          Open PandaDoc
+                        </a>
+                      </Button>
+                    ) : null}
                   </div>
                 ) : null}
               </CardContent>
             </Card>
-          </div>
           </section>
         ) : (
           <section className="mt-10">
