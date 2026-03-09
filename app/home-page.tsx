@@ -238,9 +238,6 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
   const [knownOrgLookupLoaded, setKnownOrgLookupLoaded] = useState(false);
   const [editingEstimateId, setEditingEstimateId] = useState<string | null>(null);
   const [historyEstimateId, setHistoryEstimateId] = useState<string | null>(null);
-  const projectsCardRef = useRef<HTMLDivElement>(null);
-  const estimatesCardRef = useRef<HTMLDivElement>(null);
-  const [estimatesCardHeight, setEstimatesCardHeight] = useState<number | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyActionId, setHistoryActionId] = useState<string | null>(null);
   const [movingEstimateId, setMovingEstimateId] = useState<string | null>(null);
@@ -864,16 +861,6 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
   useEffect(() => {
     setUrlEstimateId(normalizedRouteEstimateId || null);
   }, [normalizedRouteEstimateId]);
-
-  useEffect(() => {
-    const el = estimatesCardRef.current;
-    if (!el) return;
-    const observer = new ResizeObserver(() => {
-      setEstimatesCardHeight(el.offsetHeight);
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2942,8 +2929,8 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
 
             {!isEstimateMode ? (
             <div className="grid gap-6 lg:grid-cols-[minmax(280px,0.35fr)_minmax(0,0.65fr)] xl:grid-cols-[minmax(320px,0.35fr)_minmax(0,0.65fr)]">
-              <div ref={projectsCardRef} className="min-h-0">
-                <Card className="shadow-elevated flex flex-col overflow-hidden" style={{ height: estimatesCardHeight ? `${estimatesCardHeight}px` : undefined }}>
+              <div className="min-h-0 lg:h-full">
+                <Card className="shadow-elevated flex h-full min-h-0 flex-col overflow-hidden">
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base font-serif font-light tracking-tight">Projects</CardTitle>
@@ -3181,7 +3168,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                 </Card>
               </div>
 
-              <Card ref={estimatesCardRef} className="shadow-elevated">
+              <Card className="shadow-elevated flex h-full min-h-0 flex-col overflow-hidden">
                 <CardHeader className="space-y-3 pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base font-serif font-light tracking-tight">
@@ -3219,7 +3206,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                     ) : null}
                   </div>
                 </CardHeader>
-                <CardContent className="space-y-3">
+                <CardContent className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
                   {projectActionNotice ? (
                     <div className="rounded-lg border border-emerald-600/20 bg-emerald-50 px-4 py-2.5 text-sm text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300">
                       {projectActionNotice}
@@ -3236,17 +3223,19 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                       New estimate
                     </Button>
                   </div>
-                  {!teamReady ? (
-                    <div className="text-sm text-muted-foreground">
-                      Preparing your team workspace...
-                    </div>
-                  ) : !activeProjectId ? (
-                    <div className="rounded-xl border border-border bg-muted/30 px-4 py-4 text-sm text-muted-foreground">
-                      Create your first project to start organizing estimates.
-                    </div>
-                  ) : filteredTeamEstimates.length ? (
-                    <div className="space-y-1">
-                      {filteredTeamEstimates.map((estimate) => {
+                  <ScrollArea className="min-h-0 flex-1">
+                    <div className="space-y-3 pr-4">
+                      {!teamReady ? (
+                        <div className="text-sm text-muted-foreground">
+                          Preparing your team workspace...
+                        </div>
+                      ) : !activeProjectId ? (
+                        <div className="rounded-xl border border-border bg-muted/30 px-4 py-4 text-sm text-muted-foreground">
+                          Create your first project to start organizing estimates.
+                        </div>
+                      ) : filteredTeamEstimates.length ? (
+                        <div className="space-y-1">
+                          {filteredTeamEstimates.map((estimate) => {
                           const currentVersion = getCurrentVersionForEstimate(estimate);
                           const historyOpen = historyEstimateId === estimate.id;
                           const editingCurrent = editingEstimateId === estimate.id;
@@ -3468,23 +3457,23 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                             </div>
                           );
                         })}
-                    </div>
-                  ) : (
-                    <p className="py-8 text-center text-sm text-muted-foreground">
-                      {teamEstimates.length
-                        ? "No estimates match your filters."
-                        : activeProjectId === UNASSIGNED_PROJECT_KEY
-                          ? "No unassigned estimates."
-                          : "No estimates in this project yet."}
-                    </p>
-                  )}
-                  {historyError ? (
-                    <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                      {historyError}
-                    </div>
-                  ) : null}
-                  {selectedHistoryEstimate ? (
-                    <div className="space-y-2 rounded-lg border border-border bg-card p-3">
+                        </div>
+                      ) : (
+                        <p className="py-8 text-center text-sm text-muted-foreground">
+                          {teamEstimates.length
+                            ? "No estimates match your filters."
+                            : activeProjectId === UNASSIGNED_PROJECT_KEY
+                              ? "No unassigned estimates."
+                              : "No estimates in this project yet."}
+                        </p>
+                      )}
+                      {historyError ? (
+                        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                          {historyError}
+                        </div>
+                      ) : null}
+                      {selectedHistoryEstimate ? (
+                        <div className="space-y-2 rounded-lg border border-border bg-card p-3">
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-sm font-medium text-foreground">
                           History: {selectedHistoryEstimate.title ?? "Untitled"}
@@ -3767,8 +3756,10 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                   {editingEstimateId ? (
                     <div className="text-xs text-muted-foreground">
                       Editing a project estimate.
+                        </div>
+                      ) : null}
                     </div>
-                  ) : null}
+                  </ScrollArea>
                 </CardContent>
               </Card>
             </div>
