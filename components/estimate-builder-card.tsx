@@ -376,6 +376,7 @@ export function EstimateBuilderCard({
   const [expandedProductDetails, setExpandedProductDetails] = useState<Set<string>>(
     new Set()
   );
+  const [isPanelSummaryOpen, setIsPanelSummaryOpen] = useState(false);
   const addressLookupRequestRef = useRef(0);
   const normalizedPreparedByName = preparedByName?.trim() ?? "";
 
@@ -2398,41 +2399,53 @@ export function EstimateBuilderCard({
               Use `+` or `-` to adjust from the calculated install total.
             </p>
 
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-              {panelTypeOptions.map((panel) => {
-                const counts = computed.panelCounts[panel.id];
-                return (
-                  <div
-                    key={panel.id}
-                    className="rounded-lg border border-border/60 px-3 py-2"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-sm font-medium text-foreground">{panel.label}</p>
-                      <p className="text-[11px] text-muted-foreground tabular-nums">
-                        {counts.total_qty} qty
-                      </p>
-                    </div>
-                    <div className="mt-1.5">
-                      <MoneyInput
-                        className={inputSmClassName}
-                        value={
-                          draft.calculator.unit_type_cost_overrides[panel.id] ?? ""
-                        }
-                        onValueChange={(value) =>
-                          handleUnitTypeCostOverrideChange(panel.id, value)
-                        }
-                        currency="USD"
-                        placeholder={
-                          Number.isFinite(panel.price) && panel.price > 0
-                            ? `${panel.price.toFixed(2)} default`
-                            : "Cost override"
-                        }
-                        disabled={Boolean(legacyValues)}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+            <div>
+              <button
+                type="button"
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+                onClick={() => setIsPanelSummaryOpen((prev) => !prev)}
+              >
+                <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", !isPanelSummaryOpen && "-rotate-90")} />
+                Unit cost overrides
+              </button>
+              {isPanelSummaryOpen ? (
+                <div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+                  {panelTypeOptions.map((panel) => {
+                    const counts = computed.panelCounts[panel.id];
+                    return (
+                      <div
+                        key={panel.id}
+                        className="rounded-lg border border-border/60 px-3 py-2"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <p className="text-sm font-medium text-foreground">{panel.label}</p>
+                          <p className="text-[11px] text-muted-foreground tabular-nums">
+                            {counts.total_qty} qty
+                          </p>
+                        </div>
+                        <div className="mt-1.5">
+                          <MoneyInput
+                            className={inputSmClassName}
+                            value={
+                              draft.calculator.unit_type_cost_overrides[panel.id] ?? ""
+                            }
+                            onValueChange={(value) =>
+                              handleUnitTypeCostOverrideChange(panel.id, value)
+                            }
+                            currency="USD"
+                            placeholder={
+                              Number.isFinite(panel.price) && panel.price > 0
+                                ? `${panel.price.toFixed(2)} default`
+                                : "Cost override"
+                            }
+                            disabled={Boolean(legacyValues)}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
             </div>
 
             <div className="text-xs text-muted-foreground">
