@@ -369,9 +369,11 @@ export function EstimateBuilderCard({
   const [sessionFeatureOptions, setSessionFeatureOptions] = useState<
     ProductFeatureOption[]
   >([]);
-  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
-    new Set()
-  );
+  const [sectionOpenOverrides, setSectionOpenOverrides] = useState<
+    Record<string, boolean>
+  >({});
+  const [editingSections, setEditingSections] = useState<Set<string>>(new Set());
+  const [isPanelSummaryOpen, setIsPanelSummaryOpen] = useState(false);
   const [expandedProductDetails, setExpandedProductDetails] = useState<Set<string>>(
     new Set()
   );
@@ -589,6 +591,9 @@ export function EstimateBuilderCard({
     setLegacyValues(null);
     setDraft(nextDraft);
     setExchangeRateStatusByProduct({});
+    setSectionOpenOverrides({});
+    setEditingSections(new Set());
+    setIsPanelSummaryOpen(false);
   }, [loadPayload]);
 
   useEffect(() => {
@@ -989,19 +994,22 @@ export function EstimateBuilderCard({
     setAddressLookupError(null);
     setAddressLookupOpen(false);
     setExchangeRateStatusByProduct({});
+    setSectionOpenOverrides({});
+    setEditingSections(new Set());
+    setIsPanelSummaryOpen(false);
     onValuesChange(EMPTY_VALUES);
     onNameChange("");
     onSelectEstimate?.(null);
     onEstimatePayloadChange?.(null);
   };
 
-  const projectStepComplete = REQUIRED_INFO_FIELDS.every((field) =>
+  const projectStepReady = REQUIRED_INFO_FIELDS.every((field) =>
     String(draft.info[field] ?? "").trim()
   );
-  const productStepComplete = draft.products.some(
+  const productStepReady = draft.products.some(
     (item) => item.name.trim() && resolveProductBasePrice(item) > 0
   );
-  const changeOrderStepComplete =
+  const changeOrderStepReady =
     Boolean(draft.changeOrder.vendorName.trim()) &&
     toNumber(draft.changeOrder.vendorCost) > 0 &&
     toNumber(draft.changeOrder.laborCost) > 0;
@@ -1014,11 +1022,21 @@ export function EstimateBuilderCard({
   const hasInstallOverride = hasOverrideInput(
     draft.calculator.override_install_total
   );
-  const buckingStepComplete = hasBuckingLineItems || hasBuckingOverrides;
+  const buckingStepReady = hasBuckingLineItems || hasBuckingOverrides;
   const installInputsComplete = hasBuckingLineItems || hasInstallOverride;
-  const installStepComplete = isChangeOrderMode
+  const installStepReady = isChangeOrderMode
     ? computed.totals.total_contract_price > 0
     : computed.totals.total_contract_price > 0 && installInputsComplete;
+  const projectStepComplete =
+    projectStepReady && !editingSections.has("project");
+  const productStepComplete =
+    productStepReady && !editingSections.has("product");
+  const changeOrderStepComplete =
+    changeOrderStepReady && !editingSections.has("changeOrder");
+  const buckingStepComplete =
+    buckingStepReady && !editingSections.has("bucking");
+  const installStepComplete =
+    installStepReady && !editingSections.has("install");
   const hasMarginRisk =
     !computed.marginChecks.product_margin_ok ||
     !computed.marginChecks.install_margin_ok ||
@@ -1089,52 +1107,33 @@ export function EstimateBuilderCard({
     (isChangeOrderMode && showChangeOrder && changeOrderStepComplete) ||
     (!isChangeOrderMode && showInstall);
 
-  const toggleSection = useCallback((sectionId: string) => {
-    setCollapsedSections((prev) => {
-      const next = new Set(prev);
-      if (next.has(sectionId)) {
-        next.delete(sectionId);
-      } else {
-        next.add(sectionId);
-      }
-      return next;
-    });
-  }, []);
-
-  const isSectionOpen = useCallback(
+  const getDefaultSectionOpen = useCallback(
     (sectionId: string, isDone: boolean) => {
-      if (collapsedSections.has(sectionId)) return false;
-      // If user hasn't manually toggled this section, auto-collapse completed sections
-      // when there's a later section visible
-      if (isDone) {
-        // Find if there's a later section that's visible and not done
-        const sectionOrder = ["project", "changeOrder", "product", "bucking", "install", "review"];
-        const sectionVisible: Record<string, boolean> = {
-          project: true,
-          changeOrder: showChangeOrder,
-          product: showProducts,
-          bucking: showBucking,
-          install: showInstall,
-          review: showReview,
-        };
-        const sectionDone: Record<string, boolean> = {
-          project: projectStepComplete,
-          changeOrder: changeOrderStepComplete,
-          product: productStepComplete,
-          bucking: buckingStepComplete,
-          install: installStepComplete,
-          review: installStepComplete,
-        };
-        const currentIdx = sectionOrder.indexOf(sectionId);
-        const hasLaterActiveSection = sectionOrder.some(
-          (id, idx) => idx > currentIdx && sectionVisible[id] && !sectionDone[id]
-        );
-        if (hasLaterActiveSection) return false;
-      }
-      return true;
+      if (!isDone) return true;
+      const sectionOrder = ["project", "changeOrder", "product", "bucking", "install", "review"];
+      const sectionVisible: Record<string, boolean> = {
+        project: true,
+        changeOrder: showChangeOrder,
+        product: showProducts,
+        bucking: showBucking,
+        install: showInstall,
+        review: showReview,
+      };
+      const sectionDone: Record<string, boolean> = {
+        project: projectStepComplete,
+        changeOrder: changeOrderStepComplete,
+        product: productStepComplete,
+        bucking: buckingStepComplete,
+        install: installStepComplete,
+        review: installStepComplete,
+      };
+      const currentIdx = sectionOrder.indexOf(sectionId);
+      const hasLaterActiveSection = sectionOrder.some(
+        (id, idx) => idx > currentIdx && sectionVisible[id] && !sectionDone[id]
+      );
+      return !hasLaterActiveSection;
     },
     [
-      collapsedSections,
       showChangeOrder,
       showProducts,
       showBucking,
@@ -1146,6 +1145,59 @@ export function EstimateBuilderCard({
       buckingStepComplete,
       installStepComplete,
     ]
+  );
+
+  const toggleSection = useCallback(
+    (sectionId: string, isDone: boolean) => {
+      setSectionOpenOverrides((prev) => {
+        const currentOpen =
+          typeof prev[sectionId] === "boolean"
+            ? prev[sectionId]
+            : getDefaultSectionOpen(sectionId, isDone);
+        return {
+          ...prev,
+          [sectionId]: !currentOpen,
+        };
+      });
+    },
+    [getDefaultSectionOpen]
+  );
+
+  const isSectionOpen = useCallback(
+    (sectionId: string, isDone: boolean) => {
+      if (typeof sectionOpenOverrides[sectionId] === "boolean") {
+        return sectionOpenOverrides[sectionId];
+      }
+      return getDefaultSectionOpen(sectionId, isDone);
+    },
+    [
+      getDefaultSectionOpen,
+      sectionOpenOverrides,
+    ]
+  );
+
+  const handleSectionFocus = useCallback((sectionId: string) => {
+    setEditingSections((prev) => {
+      if (prev.has(sectionId)) return prev;
+      const next = new Set(prev);
+      next.add(sectionId);
+      return next;
+    });
+  }, []);
+
+  const handleSectionBlur = useCallback(
+    (sectionId: string, currentTarget: HTMLDivElement, nextTarget: EventTarget | null) => {
+      if (nextTarget instanceof Node && currentTarget.contains(nextTarget)) {
+        return;
+      }
+      setEditingSections((prev) => {
+        if (!prev.has(sectionId)) return prev;
+        const next = new Set(prev);
+        next.delete(sectionId);
+        return next;
+      });
+    },
+    []
   );
 
   return (
@@ -1186,17 +1238,19 @@ export function EstimateBuilderCard({
                 )}
                 onClick={() => {
                   if (!canClick) return;
-                  // Expand this section (remove from collapsed), collapse all others
-                  setCollapsedSections((prev) => {
-                    const next = new Set(prev);
-                    next.delete(sectionId);
-                    // Collapse other visible sections
-                    const allSections = ["project", "changeOrder", "product", "bucking", "install", "review"];
-                    for (const id of allSections) {
-                      if (id !== sectionId) next.add(id);
-                    }
-                    return next;
-                  });
+                  const allSections = [
+                    "project",
+                    "changeOrder",
+                    "product",
+                    "bucking",
+                    "install",
+                    "review",
+                  ];
+                  setSectionOpenOverrides(
+                    Object.fromEntries(
+                      allSections.map((id) => [id, id === sectionId])
+                    )
+                  );
                 }}
               >
                 {step.done ? (
@@ -1264,11 +1318,17 @@ export function EstimateBuilderCard({
             title="Project Details"
             done={projectStepComplete}
             isOpen={isSectionOpen("project", projectStepComplete)}
-            onToggle={() => toggleSection("project")}
+            onToggle={() => toggleSection("project", projectStepComplete)}
             summary={projectStepComplete ? `${draft.info.prepared_for || ""}${draft.info.project_name ? ` — ${draft.info.project_name}` : ""}` : undefined}
           />
           {isSectionOpen("project", projectStepComplete) ? (
-          <div className="grid gap-x-4 gap-y-3 md:grid-cols-2">
+          <div
+            className="grid gap-x-4 gap-y-3 md:grid-cols-2"
+            onFocusCapture={() => handleSectionFocus("project")}
+            onBlurCapture={(event) =>
+              handleSectionBlur("project", event.currentTarget, event.relatedTarget)
+            }
+          >
             {groupList.flatMap((group) =>
               group.fields.map((field) => {
                 const fieldValue =
@@ -1450,11 +1510,17 @@ export function EstimateBuilderCard({
               title="Change Order Pricing"
               done={changeOrderStepComplete}
               isOpen={isSectionOpen("changeOrder", changeOrderStepComplete)}
-              onToggle={() => toggleSection("changeOrder")}
+              onToggle={() => toggleSection("changeOrder", changeOrderStepComplete)}
               summary={changeOrderStepComplete ? formatCurrency(computed.totals.total_contract_price) : undefined}
             />
             {isSectionOpen("changeOrder", changeOrderStepComplete) ? (
-            <>
+            <div
+              className="space-y-4"
+              onFocusCapture={() => handleSectionFocus("changeOrder")}
+              onBlurCapture={(event) =>
+                handleSectionBlur("changeOrder", event.currentTarget, event.relatedTarget)
+              }
+            >
             {!vendorOptions.length ? (
               <div className="text-xs text-muted-foreground">No active vendors.</div>
             ) : null}
@@ -1539,7 +1605,7 @@ export function EstimateBuilderCard({
                 <p className="text-base font-semibold text-accent">{formatCurrency(computed.totals.total_contract_price)}</p>
               </div>
             </div>
-            </>
+            </div>
             ) : null}
 
           </section>
@@ -1555,11 +1621,17 @@ export function EstimateBuilderCard({
               title="Product Pricing"
               done={productStepComplete}
               isOpen={isSectionOpen("product", productStepComplete)}
-              onToggle={() => toggleSection("product")}
+              onToggle={() => toggleSection("product", productStepComplete)}
               summary={productStepComplete ? `${draft.products.length} product${draft.products.length !== 1 ? "s" : ""} — ${formatCurrency(computed.totals.product_price)}` : undefined}
             />
             {isSectionOpen("product", productStepComplete) ? (
-            <>
+            <div
+              className="space-y-4"
+              onFocusCapture={() => handleSectionFocus("product")}
+              onBlurCapture={(event) =>
+                handleSectionBlur("product", event.currentTarget, event.relatedTarget)
+              }
+            >
             <div className="grid gap-3 md:grid-cols-3">
               <div className="space-y-1.5">
                 <label className="text-xs text-muted-foreground">
@@ -2045,7 +2117,7 @@ export function EstimateBuilderCard({
                 Product subtotal: {formatCurrency(computed.totals.product_price)}
               </div>
             </div>
-            </>
+            </div>
             ) : null}
 
           </section>
@@ -2061,11 +2133,17 @@ export function EstimateBuilderCard({
               title="Bucking & Waterproof"
               done={buckingStepComplete}
               isOpen={isSectionOpen("bucking", buckingStepComplete)}
-              onToggle={() => toggleSection("bucking")}
+              onToggle={() => toggleSection("bucking", buckingStepComplete)}
               summary={buckingStepComplete ? `${computed.breakdown.total_lineal_ft.toFixed(0)} lineal ft` : undefined}
             />
             {isSectionOpen("bucking", buckingStepComplete) ? (
-            <>
+            <div
+              className="space-y-4"
+              onFocusCapture={() => handleSectionFocus("bucking")}
+              onBlurCapture={(event) =>
+                handleSectionBlur("bucking", event.currentTarget, event.relatedTarget)
+              }
+            >
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <RateField
                 label="Bucking $/ft"
@@ -2294,7 +2372,7 @@ export function EstimateBuilderCard({
                 Total lineal ft: {computed.breakdown.total_lineal_ft.toFixed(2)}
               </div>
             </div>
-            </>
+            </div>
             ) : null}
 
           </section>
@@ -2310,11 +2388,17 @@ export function EstimateBuilderCard({
               title="Install Calculator"
               done={installStepComplete}
               isOpen={isSectionOpen("install", installStepComplete)}
-              onToggle={() => toggleSection("install")}
+              onToggle={() => toggleSection("install", installStepComplete)}
               summary={installStepComplete ? formatCurrency(computed.breakdown.total_install_value) : undefined}
             />
             {isSectionOpen("install", installStepComplete) ? (
-            <>
+            <div
+              className="space-y-4"
+              onFocusCapture={() => handleSectionFocus("install")}
+              onBlurCapture={(event) =>
+                handleSectionBlur("install", event.currentTarget, event.relatedTarget)
+              }
+            >
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               <RateField
                 label="Install markup"
@@ -2346,10 +2430,30 @@ export function EstimateBuilderCard({
               Use `+` or `-` to adjust from the calculated install total.
             </p>
 
-            <div className="space-y-3">
-              <p className="text-xs font-medium text-muted-foreground">
-                Panel count summary
-              </p>
+            <div className="space-y-3 rounded-lg border border-border/60 p-3">
+              <button
+                type="button"
+                className="flex w-full items-center justify-between gap-3 text-left"
+                onClick={() => setIsPanelSummaryOpen((prev) => !prev)}
+              >
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    Panel count summary
+                  </p>
+                  {!isPanelSummaryOpen ? (
+                    <p className="text-[11px] text-muted-foreground">
+                      Expand to review counts and set unit cost overrides.
+                    </p>
+                  ) : null}
+                </div>
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+                    !isPanelSummaryOpen && "-rotate-90"
+                  )}
+                />
+              </button>
+              {isPanelSummaryOpen ? (
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {panelTypeOptions.map((panel) => {
                   const counts = computed.panelCounts[panel.id];
@@ -2387,12 +2491,13 @@ export function EstimateBuilderCard({
                   );
                 })}
               </div>
+              ) : null}
             </div>
 
             <div className="text-xs text-muted-foreground">
               Total installation value: {formatCurrency(computed.breakdown.total_install_value)}
             </div>
-            </>
+            </div>
             ) : null}
           </section>
           </>
