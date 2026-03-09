@@ -3550,292 +3550,6 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                               : "No estimates in this project yet."}
                         </p>
                       )}
-                      {historyError ? (
-                        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-                          {historyError}
-                        </div>
-                      ) : null}
-                      {selectedHistoryEstimate ? (
-                        <div className="space-y-2 rounded-lg border border-border bg-card p-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <p className="text-sm font-medium text-foreground">
-                          History: {selectedHistoryEstimate.title ?? "Untitled"}
-                        </p>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-7 text-xs text-muted-foreground"
-                          onClick={() => {
-                            setHistoryEstimateId(null);
-                            setPreviewVersionEntry(null);
-                          }}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                      {selectedHistoryEntries.length ? (
-                        <ScrollArea className="h-48 rounded-md border border-border">
-                          <div className="divide-y divide-border/60">
-                            {selectedHistoryEntries.map((entry) => {
-                              const actionId = `${selectedHistoryEstimate.id}:${entry.id}`;
-                              const reverting = historyActionId === actionId;
-                              const isCurrent =
-                                selectedHistoryCurrentVersion === entry.version;
-                              const isPreviewing = previewVersionEntry?.id === entry.id;
-                              return (
-                                <div
-                                  key={entry.id}
-                                  className={cn(
-                                    "px-3 py-2",
-                                    isPreviewing && "bg-accent/5"
-                                  )}
-                                >
-                                  <div className="flex items-center justify-between gap-4">
-                                    <div>
-                                      <p className="text-xs font-medium text-foreground">
-                                        v{entry.version} ·{" "}
-                                        {getEstimateVersionActionLabel(entry.action)}
-                                      </p>
-                                      <p className="text-xs text-muted-foreground">
-                                        {entry.createdByUserId && teamMemberNameById[entry.createdByUserId]
-                                          ? `${teamMemberNameById[entry.createdByUserId]} · `
-                                          : ""}
-                                        {new Date(entry.createdAt).toLocaleString()}
-                                      </p>
-                                    </div>
-                                    <div className="flex items-center gap-1.5">
-                                      {isCurrent ? (
-                                        <Badge variant="outline" className="bg-card">
-                                          Current
-                                        </Badge>
-                                      ) : null}
-                                      {!isCurrent && entry.payload ? (
-                                        <Button
-                                          variant={isPreviewing ? "secondary" : "ghost"}
-                                          size="sm"
-                                          onClick={() =>
-                                            setPreviewVersionEntry(
-                                              isPreviewing ? null : entry
-                                            )
-                                          }
-                                        >
-                                          <Eye className="h-3.5 w-3.5" />
-                                          {isPreviewing ? "Close" : "Preview"}
-                                        </Button>
-                                      ) : null}
-                                      <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() =>
-                                          void handleRevertTeamEstimateVersion(
-                                            selectedHistoryEstimate,
-                                            entry
-                                          )
-                                        }
-                                        disabled={reverting || isCurrent || !entry.payload}
-                                      >
-                                        {reverting ? (
-                                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                        ) : null}
-                                        Revert
-                                      </Button>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </ScrollArea>
-                      ) : (
-                        <div className="text-xs text-muted-foreground">
-                          No versions recorded yet.
-                        </div>
-                      )}
-                      {previewVersionEntry ? (() => {
-                        const currentPayload = selectedHistoryEstimate?.payload;
-                        const versionPayload = previewVersionEntry.payload;
-                        const currentTotals = selectedHistoryEstimate?.totals;
-                        const versionTotals = previewVersionEntry.totals;
-                        type DiffEntry = { group: string; field: string; current: string; version: string };
-                        const diffs: DiffEntry[] = [];
-                        const fmtMoney = (v: any) => typeof v === "number" ? `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "(none)";
-                        const fmtPercent = (v: any) => {
-                          const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : NaN;
-                          return Number.isFinite(n) ? `${(n * 100).toFixed(1)}%` : String(v ?? "(empty)");
-                        };
-                        const str = (v: any) => String(v ?? "").trim();
-                        const addDiff = (group: string, field: string, cur: string, ver: string) => {
-                          if (cur !== ver) diffs.push({ group, field, current: cur || "(empty)", version: ver || "(empty)" });
-                        };
-
-                        // Title
-                        addDiff("General", "Estimate name", str(selectedHistoryEstimate?.title), str(previewVersionEntry.title));
-
-                        // Who changed it
-                        const versionAuthor = previewVersionEntry.createdByUserId
-                          ? teamMemberNameById[previewVersionEntry.createdByUserId] ?? previewVersionEntry.createdByUserId
-                          : "";
-
-                        // Info fields (all of them)
-                        const allInfoFields = [
-                          ["prepared_for", "Prepared for"],
-                          ["project_name", "Project name"],
-                          ["project_type", "Project type"],
-                          ["city_state_zip", "City, State, ZIP"],
-                          ["proposal_date", "Proposal date"],
-                          ["plan_set_date", "Plan set date"],
-                          ["prepared_by", "Prepared by"],
-                          ["project_address", "Project address"],
-                        ];
-                        for (const [key, label] of allInfoFields) {
-                          const cur = str(currentPayload?.values?.[key] ?? currentPayload?.info?.[key]);
-                          const ver = str(versionPayload?.values?.[key] ?? versionPayload?.info?.[key]);
-                          addDiff("Project Details", label, cur, ver);
-                        }
-
-                        // Calculator fields
-                        const calcFields = [
-                          ["product_markup_default", "Default product markup", fmtPercent],
-                          ["install_markup", "Install markup", fmtPercent],
-                          ["bucking_rate", "Bucking rate", str],
-                          ["waterproofing_rate", "Waterproofing rate", str],
-                          ["rentals", "Rentals", str],
-                          ["override_bucking_cost", "Override bucking cost", str],
-                          ["override_waterproofing_cost", "Override waterproof cost", str],
-                          ["override_install_total", "Override install total", str],
-                        ] as const;
-                        for (const [key, label, fmt] of calcFields) {
-                          const cur = fmt(currentPayload?.calculator?.[key]);
-                          const ver = fmt(versionPayload?.calculator?.[key]);
-                          addDiff("Calculator", label, cur, ver);
-                        }
-
-                        // Change order fields
-                        const coFields = [
-                          ["vendorName", "CO vendor"],
-                          ["vendorCost", "CO vendor cost"],
-                          ["vendorMarkup", "CO vendor markup"],
-                          ["laborCost", "CO labor cost"],
-                          ["laborMarkup", "CO labor markup"],
-                        ];
-                        for (const [key, label] of coFields) {
-                          const cur = str(currentPayload?.changeOrder?.[key]);
-                          const ver = str(versionPayload?.changeOrder?.[key]);
-                          addDiff("Change Order", label, cur, ver);
-                        }
-
-                        // Products
-                        const curProducts: any[] = Array.isArray(currentPayload?.products) ? currentPayload.products : [];
-                        const verProducts: any[] = Array.isArray(versionPayload?.products) ? versionPayload.products : [];
-                        const maxProducts = Math.max(curProducts.length, verProducts.length);
-                        for (let i = 0; i < maxProducts; i++) {
-                          const cp = curProducts[i];
-                          const vp = verProducts[i];
-                          const label = `Product ${i + 1}`;
-                          if (!cp && vp) { addDiff("Products", label, "(not present)", `${str(vp.name) || "Unnamed"}`); continue; }
-                          if (cp && !vp) { addDiff("Products", label, `${str(cp.name) || "Unnamed"}`, "(removed)"); continue; }
-                          if (!cp || !vp) continue;
-                          const productFields = [
-                            ["name", "Vendor"], ["price", "Price"], ["markup", "Markup"],
-                            ["interior_frame_color", "Frame color"], ["exterior_frame_color", "Ext. frame color"],
-                            ["glass_type", "Glass type"], ["glass_makeup", "Glass makeup"],
-                            ["door_hardware_color", "Door HW color"], ["door_hinge_color", "Door hinge color"],
-                            ["window_hardware_color", "Window HW color"],
-                          ];
-                          for (const [key, fieldLabel] of productFields) {
-                            addDiff("Products", `${label} ${fieldLabel}`, str(cp[key]), str(vp[key]));
-                          }
-                          const boolFields = [
-                            ["split_finish", "Split finish"], ["stainless_operating_hardware", "SS hardware"],
-                            ["has_screens", "Screens"], ["euroPricingEnabled", "EUR pricing"],
-                          ];
-                          for (const [key, fieldLabel] of boolFields) {
-                            addDiff("Products", `${label} ${fieldLabel}`, cp[key] ? "Yes" : "No", vp[key] ? "Yes" : "No");
-                          }
-                        }
-
-                        // Bucking lines
-                        const curBucking: any[] = Array.isArray(currentPayload?.bucking) ? currentPayload.bucking : [];
-                        const verBucking: any[] = Array.isArray(versionPayload?.bucking) ? versionPayload.bucking : [];
-                        const maxBucking = Math.max(curBucking.length, verBucking.length);
-                        if (curBucking.length !== verBucking.length) {
-                          addDiff("Bucking", "Line count", String(curBucking.length), String(verBucking.length));
-                        }
-                        for (let i = 0; i < maxBucking; i++) {
-                          const cb = curBucking[i];
-                          const vb = verBucking[i];
-                          const label = `Line ${i + 1}`;
-                          if (!cb && vb) { addDiff("Bucking", label, "(not present)", "Added"); continue; }
-                          if (cb && !vb) { addDiff("Bucking", label, "Present", "(removed)"); continue; }
-                          if (!cb || !vb) continue;
-                          const buckingFields = [
-                            ["unit_type", "Unit type"], ["vendor_id", "Vendor"], ["qty", "Qty"],
-                            ["sqft", "SqFt"], ["replacement_qty", "Replacement"], ["clerestory_qty", "Clerestory"],
-                          ];
-                          for (const [key, fieldLabel] of buckingFields) {
-                            addDiff("Bucking", `${label} ${fieldLabel}`, str(cb[key]), str(vb[key]));
-                          }
-                        }
-
-                        // Totals
-                        const totalFields = [
-                          ["total_contract_price", "Total contract"],
-                          ["product_price", "Product price"],
-                          ["installation_price", "Installation price"],
-                          ["bucking_price", "Bucking price"],
-                          ["waterproofing_price", "Waterproofing price"],
-                        ];
-                        for (const [key, label] of totalFields) {
-                          const cur = currentTotals?.[key];
-                          const ver = versionTotals?.[key];
-                          if (cur !== ver && (cur != null || ver != null)) {
-                            diffs.push({ group: "Totals", field: label, current: fmtMoney(cur), version: fmtMoney(ver) });
-                          }
-                        }
-
-                        // Group diffs for display
-                        const groupOrder = ["General", "Project Details", "Calculator", "Change Order", "Products", "Bucking", "Totals"];
-                        const groupedDiffs = groupOrder
-                          .map((group) => ({ group, items: diffs.filter((d) => d.group === group) }))
-                          .filter((g) => g.items.length > 0);
-
-                        return (
-                          <div className="rounded-lg border border-accent/30 bg-accent/5 p-3 space-y-2">
-                            <div className="flex items-center justify-between gap-2">
-                              <p className="text-xs font-medium text-foreground">
-                                Comparing current with v{previewVersionEntry.version}
-                              </p>
-                              {versionAuthor ? (
-                                <p className="text-xs text-muted-foreground">
-                                  by {versionAuthor}
-                                </p>
-                              ) : null}
-                            </div>
-                            {groupedDiffs.length ? (
-                              <div className="space-y-2">
-                                {groupedDiffs.map(({ group, items }) => (
-                                  <div key={group}>
-                                    <p className="text-[10px] font-medium text-muted-foreground mb-1">{group}</p>
-                                    <div className="rounded-md border border-border bg-muted/30 overflow-hidden">
-                                      {items.map((diff, idx) => (
-                                        <div key={`${diff.field}-${idx}`} className="grid grid-cols-3 gap-px bg-border/30 text-xs">
-                                          <div className="bg-card px-2 py-1 text-muted-foreground">{diff.field}</div>
-                                          <div className="bg-red-500/5 px-2 py-1 text-foreground">{diff.current}</div>
-                                          <div className="bg-emerald-500/5 px-2 py-1 text-foreground">{diff.version}</div>
-                                        </div>
-                                      ))}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-xs text-muted-foreground">No differences detected.</p>
-                            )}
-                          </div>
-                        );
-                      })() : null}
-                    </div>
-                  ) : null}
                   {editingEstimateId ? (
                     <div className="text-xs text-muted-foreground">
                       Editing a project estimate.
@@ -3847,6 +3561,307 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
               </Card>
             </div>
             ) : null}
+          </section>
+        ) : null}
+
+        {(historyError || selectedHistoryEstimate) && !isEstimateMode ? (
+          <section className="mt-6 animate-fade-up">
+            <Card className="shadow-elevated">
+              <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0 pb-3">
+                <div>
+                  <CardTitle className="text-base font-serif font-light tracking-tight">
+                    Version History
+                  </CardTitle>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {selectedHistoryEstimate
+                      ? `Review saved versions for ${selectedHistoryEstimate.title ?? "Untitled"}.`
+                      : "Review saved estimate versions and compare revisions."}
+                  </p>
+                </div>
+                {selectedHistoryEstimate ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs text-muted-foreground"
+                    onClick={() => {
+                      setHistoryEstimateId(null);
+                      setPreviewVersionEntry(null);
+                    }}
+                  >
+                    <X className="h-3.5 w-3.5" />
+                    Hide
+                  </Button>
+                ) : null}
+              </CardHeader>
+              <CardContent className="space-y-4 pt-0">
+                {historyError ? (
+                  <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                    {historyError}
+                  </div>
+                ) : null}
+                {selectedHistoryEstimate ? (
+                  <>
+                    <div className="rounded-lg border border-border/70 bg-muted/20 px-4 py-3">
+                      <p className="text-sm font-medium text-foreground">
+                        History: {selectedHistoryEstimate.title ?? "Untitled"}
+                      </p>
+                    </div>
+                    {selectedHistoryEntries.length ? (
+                      <ScrollArea className="h-56 rounded-md border border-border">
+                        <div className="divide-y divide-border/60">
+                          {selectedHistoryEntries.map((entry) => {
+                            const actionId = `${selectedHistoryEstimate.id}:${entry.id}`;
+                            const reverting = historyActionId === actionId;
+                            const isCurrent =
+                              selectedHistoryCurrentVersion === entry.version;
+                            const isPreviewing = previewVersionEntry?.id === entry.id;
+                            return (
+                              <div
+                                key={entry.id}
+                                className={cn(
+                                  "px-3 py-2",
+                                  isPreviewing && "bg-accent/5"
+                                )}
+                              >
+                                <div className="flex items-center justify-between gap-4">
+                                  <div>
+                                    <p className="text-xs font-medium text-foreground">
+                                      v{entry.version} ·{" "}
+                                      {getEstimateVersionActionLabel(entry.action)}
+                                    </p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {entry.createdByUserId && teamMemberNameById[entry.createdByUserId]
+                                        ? `${teamMemberNameById[entry.createdByUserId]} · `
+                                        : ""}
+                                      {new Date(entry.createdAt).toLocaleString()}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-1.5">
+                                    {isCurrent ? (
+                                      <Badge variant="outline" className="bg-card">
+                                        Current
+                                      </Badge>
+                                    ) : null}
+                                    {!isCurrent && entry.payload ? (
+                                      <Button
+                                        variant={isPreviewing ? "secondary" : "ghost"}
+                                        size="sm"
+                                        onClick={() =>
+                                          setPreviewVersionEntry(
+                                            isPreviewing ? null : entry
+                                          )
+                                        }
+                                      >
+                                        <Eye className="h-3.5 w-3.5" />
+                                        {isPreviewing ? "Close" : "Preview"}
+                                      </Button>
+                                    ) : null}
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() =>
+                                        void handleRevertTeamEstimateVersion(
+                                          selectedHistoryEstimate,
+                                          entry
+                                        )
+                                      }
+                                      disabled={reverting || isCurrent || !entry.payload}
+                                    >
+                                      {reverting ? (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                      ) : null}
+                                      Revert
+                                    </Button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </ScrollArea>
+                    ) : (
+                      <div className="text-xs text-muted-foreground">
+                        No versions recorded yet.
+                      </div>
+                    )}
+                    {previewVersionEntry ? (() => {
+                      const currentPayload = selectedHistoryEstimate?.payload;
+                      const versionPayload = previewVersionEntry.payload;
+                      const currentTotals = selectedHistoryEstimate?.totals;
+                      const versionTotals = previewVersionEntry.totals;
+                      type DiffEntry = { group: string; field: string; current: string; version: string };
+                      const diffs: DiffEntry[] = [];
+                      const fmtMoney = (v: any) => typeof v === "number" ? `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "(none)";
+                      const fmtPercent = (v: any) => {
+                        const n = typeof v === "string" ? Number(v) : typeof v === "number" ? v : NaN;
+                        return Number.isFinite(n) ? `${(n * 100).toFixed(1)}%` : String(v ?? "(empty)");
+                      };
+                      const str = (v: any) => String(v ?? "").trim();
+                      const addDiff = (group: string, field: string, cur: string, ver: string) => {
+                        if (cur !== ver) diffs.push({ group, field, current: cur || "(empty)", version: ver || "(empty)" });
+                      };
+
+                      addDiff("General", "Estimate name", str(selectedHistoryEstimate?.title), str(previewVersionEntry.title));
+
+                      const versionAuthor = previewVersionEntry.createdByUserId
+                        ? teamMemberNameById[previewVersionEntry.createdByUserId] ?? previewVersionEntry.createdByUserId
+                        : "";
+
+                      const allInfoFields = [
+                        ["prepared_for", "Prepared for"],
+                        ["project_name", "Project name"],
+                        ["project_type", "Project type"],
+                        ["city_state_zip", "City, State, ZIP"],
+                        ["proposal_date", "Proposal date"],
+                        ["plan_set_date", "Plan set date"],
+                        ["prepared_by", "Prepared by"],
+                        ["project_address", "Project address"],
+                      ];
+                      for (const [key, label] of allInfoFields) {
+                        const cur = str(currentPayload?.values?.[key] ?? currentPayload?.info?.[key]);
+                        const ver = str(versionPayload?.values?.[key] ?? versionPayload?.info?.[key]);
+                        addDiff("Project Details", label, cur, ver);
+                      }
+
+                      const calcFields = [
+                        ["product_markup_default", "Default product markup", fmtPercent],
+                        ["install_markup", "Install markup", fmtPercent],
+                        ["bucking_rate", "Bucking rate", str],
+                        ["waterproofing_rate", "Waterproofing rate", str],
+                        ["rentals", "Rentals", str],
+                        ["override_bucking_cost", "Override bucking cost", str],
+                        ["override_waterproofing_cost", "Override waterproof cost", str],
+                        ["override_install_total", "Override install total", str],
+                      ] as const;
+                      for (const [key, label, fmt] of calcFields) {
+                        const cur = fmt(currentPayload?.calculator?.[key]);
+                        const ver = fmt(versionPayload?.calculator?.[key]);
+                        addDiff("Calculator", label, cur, ver);
+                      }
+
+                      const coFields = [
+                        ["vendorName", "CO vendor"],
+                        ["vendorCost", "CO vendor cost"],
+                        ["vendorMarkup", "CO vendor markup"],
+                        ["laborCost", "CO labor cost"],
+                        ["laborMarkup", "CO labor markup"],
+                      ];
+                      for (const [key, label] of coFields) {
+                        const cur = str(currentPayload?.changeOrder?.[key]);
+                        const ver = str(versionPayload?.changeOrder?.[key]);
+                        addDiff("Change Order", label, cur, ver);
+                      }
+
+                      const curProducts: any[] = Array.isArray(currentPayload?.products) ? currentPayload.products : [];
+                      const verProducts: any[] = Array.isArray(versionPayload?.products) ? versionPayload.products : [];
+                      const maxProducts = Math.max(curProducts.length, verProducts.length);
+                      for (let i = 0; i < maxProducts; i++) {
+                        const cp = curProducts[i];
+                        const vp = verProducts[i];
+                        const label = `Product ${i + 1}`;
+                        if (!cp && vp) { addDiff("Products", label, "(not present)", `${str(vp.name) || "Unnamed"}`); continue; }
+                        if (cp && !vp) { addDiff("Products", label, `${str(cp.name) || "Unnamed"}`, "(removed)"); continue; }
+                        if (!cp || !vp) continue;
+                        const productFields = [
+                          ["name", "Vendor"], ["price", "Price"], ["markup", "Markup"],
+                          ["interior_frame_color", "Frame color"], ["exterior_frame_color", "Ext. frame color"],
+                          ["glass_type", "Glass type"], ["glass_makeup", "Glass makeup"],
+                          ["door_hardware_color", "Door HW color"], ["door_hinge_color", "Door hinge color"],
+                          ["window_hardware_color", "Window HW color"],
+                        ];
+                        for (const [key, fieldLabel] of productFields) {
+                          addDiff("Products", `${label} ${fieldLabel}`, str(cp[key]), str(vp[key]));
+                        }
+                        const boolFields = [
+                          ["split_finish", "Split finish"], ["stainless_operating_hardware", "SS hardware"],
+                          ["has_screens", "Screens"], ["euroPricingEnabled", "EUR pricing"],
+                        ];
+                        for (const [key, fieldLabel] of boolFields) {
+                          addDiff("Products", `${label} ${fieldLabel}`, cp[key] ? "Yes" : "No", vp[key] ? "Yes" : "No");
+                        }
+                      }
+
+                      const curBucking: any[] = Array.isArray(currentPayload?.bucking) ? currentPayload.bucking : [];
+                      const verBucking: any[] = Array.isArray(versionPayload?.bucking) ? versionPayload.bucking : [];
+                      const maxBucking = Math.max(curBucking.length, verBucking.length);
+                      if (curBucking.length !== verBucking.length) {
+                        addDiff("Bucking", "Line count", String(curBucking.length), String(verBucking.length));
+                      }
+                      for (let i = 0; i < maxBucking; i++) {
+                        const cb = curBucking[i];
+                        const vb = verBucking[i];
+                        const label = `Line ${i + 1}`;
+                        if (!cb && vb) { addDiff("Bucking", label, "(not present)", "Added"); continue; }
+                        if (cb && !vb) { addDiff("Bucking", label, "Present", "(removed)"); continue; }
+                        if (!cb || !vb) continue;
+                        const buckingFields = [
+                          ["unit_type", "Unit type"], ["vendor_id", "Vendor"], ["qty", "Qty"],
+                          ["sqft", "SqFt"], ["replacement_qty", "Replacement"], ["clerestory_qty", "Clerestory"],
+                        ];
+                        for (const [key, fieldLabel] of buckingFields) {
+                          addDiff("Bucking", `${label} ${fieldLabel}`, str(cb[key]), str(vb[key]));
+                        }
+                      }
+
+                      const totalFields = [
+                        ["total_contract_price", "Total contract"],
+                        ["product_price", "Product price"],
+                        ["installation_price", "Installation price"],
+                        ["bucking_price", "Bucking price"],
+                        ["waterproofing_price", "Waterproofing price"],
+                      ];
+                      for (const [key, label] of totalFields) {
+                        const cur = currentTotals?.[key];
+                        const ver = versionTotals?.[key];
+                        if (cur !== ver && (cur != null || ver != null)) {
+                          diffs.push({ group: "Totals", field: label, current: fmtMoney(cur), version: fmtMoney(ver) });
+                        }
+                      }
+
+                      const groupOrder = ["General", "Project Details", "Calculator", "Change Order", "Products", "Bucking", "Totals"];
+                      const groupedDiffs = groupOrder
+                        .map((group) => ({ group, items: diffs.filter((d) => d.group === group) }))
+                        .filter((g) => g.items.length > 0);
+
+                      return (
+                        <div className="rounded-lg border border-accent/30 bg-accent/5 p-3 space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <p className="text-xs font-medium text-foreground">
+                              Comparing current with v{previewVersionEntry.version}
+                            </p>
+                            {versionAuthor ? (
+                              <p className="text-xs text-muted-foreground">
+                                by {versionAuthor}
+                              </p>
+                            ) : null}
+                          </div>
+                          {groupedDiffs.length ? (
+                            <div className="space-y-2">
+                              {groupedDiffs.map(({ group, items }) => (
+                                <div key={group}>
+                                  <p className="mb-1 text-[10px] font-medium text-muted-foreground">{group}</p>
+                                  <div className="overflow-hidden rounded-md border border-border bg-muted/30">
+                                    {items.map((diff, idx) => (
+                                      <div key={`${diff.field}-${idx}`} className="grid grid-cols-3 gap-px bg-border/30 text-xs">
+                                        <div className="bg-card px-2 py-1 text-muted-foreground">{diff.field}</div>
+                                        <div className="bg-red-500/5 px-2 py-1 text-foreground">{diff.current}</div>
+                                        <div className="bg-emerald-500/5 px-2 py-1 text-foreground">{diff.version}</div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">No differences detected.</p>
+                          )}
+                        </div>
+                      );
+                    })() : null}
+                  </>
+                ) : null}
+              </CardContent>
+            </Card>
           </section>
         ) : null}
 
