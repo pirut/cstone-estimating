@@ -3837,6 +3837,17 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                           </div>
                           {groupedDiffs.length ? (
                             <div className="space-y-2">
+                              <div className="grid grid-cols-3 gap-px overflow-hidden rounded-md border border-border bg-border/30 text-[11px]">
+                                <div className="bg-card px-2 py-1 font-medium text-muted-foreground">
+                                  Field
+                                </div>
+                                <div className="bg-red-500/10 px-2 py-1 font-medium text-foreground">
+                                  Current estimate
+                                </div>
+                                <div className="bg-emerald-500/10 px-2 py-1 font-medium text-foreground">
+                                  Preview v{previewVersionEntry.version}
+                                </div>
+                              </div>
                               {groupedDiffs.map(({ group, items }) => (
                                 <div key={group}>
                                   <p className="mb-1 text-[10px] font-medium text-muted-foreground">{group}</p>
