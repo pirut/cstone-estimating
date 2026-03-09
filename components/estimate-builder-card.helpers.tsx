@@ -14,13 +14,11 @@ export function SectionHeader({
   done: boolean;
 }) {
   return (
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div>
-        <p className="text-sm font-semibold text-foreground">{title}</p>
-      </div>
+    <div className="flex items-center justify-between gap-3">
+      <p className="text-base font-serif font-light tracking-tight text-foreground">{title}</p>
       <Badge
         variant={done ? "accent" : "outline"}
-        className={cn("text-[10px]", done && "bg-accent/90")}
+        className={cn("text-[10px] shrink-0", done && "bg-accent/90")}
       >
         {done ? "Complete" : "In progress"}
       </Badge>
@@ -48,8 +46,8 @@ export function RateField({
   percent?: boolean;
 }) {
   return (
-    <div className="space-y-2">
-      <label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+    <div className="space-y-1.5">
+      <label className="text-xs text-muted-foreground">
         {label}
       </label>
       {moneyCurrency ? (

@@ -1119,7 +1119,7 @@ export function EstimateBuilderCard({
         </div>
       </CardHeader>
 
-      <CardContent className="relative space-y-6">
+      <CardContent className="relative space-y-8">
         {legacyValues ? (
           <div className="rounded-xl border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-800">
             Legacy estimate loaded. Convert to the new calculator to use the guided flow.
@@ -1135,19 +1135,15 @@ export function EstimateBuilderCard({
           </div>
         ) : null}
 
-        <section className="space-y-4 rounded-lg border border-border bg-card/50 p-4">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-foreground">Estimate Session</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="outline" onClick={handleClear}>
-                Clear
-              </Button>
-            </div>
+        <section className="space-y-4">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-base font-serif font-light tracking-tight text-foreground">Estimate Session</p>
+            <Button variant="outline" size="sm" onClick={handleClear}>
+              Clear
+            </Button>
           </div>
-          <div className="space-y-2">
-            <label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+          <div className="space-y-1.5">
+            <label className="text-xs text-muted-foreground">
               Estimate name
             </label>
             <Input
@@ -1167,9 +1163,11 @@ export function EstimateBuilderCard({
           </div>
         </section>
 
-        <section className="space-y-4 rounded-lg border border-border bg-card/50 p-4">
+        <Separator />
+
+        <section className="space-y-4">
           <SectionHeader title="Project Details" done={projectStepComplete} />
-          <div className="grid gap-3 md:grid-cols-2">
+          <div className="grid gap-x-4 gap-y-3 md:grid-cols-2">
             {groupList.flatMap((group) =>
               group.fields.map((field) => {
                 const fieldValue =
@@ -1205,13 +1203,11 @@ export function EstimateBuilderCard({
                   (isPreparedByField && Boolean(normalizedPreparedByName));
 
                 return (
-                  <div key={field.key} className="space-y-2">
-                    <label className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                  <div key={field.key} className="space-y-1.5">
+                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                       <span>{field.label}</span>
                       {isRequired ? (
-                        <span className="rounded bg-muted px-1.5 py-0.5 text-[10px] text-foreground">
-                          Required
-                        </span>
+                        <span className="text-accent">*</span>
                       ) : null}
                     </label>
                     {isDate ? (
@@ -1344,7 +1340,10 @@ export function EstimateBuilderCard({
         </section>
 
         {showChangeOrder ? (
-          <section className="space-y-4 rounded-lg border border-border bg-card/50 p-4">
+          <>
+          <Separator />
+
+          <section className="space-y-4">
             <SectionHeader
               title="Change Order Pricing"
               done={changeOrderStepComplete}
@@ -1420,43 +1419,35 @@ export function EstimateBuilderCard({
               />
             </div>
 
-            <div className="grid gap-3 md:grid-cols-3">
-              <div className="rounded-lg border border-border bg-card/50 px-3 py-2">
-                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                  Vendor Total
-                </p>
-                <p className="text-base font-semibold text-foreground">
-                  {formatCurrency(changeOrderVendorTotal)}
-                </p>
+            <div className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg bg-muted/40 px-4 py-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Vendor Total</p>
+                <p className="text-sm font-semibold text-foreground">{formatCurrency(changeOrderVendorTotal)}</p>
               </div>
-              <div className="rounded-lg border border-border bg-card/50 px-3 py-2">
-                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                  Labor Total
-                </p>
-                <p className="text-base font-semibold text-foreground">
-                  {formatCurrency(changeOrderLaborTotal)}
-                </p>
+              <div>
+                <p className="text-xs text-muted-foreground">Labor Total</p>
+                <p className="text-sm font-semibold text-foreground">{formatCurrency(changeOrderLaborTotal)}</p>
               </div>
-              <div className="rounded-lg border border-border bg-card/50 px-3 py-2">
-                <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                  Change Order Total
-                </p>
-                <p className="text-base font-semibold text-foreground">
-                  {formatCurrency(computed.totals.total_contract_price)}
-                </p>
+              <div className="ml-auto">
+                <p className="text-xs text-muted-foreground">Change Order Total</p>
+                <p className="text-base font-semibold text-accent">{formatCurrency(computed.totals.total_contract_price)}</p>
               </div>
             </div>
 
           </section>
+          </>
         ) : null}
 
         {showProducts ? (
-          <section className="space-y-4 rounded-lg border border-border bg-card/50 p-4">
+          <>
+          <Separator />
+
+          <section className="space-y-4">
             <SectionHeader title="Product Pricing" done={productStepComplete} />
 
             <div className="grid gap-3 md:grid-cols-3">
-              <div className="space-y-2">
-                <label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+              <div className="space-y-1.5">
+                <label className="text-xs text-muted-foreground">
                   Default product markup
                 </label>
                 <Input
@@ -1507,37 +1498,10 @@ export function EstimateBuilderCard({
                         ? { ...field, label: "Frame color" }
                         : field
                     );
-                const featureListLines = [
-                  `${
-                    allowsSplitFinish ? "Interior frame color" : "Frame color"
-                  }: ${item.interior_frame_color || "Not selected"}`,
-                  ...(allowsSplitFinish
-                    ? [
-                        `Exterior frame color: ${
-                          item.split_finish
-                            ? item.exterior_frame_color || "Not selected"
-                            : item.interior_frame_color
-                              ? `${item.interior_frame_color} (same as interior)`
-                              : "Not selected"
-                        }`,
-                      ]
-                    : []),
-                  `Glass type: ${item.glass_type || "Not selected"}`,
-                  `Glass make up: ${item.glass_makeup || "Not selected"}`,
-                  `Stainless steel operating hardware: ${
-                    item.stainless_operating_hardware ? "Yes" : "No"
-                  }`,
-                  `Screens: ${item.has_screens ? "Yes" : "No"}`,
-                  `Door hardware color: ${item.door_hardware_color || "Not selected"}`,
-                  `Door hinge color: ${item.door_hinge_color || "Not selected"}`,
-                  `Window hardware color: ${
-                    item.window_hardware_color || "Not selected"
-                  }`,
-                ];
                 return (
                   <div
                     key={item.id}
-                    className="rounded-xl border border-border bg-card/50 p-3"
+                    className="rounded-lg border border-border/60 p-4"
                   >
                     <div className="grid gap-3 lg:grid-cols-[1.8fr_0.8fr_0.8fr_auto]">
                       <div className="space-y-1">
@@ -1613,20 +1577,18 @@ export function EstimateBuilderCard({
                         />
                       </div>
                       <div className="flex items-end justify-end">
-                        <div className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground">
+                        <p className="px-1 py-2 text-sm font-semibold text-foreground tabular-nums">
                           {Number.isFinite(total) ? formatCurrency(total) : "-"}
-                        </div>
+                        </p>
                       </div>
                     </div>
 
                     {usesEuroPricing ? (
-                      <div className="mt-3 space-y-3 rounded-lg border border-border bg-background/80 p-3">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div>
-                            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                              EUR Cost Calculator
-                            </p>
-                          </div>
+                      <div className="mt-3 space-y-3 border-t border-border/40 pt-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <p className="text-xs font-medium text-muted-foreground">
+                            EUR Cost Calculator
+                          </p>
                           <Button
                             variant="outline"
                             size="sm"
@@ -1822,12 +1784,10 @@ export function EstimateBuilderCard({
                       </div>
                     ) : null}
 
-                    <div className="mt-3 space-y-3 rounded-lg border border-border bg-background/80 p-3">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                          Features
-                        </p>
-                      </div>
+                    <div className="mt-3 space-y-3 border-t border-border/40 pt-3">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Features
+                      </p>
 
                       <div className="grid gap-3 md:grid-cols-2">
                         {visibleFeatureFields.map((field) => {
@@ -1871,8 +1831,8 @@ export function EstimateBuilderCard({
                         })}
                       </div>
 
-                      <div className="grid gap-3 md:grid-cols-3">
-                        <label className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-2 text-xs text-foreground">
+                      <div className="flex flex-wrap gap-x-5 gap-y-2">
+                        <label className="flex items-center gap-2 text-sm text-foreground">
                           <Checkbox
                             checked={item.split_finish}
                             onCheckedChange={(checked) =>
@@ -1885,9 +1845,9 @@ export function EstimateBuilderCard({
                               Boolean(legacyValues) || !allowsSplitFinish
                             }
                           />
-                          <span>Split finish</span>
+                          Split finish
                         </label>
-                        <label className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-2 text-xs text-foreground">
+                        <label className="flex items-center gap-2 text-sm text-foreground">
                           <Checkbox
                             checked={item.stainless_operating_hardware}
                             onCheckedChange={(checked) =>
@@ -1897,9 +1857,9 @@ export function EstimateBuilderCard({
                             }
                             disabled={Boolean(legacyValues)}
                           />
-                          <span>Stainless steel operating hardware</span>
+                          SS hardware
                         </label>
-                        <label className="flex items-center gap-2 rounded-lg border border-border bg-card/60 px-3 py-2 text-xs text-foreground">
+                        <label className="flex items-center gap-2 text-sm text-foreground">
                           <Checkbox
                             checked={item.has_screens}
                             onCheckedChange={(checked) =>
@@ -1909,20 +1869,10 @@ export function EstimateBuilderCard({
                             }
                             disabled={Boolean(legacyValues)}
                           />
-                          <span>Screens</span>
+                          Screens
                         </label>
                       </div>
 
-                      <div className="rounded-lg border border-border bg-card/50 px-3 py-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                          Features list (ordered)
-                        </p>
-                        <ul className="mt-2 space-y-1 text-sm text-foreground">
-                          {featureListLines.map((line) => (
-                            <li key={`${item.id}-${line}`}>• {line}</li>
-                          ))}
-                        </ul>
-                      </div>
                     </div>
                   </div>
                 );
@@ -1936,10 +1886,14 @@ export function EstimateBuilderCard({
             </div>
 
           </section>
+          </>
         ) : null}
 
         {showBucking ? (
-          <section className="space-y-4 rounded-lg border border-border bg-card/50 p-4">
+          <>
+          <Separator />
+
+          <section className="space-y-4">
             <SectionHeader title="Bucking & Waterproof" done={buckingStepComplete} />
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -1997,7 +1951,7 @@ export function EstimateBuilderCard({
                 return (
                   <div
                     key={item.id}
-                    className="rounded-xl border border-border bg-card/50 p-3"
+                    className="rounded-lg border border-border/60 p-3"
                   >
                     <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-7">
                       <div className="space-y-1">
@@ -2115,9 +2069,9 @@ export function EstimateBuilderCard({
                         />
                       </div>
                       <div className="flex items-end justify-between gap-2">
-                        <div className="rounded-lg border border-border bg-background px-3 py-2 text-sm font-semibold text-foreground">
+                        <p className="px-1 py-2 text-sm font-semibold text-foreground tabular-nums">
                           {lineal ? `${lineal.toFixed(2)} ft` : "-"}
-                        </div>
+                        </p>
                         <Button
                           variant="ghost"
                           size="icon"
@@ -2172,10 +2126,14 @@ export function EstimateBuilderCard({
             </div>
 
           </section>
+          </>
         ) : null}
 
         {showInstall ? (
-          <section className="space-y-4 rounded-lg border border-border bg-card/50 p-4">
+          <>
+          <Separator />
+
+          <section className="space-y-4">
             <SectionHeader title="Install Calculator" done={installStepComplete} />
 
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
@@ -2209,28 +2167,25 @@ export function EstimateBuilderCard({
               Use `+` or `-` to adjust from the calculated install total.
             </p>
 
-            <div className="rounded-xl border border-border bg-card/50 p-3">
-              <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+            <div className="space-y-3">
+              <p className="text-xs font-medium text-muted-foreground">
                 Panel count summary
               </p>
-              <p className="mb-3 text-[11px] text-muted-foreground">
-                Override unit cost by type to recalculate install totals for this estimate.
-              </p>
-              <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+              <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                 {panelTypeOptions.map((panel) => {
                   const counts = computed.panelCounts[panel.id];
                   return (
                     <div
                       key={panel.id}
-                      className="rounded-lg border border-border bg-background px-3 py-2"
+                      className="rounded-lg border border-border/60 px-3 py-2.5"
                     >
-                      <p className="text-sm font-semibold text-foreground">{panel.label}</p>
+                      <p className="text-sm font-medium text-foreground">{panel.label}</p>
                       <p className="text-xs text-muted-foreground">
-                        Qty {counts.total_qty} | Clerestory {counts.clerestory_qty} | Replacement {counts.replacement_qty}
+                        Qty {counts.total_qty} &middot; Clerestory {counts.clerestory_qty} &middot; Replacement {counts.replacement_qty}
                       </p>
                       <div className="mt-2 space-y-1">
                         <label className="text-xs text-muted-foreground">
-                          Unit cost override
+                          Cost override
                         </label>
                         <MoneyInput
                           className={inputSmClassName}
@@ -2248,9 +2203,6 @@ export function EstimateBuilderCard({
                           }
                           disabled={Boolean(legacyValues)}
                         />
-                        <p className="text-[11px] text-muted-foreground">
-                          Leave blank to use catalog pricing.
-                        </p>
                       </div>
                     </div>
                   );
@@ -2262,18 +2214,22 @@ export function EstimateBuilderCard({
               Total installation value: {formatCurrency(computed.breakdown.total_install_value)}
             </div>
           </section>
+          </>
         ) : null}
 
         {showReview ? (
-          <section className="space-y-4 rounded-lg border border-border bg-card/50 p-4">
+          <>
+          <Separator />
+
+          <section className="space-y-4">
             <SectionHeader title="Pricing Breakdown" done={installStepComplete} />
 
-            <div className="rounded-xl border border-border bg-card/50 overflow-hidden">
-              <div className="grid grid-cols-4 gap-px bg-border/40 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                <div className="bg-card/90 px-3 py-2">Line Item</div>
-                <div className="bg-card/90 px-3 py-2 text-right">Cost</div>
-                <div className="bg-card/90 px-3 py-2 text-right">Markup</div>
-                <div className="bg-card/90 px-3 py-2 text-right">Customer Price</div>
+            <div className="rounded-lg border border-border/60 overflow-hidden">
+              <div className="grid grid-cols-4 gap-px bg-border/30 text-xs text-muted-foreground">
+                <div className="bg-card px-3 py-2">Line Item</div>
+                <div className="bg-card px-3 py-2 text-right">Cost</div>
+                <div className="bg-card px-3 py-2 text-right">Markup</div>
+                <div className="bg-card px-3 py-2 text-right">Price</div>
               </div>
               {[
                 {
@@ -2299,21 +2255,21 @@ export function EstimateBuilderCard({
               ].map((row) => (
                 <div
                   key={row.label}
-                  className="grid grid-cols-4 gap-px bg-border/40 text-sm"
+                  className="grid grid-cols-4 gap-px bg-border/30 text-sm"
                 >
-                  <div className="bg-card/70 px-3 py-2 text-muted-foreground">{row.label}</div>
-                  <div className="bg-card/70 px-3 py-2 text-right font-medium text-foreground">
+                  <div className="bg-card px-3 py-2 text-muted-foreground">{row.label}</div>
+                  <div className="bg-card px-3 py-2 text-right font-medium text-foreground">
                     {formatCurrency(row.cost)}
                   </div>
-                  <div className="bg-card/70 px-3 py-2 text-right font-medium text-foreground">
+                  <div className="bg-card px-3 py-2 text-right font-medium text-foreground">
                     {formatCurrency(row.price - row.cost)}
                   </div>
-                  <div className="bg-card/70 px-3 py-2 text-right font-semibold text-foreground">
+                  <div className="bg-card px-3 py-2 text-right font-semibold text-foreground">
                     {formatCurrency(row.price)}
                   </div>
                 </div>
               ))}
-              <div className="grid grid-cols-4 gap-px bg-border/40">
+              <div className="grid grid-cols-4 gap-px bg-border/30">
                 <div className="bg-accent/10 px-3 py-2.5 text-sm font-semibold text-foreground">
                   Total Contract
                 </div>
@@ -2344,54 +2300,29 @@ export function EstimateBuilderCard({
               </div>
             </div>
 
-            <div>
-              <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                Job margin checks
-              </p>
-              <div className="grid gap-2 md:grid-cols-3">
+            <div className="space-y-2">
+              <p className="text-xs font-medium text-muted-foreground">Margin checks</p>
+              <div className="grid gap-3 md:grid-cols-3">
                 {[
-                  [
-                    "Product margin",
-                    computed.margins.product_margin,
-                    computed.marginChecks.product_margin_ok,
-                    computed.marginThresholds.product_margin_min,
-                  ],
-                  [
-                    "Install margin",
-                    computed.margins.install_margin,
-                    computed.marginChecks.install_margin_ok,
-                    computed.marginThresholds.install_margin_min,
-                  ],
-                  [
-                    "Overall project margin",
-                    computed.margins.project_margin,
-                    computed.marginChecks.project_margin_ok,
-                    computed.marginThresholds.project_margin_min,
-                  ],
+                  ["Product", computed.margins.product_margin, computed.marginChecks.product_margin_ok, computed.marginThresholds.product_margin_min],
+                  ["Install", computed.margins.install_margin, computed.marginChecks.install_margin_ok, computed.marginThresholds.install_margin_min],
+                  ["Overall", computed.margins.project_margin, computed.marginChecks.project_margin_ok, computed.marginThresholds.project_margin_min],
                 ].map(([label, value, ok, threshold]) => (
-                  <div
-                    key={String(label)}
-                    className="rounded-lg border border-border bg-card/50 px-3 py-2"
-                  >
-                    <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">
-                      {label}
-                    </p>
-                    <div className="mt-1 flex items-end justify-between gap-2">
-                      <span
-                        className={cn(
-                          "text-base font-semibold",
-                          ok ? "text-accent" : "text-destructive"
-                        )}
-                      >
+                  <div key={String(label)} className="flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-2.5">
+                    <div>
+                      <p className="text-xs text-muted-foreground">{label}</p>
+                      <p className={cn("text-sm font-semibold tabular-nums", ok ? "text-accent" : "text-destructive")}>
                         {formatMargin(value as number)}
-                      </span>
+                      </p>
+                    </div>
+                    <div className="text-right">
                       <Badge variant={ok ? "accent" : "outline"} className="text-[10px]">
                         {ok ? "Pass" : "Review"}
                       </Badge>
+                      <p className="mt-1 text-[10px] text-muted-foreground">
+                        min {formatMargin(threshold as number)}
+                      </p>
                     </div>
-                    <p className="mt-1 text-[11px] text-muted-foreground">
-                      Target: {formatMargin(threshold as number)}
-                    </p>
                   </div>
                 ))}
               </div>
@@ -2401,11 +2332,9 @@ export function EstimateBuilderCard({
               <>
                 <Separator />
 
-                <div>
-                  <p className="mb-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                    Payment schedule
-                  </p>
-                  <div className="grid gap-2 md:grid-cols-2">
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Payment schedule</p>
+                  <div className="grid gap-x-6 gap-y-1 md:grid-cols-2">
                     {[
                       ["Material draw 1", computed.schedule.material_draw_1],
                       ["Material draw 2", computed.schedule.material_draw_2],
@@ -2417,10 +2346,10 @@ export function EstimateBuilderCard({
                     ].map(([label, value]) => (
                       <div
                         key={label}
-                        className="flex items-center justify-between rounded-lg border border-border bg-card/50 px-3 py-2"
+                        className="flex items-center justify-between py-1.5 border-b border-border/30 last:border-b-0"
                       >
                         <span className="text-sm text-muted-foreground">{label}</span>
-                        <span className="text-sm font-semibold text-foreground">
+                        <span className="text-sm font-medium text-foreground tabular-nums">
                           {formatCurrency(value as number)}
                         </span>
                       </div>
@@ -2431,21 +2360,18 @@ export function EstimateBuilderCard({
             ) : null}
 
             {hasMarginRisk ? (
-              <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-3 text-sm text-foreground">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-destructive" />
-                  Margin review required.
-                </div>
+              <div className="flex items-center gap-2 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-foreground">
+                <Sparkles className="h-4 w-4 text-destructive" />
+                Margin review required.
               </div>
             ) : (
-              <div className="rounded-xl border border-accent/30 bg-accent/10 px-3 py-3 text-sm text-foreground">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-accent" />
-                  Ready.
-                </div>
+              <div className="flex items-center gap-2 rounded-lg bg-accent/10 px-4 py-3 text-sm text-foreground">
+                <Sparkles className="h-4 w-4 text-accent" />
+                Ready to generate.
               </div>
             )}
           </section>
+          </>
         ) : null}
 
       </CardContent>
