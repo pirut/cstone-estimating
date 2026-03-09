@@ -75,11 +75,14 @@ import {
 } from "@/lib/org-teams";
 import { DEFAULT_MARGIN_THRESHOLDS } from "@/lib/estimate-calculator";
 import {
+  Archive,
+  ArchiveRestore,
   ArrowDownToLine,
   ArrowRightLeft,
   CheckCircle2,
   Clock3,
   CircleDashed,
+  Eye,
   FileText,
   FolderKanban,
   History,
@@ -87,12 +90,10 @@ import {
   Loader2,
   PencilLine,
   Plus,
-  Rocket,
   Save,
   Search,
   Tag,
   Trash2,
-  Workflow,
   X,
 } from "lucide-react";
 import {
@@ -127,6 +128,7 @@ type DeleteEstimateDialogState = {
 
 type HomePageProps = {
   routeEstimateId?: string | null;
+  mode?: "dashboard" | "estimate";
 };
 
 const LINKED_DOCUMENT_POLL_INTERVAL_MS = 20_000;
@@ -178,7 +180,8 @@ function mergeTotalsWithPandaDocValue(
   };
 }
 
-export default function HomePage({ routeEstimateId = null }: HomePageProps = {}) {
+export default function HomePage({ routeEstimateId = null, mode = "dashboard" }: HomePageProps = {}) {
+  const isEstimateMode = mode === "estimate" && Boolean(routeEstimateId);
   const normalizedRouteEstimateId = String(routeEstimateId ?? "").trim();
   const [urlEstimateId, setUrlEstimateId] = useState<string | null>(
     normalizedRouteEstimateId || null
@@ -250,17 +253,16 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
   >({});
   const [teamEstimateQuery, setTeamEstimateQuery] = useState("");
   const [teamEstimateScope, setTeamEstimateScope] = useState<
-    "all" | "mine" | "recent"
+    "all" | "mine" | "recent" | "archived"
   >("all");
   const [projectActionNotice, setProjectActionNotice] = useState<string | null>(null);
-  const [floatingDockOpen, setFloatingDockOpen] = useState(false);
-  const [floatingDockMoveTargetId, setFloatingDockMoveTargetId] = useState("");
-  const [dockRenameEstimateOpen, setDockRenameEstimateOpen] = useState(false);
-  const [dockRenameEstimateValue, setDockRenameEstimateValue] = useState("");
-  const [dockRenameProjectOpen, setDockRenameProjectOpen] = useState(false);
-  const [dockRenameProjectValue, setDockRenameProjectValue] = useState("");
-  const [dockCreateProjectOpen, setDockCreateProjectOpen] = useState(false);
-  const [dockCreateProjectValue, setDockCreateProjectValue] = useState("");
+  const [showArchivedProjects, setShowArchivedProjects] = useState(false);
+  const [archivingId, setArchivingId] = useState<string | null>(null);
+  const [renamingEstimateId, setRenamingEstimateId] = useState<string | null>(null);
+  const [renameEstimateValue, setRenameEstimateValue] = useState("");
+  const [renamingProjectId, setRenamingProjectId] = useState<string | null>(null);
+  const [renameProjectValue, setRenameProjectValue] = useState("");
+  const [previewVersionEntry, setPreviewVersionEntry] = useState<EstimateVersionEntry | null>(null);
   const [loadedEstimatePayload, setLoadedEstimatePayload] = useState<Record<
     string,
     any
@@ -454,6 +456,7 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
       return {
         id: projectId,
         name: String(project?.name ?? "").trim() || "Untitled Project",
+        status: String(project?.status ?? "active").trim(),
         estimateCount: Array.isArray(project?.estimates) ? project.estimates.length : 0,
         updatedAt:
           typeof project?.updatedAt === "number"
@@ -485,15 +488,22 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
   }, [teamProjects, unassignedTeamEstimates]);
   const filteredProjectLibraryItems = useMemo(() => {
     const query = projectLibraryQuery.trim().toLowerCase();
-    if (!query) return projectLibraryItems;
-    return projectLibraryItems.filter((project) =>
-      project.name.toLowerCase().includes(query)
-    );
-  }, [projectLibraryItems, projectLibraryQuery]);
+    return projectLibraryItems.filter((project) => {
+      if (!showArchivedProjects && project.status === "archived") return false;
+      if (query && !project.name.toLowerCase().includes(query)) return false;
+      return true;
+    });
+  }, [projectLibraryItems, projectLibraryQuery, showArchivedProjects]);
   const filteredTeamEstimates = useMemo(() => {
     const query = teamEstimateQuery.trim().toLowerCase();
     const recentCutoff = Date.now() - 1000 * 60 * 60 * 24 * 14;
     return teamEstimates.filter((estimate) => {
+      const isArchived = String(estimate?.status ?? "").trim() === "archived";
+      if (teamEstimateScope === "archived") {
+        if (!isArchived) return false;
+      } else {
+        if (isArchived) return false;
+      }
       if (
         teamEstimateScope === "mine" &&
         estimate?.owner?.id !== convexUser?.id
@@ -619,11 +629,6 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
   const activeEditingEstimateProjectId = String(
     activeEditingEstimate?.project?.id ?? ""
   ).trim();
-  const floatingDockMoveOptions = useMemo(
-    () =>
-      teamProjects.filter((project) => project.id !== activeEditingEstimateProjectId),
-    [activeEditingEstimateProjectId, teamProjects]
-  );
   const activeTrackedPandaDocDocument = useMemo(
     () =>
       activeEditingEstimate
@@ -903,22 +908,6 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
       setActiveProjectId(nextProjectId);
     }
   }, [activeProjectId, teamProjects, unassignedTeamEstimates.length]);
-
-  useEffect(() => {
-    if (!floatingDockMoveOptions.length) {
-      if (floatingDockMoveTargetId) {
-        setFloatingDockMoveTargetId("");
-      }
-      return;
-    }
-    if (
-      floatingDockMoveTargetId &&
-      floatingDockMoveOptions.some((project) => project.id === floatingDockMoveTargetId)
-    ) {
-      return;
-    }
-    setFloatingDockMoveTargetId(floatingDockMoveOptions[0]?.id ?? "");
-  }, [floatingDockMoveOptions, floatingDockMoveTargetId]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -2022,66 +2011,126 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
     }
   };
 
-  const handleRenameCurrentEstimate = useCallback(
-    (nextName: string) => {
-      const normalized = nextName.trim();
+  const handleRenameEstimate = useCallback(
+    async (estimateId: string, newName: string) => {
+      setError(null);
+      const normalized = newName.trim();
       if (!normalized) {
         setError("Estimate name can't be empty.");
         return false;
       }
-      setEstimateName(normalized);
-      setProjectActionNotice(`Renamed estimate to "${normalized}".`);
-      setDockRenameEstimateOpen(false);
-      return true;
+      if (!convexAppUrl || !convexUser || !activeTeam || !activeMembership) {
+        setError("Sign in and select a team first.");
+        return false;
+      }
+      try {
+        const now = Date.now();
+        await db.transact(
+          db.tx.estimates[estimateId].update({
+            title: normalized,
+            updatedAt: now,
+          })
+        );
+        if (editingEstimateId === estimateId) {
+          setEstimateName(normalized);
+        }
+        setProjectActionNotice(`Renamed estimate to "${normalized}".`);
+        setRenamingEstimateId(null);
+        return true;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error.";
+        setError(message);
+        return false;
+      }
     },
-    []
+    [activeMembership, activeTeam, convexAppUrl, convexUser, editingEstimateId]
   );
 
-  const handleRenameActiveProject = useCallback(async () => {
-    setError(null);
-    if (!convexAppUrl) {
-      setError("Convex is not configured yet.");
-      return;
-    }
-    if (!convexUser) {
-      setError("Sign in to rename projects.");
-      return;
-    }
-    if (!activeTeam || !activeMembership) {
-      setError("Select a team workspace first.");
-      return;
-    }
-    if (!activeProject) {
-      setError("Select a project to rename.");
-      return;
-    }
+  const handleRenameProject = useCallback(
+    async (projectId: string, newName: string) => {
+      setError(null);
+      const normalized = newName.trim();
+      if (!normalized) {
+        setError("Project name can't be empty.");
+        return false;
+      }
+      if (!convexAppUrl || !convexUser || !activeTeam || !activeMembership) {
+        setError("Sign in and select a team first.");
+        return false;
+      }
+      try {
+        const now = Date.now();
+        await db.transact(
+          db.tx.projects[projectId].update({
+            name: normalized,
+            updatedAt: now,
+          })
+        );
+        setProjectActionNotice(`Renamed project to "${normalized}".`);
+        setRenamingProjectId(null);
+        return true;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error.";
+        setError(message);
+        return false;
+      }
+    },
+    [activeMembership, activeTeam, convexAppUrl, convexUser]
+  );
 
-    const current = String(activeProject.name ?? "").trim();
-    const normalized = dockRenameProjectValue.trim();
-    if (!normalized || normalized === current) return;
+  const handleArchiveEstimate = useCallback(
+    async (estimateId: string, archive: boolean) => {
+      setError(null);
+      if (!convexAppUrl || !convexUser || !activeTeam || !activeMembership) {
+        setError("Sign in and select a team first.");
+        return;
+      }
+      setArchivingId(estimateId);
+      try {
+        const now = Date.now();
+        await db.transact(
+          db.tx.estimates[estimateId].update({
+            status: archive ? "archived" : "draft",
+            updatedAt: now,
+          })
+        );
+        setProjectActionNotice(archive ? "Estimate archived." : "Estimate restored.");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error.";
+        setError(message);
+      } finally {
+        setArchivingId(null);
+      }
+    },
+    [activeMembership, activeTeam, convexAppUrl, convexUser]
+  );
 
-    try {
-      const now = Date.now();
-      await db.transact(
-        db.tx.projects[activeProject.id].update({
-          name: normalized,
-          updatedAt: now,
-        })
-      );
-      setProjectActionNotice(`Renamed project to "${normalized}".`);
-      setDockRenameProjectOpen(false);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error.";
-      setError(message);
-    }
-  }, [
-    dockRenameProjectValue,
-    activeMembership,
-    activeProject,
-    activeTeam,
-    convexAppUrl,
-    convexUser,
-  ]);
+  const handleArchiveProject = useCallback(
+    async (projectId: string, archive: boolean) => {
+      setError(null);
+      if (!convexAppUrl || !convexUser || !activeTeam || !activeMembership) {
+        setError("Sign in and select a team first.");
+        return;
+      }
+      setArchivingId(projectId);
+      try {
+        const now = Date.now();
+        await db.transact(
+          db.tx.projects[projectId].update({
+            status: archive ? "archived" : "active",
+            updatedAt: now,
+          })
+        );
+        setProjectActionNotice(archive ? "Project archived." : "Project restored.");
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Unknown error.";
+        setError(message);
+      } finally {
+        setArchivingId(null);
+      }
+    },
+    [activeMembership, activeTeam, convexAppUrl, convexUser]
+  );
 
   const handleMoveEstimateToProject = useCallback(
     async (estimate: any, targetProjectId: string) => {
@@ -2159,18 +2208,6 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
       teamProjects,
     ]
   );
-
-  const handleMoveEditingEstimateToProject = useCallback(async () => {
-    if (!activeEditingEstimate) {
-      setError("Load an estimate before moving it.");
-      return;
-    }
-    if (!floatingDockMoveTargetId) {
-      setError("Choose a destination project in the action dock.");
-      return;
-    }
-    await handleMoveEstimateToProject(activeEditingEstimate, floatingDockMoveTargetId);
-  }, [activeEditingEstimate, floatingDockMoveTargetId, handleMoveEstimateToProject]);
 
   const handleDeleteTeamEstimate = useCallback(
     (estimate: any) => {
@@ -2304,10 +2341,6 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
         return;
       }
 
-      if (key === ".") {
-        event.preventDefault();
-        setFloatingDockOpen((open) => !open);
-      }
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -2319,24 +2352,6 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
     resetEstimateWorkspace,
   ]);
 
-  useEffect(() => {
-    if (!floatingDockOpen) return;
-    const onEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setFloatingDockOpen(false);
-      }
-    };
-    window.addEventListener("keydown", onEscape);
-    return () => window.removeEventListener("keydown", onEscape);
-  }, [floatingDockOpen]);
-
-  useEffect(() => {
-    if (floatingDockOpen) return;
-    setDockRenameEstimateOpen(false);
-    setDockRenameProjectOpen(false);
-    setDockCreateProjectOpen(false);
-  }, [floatingDockOpen]);
-
   const handleOpenActiveEstimateHistory = useCallback(() => {
     if (!activeEditingEstimate) {
       setError("Load an estimate to inspect version history.");
@@ -2345,75 +2360,6 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
     setHistoryEstimateId(activeEditingEstimate.id);
     setProjectActionNotice("Version history opened.");
   }, [activeEditingEstimate]);
-
-  const handleCreateProjectFromDock = useCallback(async () => {
-    setError(null);
-    if (!convexAppUrl) {
-      setError("Convex is not configured yet.");
-      return;
-    }
-    if (!convexUser) {
-      setError("Sign in to create projects.");
-      return;
-    }
-    if (!activeTeam || !activeMembership) {
-      setError("Select a team workspace first.");
-      return;
-    }
-
-    const normalized = dockCreateProjectValue.trim();
-    if (!normalized) {
-      setError("Enter a project name.");
-      return;
-    }
-
-    try {
-      const now = Date.now();
-      const projectId = id();
-      await db.transact(
-        db.tx.projects[projectId]
-          .create({
-            name: normalized,
-            status: "active",
-            createdAt: now,
-            updatedAt: now,
-          })
-          .link({ team: activeTeam.id, owner: convexUser.id })
-      );
-      setActiveProjectId(projectId);
-      setProjectActionNotice(`Created project "${normalized}".`);
-      setDockCreateProjectOpen(false);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown error.";
-      setError(message);
-    }
-  }, [
-    dockCreateProjectValue,
-    activeMembership,
-    activeTeam,
-    convexAppUrl,
-    convexUser,
-  ]);
-
-  const openDockRenameEstimate = useCallback(() => {
-    setDockRenameEstimateValue(estimateName.trim() || "Untitled Estimate");
-    setDockRenameEstimateOpen(true);
-  }, [estimateName]);
-
-  const openDockRenameProject = useCallback(() => {
-    setDockRenameProjectValue(String(activeProject?.name ?? "").trim());
-    setDockRenameProjectOpen(true);
-  }, [activeProject?.name]);
-
-  const openDockCreateProject = useCallback(() => {
-    const suggestedName =
-      estimateName.trim() ||
-      activeEditingEstimate?.title ||
-      activeProject?.name ||
-      "New Project";
-    setDockCreateProjectValue(suggestedName);
-    setDockCreateProjectOpen(true);
-  }, [activeEditingEstimate?.title, activeProject?.name, estimateName]);
 
   const handleCreateProject = async () => {
     setError(null);
@@ -3111,6 +3057,7 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
               </CardContent>
             </Card>
 
+            {!isEstimateMode ? (
             <div className="grid gap-4 xl:grid-cols-[minmax(320px,0.42fr)_minmax(0,0.58fr)] 2xl:grid-cols-[minmax(360px,0.38fr)_minmax(0,0.62fr)]">
               <div className="xl:sticky xl:top-6 xl:self-start">
                 <Card className="h-fit rounded-3xl border-border/60 bg-card/80 shadow-elevated">
@@ -3259,50 +3206,139 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
                         </Popover>
                       </div>
                     </div>
+                    <div className="flex items-center justify-between">
+                      <button
+                        type="button"
+                        className="text-[11px] text-muted-foreground hover:text-foreground"
+                        onClick={() => setShowArchivedProjects((v) => !v)}
+                      >
+                        {showArchivedProjects ? "Hide archived" : "Show archived"}
+                      </button>
+                    </div>
                     {filteredProjectLibraryItems.length ? (
                       <ScrollArea className="h-60 rounded-xl border border-border/60 bg-background/70">
                         <div className="space-y-2 p-2">
                           {filteredProjectLibraryItems.map((project) => {
                             const isActive = activeProjectId === project.id;
+                            const isProjectArchived = project.status === "archived";
+                            const isRenaming = renamingProjectId === project.id;
+                            const isUnassigned = project.id === UNASSIGNED_PROJECT_KEY;
                             return (
-                              <button
+                              <div
                                 key={project.id}
-                                type="button"
-                                onClick={() => setActiveProjectId(project.id)}
                                 className={cn(
-                                  "w-full rounded-lg border px-3 py-2 text-left transition",
+                                  "rounded-lg border px-3 py-2 transition",
                                   isActive
                                     ? "border-accent/60 bg-accent/10"
-                                    : "border-border/60 bg-card/80 hover:border-accent/40 hover:bg-accent/5"
+                                    : "border-border/60 bg-card/80 hover:border-accent/40 hover:bg-accent/5",
+                                  isProjectArchived && "opacity-60"
                                 )}
                               >
                                 <div className="flex items-center justify-between gap-2">
-                                  <p className="text-sm font-medium text-foreground">
-                                    {project.name}
-                                  </p>
-                                  {isActive ? (
-                                    <Badge
-                                      variant="outline"
-                                      className="border-accent/40 bg-accent/10 text-foreground"
+                                  <button
+                                    type="button"
+                                    className="flex-1 text-left"
+                                    onClick={() => setActiveProjectId(project.id)}
+                                  >
+                                    <p className="text-sm font-medium text-foreground">
+                                      {project.name}
+                                    </p>
+                                  </button>
+                                  <div className="flex items-center gap-1">
+                                    {isProjectArchived ? (
+                                      <Badge variant="muted" className="text-[10px]">Archived</Badge>
+                                    ) : null}
+                                    {isActive ? (
+                                      <Badge
+                                        variant="outline"
+                                        className="border-accent/40 bg-accent/10 text-foreground"
+                                      >
+                                        Active
+                                      </Badge>
+                                    ) : null}
+                                    {!isUnassigned ? (
+                                      <>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            setRenamingProjectId(project.id);
+                                            setRenameProjectValue(project.name);
+                                          }}
+                                        >
+                                          <PencilLine className="h-3 w-3" />
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7"
+                                          disabled={archivingId === project.id}
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            void handleArchiveProject(project.id, !isProjectArchived);
+                                          }}
+                                        >
+                                          {archivingId === project.id ? (
+                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                          ) : isProjectArchived ? (
+                                            <ArchiveRestore className="h-3 w-3" />
+                                          ) : (
+                                            <Archive className="h-3 w-3" />
+                                          )}
+                                        </Button>
+                                      </>
+                                    ) : null}
+                                  </div>
+                                </div>
+                                {isRenaming ? (
+                                  <div className="mt-2 flex items-center gap-2">
+                                    <Input
+                                      value={renameProjectValue}
+                                      onChange={(e) => setRenameProjectValue(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                          e.preventDefault();
+                                          void handleRenameProject(project.id, renameProjectValue);
+                                        }
+                                        if (e.key === "Escape") setRenamingProjectId(null);
+                                      }}
+                                      className="h-8 text-sm"
+                                      autoFocus
+                                    />
+                                    <Button
+                                      size="sm"
+                                      className="h-8"
+                                      onClick={() => void handleRenameProject(project.id, renameProjectValue)}
                                     >
-                                      Active
-                                    </Badge>
-                                  ) : null}
-                                </div>
-                                <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
-                                  <span className="inline-flex items-center gap-1">
-                                    <FolderKanban className="h-3 w-3" />
-                                    {project.estimateCount} estimate
-                                    {project.estimateCount === 1 ? "" : "s"}
-                                  </span>
-                                  <span>
-                                    Updated{" "}
-                                    {project.updatedAt
-                                      ? formatRelativeTime(project.updatedAt)
-                                      : "never"}
-                                  </span>
-                                </div>
-                              </button>
+                                      Save
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="h-8"
+                                      onClick={() => setRenamingProjectId(null)}
+                                    >
+                                      Cancel
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground">
+                                    <span className="inline-flex items-center gap-1">
+                                      <FolderKanban className="h-3 w-3" />
+                                      {project.estimateCount} estimate
+                                      {project.estimateCount === 1 ? "" : "s"}
+                                    </span>
+                                    <span>
+                                      Updated{" "}
+                                      {project.updatedAt
+                                        ? formatRelativeTime(project.updatedAt)
+                                        : "never"}
+                                    </span>
+                                  </div>
+                                )}
+                              </div>
                             );
                           })}
                         </div>
@@ -3382,6 +3418,14 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
                     >
                       Updated 14d
                     </Button>
+                    <Button
+                      variant={teamEstimateScope === "archived" ? "secondary" : "outline"}
+                      size="sm"
+                      onClick={() => setTeamEstimateScope("archived")}
+                    >
+                      <Archive className="mr-1 h-3 w-3" />
+                      Archived
+                    </Button>
                     {teamEstimateQuery.trim() ? (
                       <Button
                         variant="ghost"
@@ -3447,6 +3491,7 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
                           const editingCurrent = editingEstimateId === estimate.id;
                           const tags = normalizeEstimateTags(estimate?.tags);
                           const projectType = getEstimateProjectType(estimate);
+                          const isEstimateArchived = String(estimate?.status ?? "").trim() === "archived";
                           const estimateProjectId = String(
                             estimate?.project?.id ?? ""
                           ).trim();
@@ -3468,6 +3513,7 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
                                 estimateOwnerId &&
                                 estimateOwnerId === convexUser.id)
                           );
+                          const isRenamingThisEstimate = renamingEstimateId === estimate.id;
                           const estimateHref = `/estimates/${encodeURIComponent(
                             String(estimate.id ?? "")
                           )}`;
@@ -3476,30 +3522,66 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
                               key={estimate.id}
                               className={cn(
                                 "rounded-lg border border-border/60 bg-card/80 px-3 py-3",
-                                historyOpen && "border-accent/40 bg-accent/5"
+                                historyOpen && "border-accent/40 bg-accent/5",
+                                isEstimateArchived && "opacity-60"
                               )}
                             >
                               <div className="flex flex-wrap items-start justify-between gap-3">
-                                <div className="space-y-1">
-                                  <p>
-                                    <Link
-                                      href={estimateHref}
-                                      className="text-sm font-semibold text-foreground hover:text-accent"
-                                      onClick={(event) => {
-                                        const modifiedClick =
-                                          event.button !== 0 ||
-                                          event.metaKey ||
-                                          event.ctrlKey ||
-                                          event.shiftKey ||
-                                          event.altKey;
-                                        if (modifiedClick) return;
-                                        event.preventDefault();
-                                        handleOpenTeamEstimate(estimate);
-                                      }}
-                                    >
-                                      {estimate.title ?? "Untitled"}
-                                    </Link>
-                                  </p>
+                                <div className="min-w-0 flex-1 space-y-1">
+                                  {isRenamingThisEstimate ? (
+                                    <div className="flex items-center gap-2">
+                                      <Input
+                                        value={renameEstimateValue}
+                                        onChange={(e) => setRenameEstimateValue(e.target.value)}
+                                        onKeyDown={(e) => {
+                                          if (e.key === "Enter") {
+                                            e.preventDefault();
+                                            void handleRenameEstimate(estimate.id, renameEstimateValue);
+                                          }
+                                          if (e.key === "Escape") setRenamingEstimateId(null);
+                                        }}
+                                        className="h-8 text-sm"
+                                        autoFocus
+                                      />
+                                      <Button
+                                        size="sm"
+                                        className="h-8"
+                                        onClick={() => void handleRenameEstimate(estimate.id, renameEstimateValue)}
+                                      >
+                                        Save
+                                      </Button>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        className="h-8"
+                                        onClick={() => setRenamingEstimateId(null)}
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  ) : (
+                                    <p className="flex items-center gap-1">
+                                      <Link
+                                        href={estimateHref}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="text-sm font-semibold text-foreground hover:text-accent"
+                                      >
+                                        {estimate.title ?? "Untitled"}
+                                      </Link>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-6 w-6 shrink-0"
+                                        onClick={() => {
+                                          setRenamingEstimateId(estimate.id);
+                                          setRenameEstimateValue(String(estimate.title ?? ""));
+                                        }}
+                                      >
+                                        <PencilLine className="h-3 w-3" />
+                                      </Button>
+                                    </p>
+                                  )}
                                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                                     <Badge variant="outline" className="bg-background/80">
                                       v{currentVersion}
@@ -3508,6 +3590,9 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
                                       <Badge variant="muted" className="bg-muted/80">
                                         {projectType}
                                       </Badge>
+                                    ) : null}
+                                    {isEstimateArchived ? (
+                                      <Badge variant="muted" className="text-[10px]">Archived</Badge>
                                     ) : null}
                                     {editingCurrent ? (
                                       <Badge
@@ -3521,9 +3606,6 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
                                       <Clock3 className="h-3 w-3" />
                                       {formatRelativeTime(estimate.updatedAt)}
                                     </span>
-                                    {estimate.updatedAt ? (
-                                      <span>{new Date(estimate.updatedAt).toLocaleString()}</span>
-                                    ) : null}
                                   </div>
                                   {tags.length ? (
                                     <div className="mt-1 flex flex-wrap gap-1">
@@ -3539,7 +3621,16 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
                                     </div>
                                   ) : null}
                                 </div>
-                                <div className="flex flex-wrap items-center justify-end gap-2">
+                                <div className="flex flex-wrap items-center justify-end gap-1.5">
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    asChild
+                                  >
+                                    <Link href={estimateHref} target="_blank" rel="noreferrer">
+                                      Open
+                                    </Link>
+                                  </Button>
                                   {destinationProjects.length ? (
                                     <Popover>
                                       <PopoverTrigger asChild>
@@ -3548,20 +3639,14 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
                                           size="sm"
                                           disabled={isMovingEstimate || isDeletingEstimate}
                                         >
-                                          {isMovingEstimate ? (
-                                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                          ) : (
-                                            <ArrowRightLeft className="h-3.5 w-3.5" />
-                                          )}
+                                          <ArrowRightLeft className="h-3.5 w-3.5" />
                                           Move
                                         </Button>
                                       </PopoverTrigger>
                                       <PopoverContent align="end" className="w-72 space-y-3">
-                                        <div className="space-y-1">
-                                          <p className="text-sm font-semibold text-foreground">
-                                            Move estimate
-                                          </p>
-                                        </div>
+                                        <p className="text-sm font-semibold text-foreground">
+                                          Move estimate
+                                        </p>
                                         <Select
                                           value={selectedMoveTarget || undefined}
                                           onValueChange={(value) =>
@@ -3588,16 +3673,9 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
                                         <div className="flex justify-end">
                                           <Button
                                             size="sm"
-                                            disabled={
-                                              isMovingEstimate ||
-                                              isDeletingEstimate ||
-                                              !selectedMoveTarget
-                                            }
+                                            disabled={isMovingEstimate || !selectedMoveTarget}
                                             onClick={() =>
-                                              void handleMoveEstimateToProject(
-                                                estimate,
-                                                selectedMoveTarget
-                                              )
+                                              void handleMoveEstimateToProject(estimate, selectedMoveTarget)
                                             }
                                           >
                                             {isMovingEstimate ? (
@@ -3610,32 +3688,34 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
                                         </div>
                                       </PopoverContent>
                                     </Popover>
-                                  ) : (
-                                    <span className="text-[11px] text-muted-foreground">
-                                      Only project
-                                    </span>
-                                  )}
-                                  <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={() => handleOpenTeamEstimate(estimate)}
-                                    disabled={isDeletingEstimate}
-                                  >
-                                    Open
-                                  </Button>
+                                  ) : null}
                                   <Button
                                     variant={historyOpen ? "secondary" : "ghost"}
                                     size="sm"
                                     disabled={isDeletingEstimate}
                                     onClick={() => {
                                       setHistoryError(null);
+                                      setPreviewVersionEntry(null);
                                       setHistoryEstimateId((current) =>
                                         current === estimate.id ? null : estimate.id
                                       );
                                     }}
                                   >
                                     <History className="h-3.5 w-3.5" />
-                                    {historyOpen ? "Hide history" : "History"}
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={archivingId === estimate.id || isDeletingEstimate}
+                                    onClick={() => void handleArchiveEstimate(estimate.id, !isEstimateArchived)}
+                                  >
+                                    {archivingId === estimate.id ? (
+                                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                    ) : isEstimateArchived ? (
+                                      <ArchiveRestore className="h-3.5 w-3.5" />
+                                    ) : (
+                                      <Archive className="h-3.5 w-3.5" />
+                                    )}
                                   </Button>
                                   {canDeleteEstimate ? (
                                     <Button
@@ -3652,7 +3732,6 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
                                       ) : (
                                         <Trash2 className="h-3.5 w-3.5" />
                                       )}
-                                      Delete
                                     </Button>
                                   ) : null}
                                 </div>
@@ -3688,7 +3767,10 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => setHistoryEstimateId(null)}
+                          onClick={() => {
+                            setHistoryEstimateId(null);
+                            setPreviewVersionEntry(null);
+                          }}
                         >
                           Close
                         </Button>
@@ -3701,42 +3783,62 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
                               const reverting = historyActionId === actionId;
                               const isCurrent =
                                 selectedHistoryCurrentVersion === entry.version;
+                              const isPreviewing = previewVersionEntry?.id === entry.id;
                               return (
                                 <div
                                   key={entry.id}
-                                  className="flex items-center justify-between gap-4 px-3 py-2"
+                                  className={cn(
+                                    "px-3 py-2",
+                                    isPreviewing && "bg-accent/5"
+                                  )}
                                 >
-                                  <div>
-                                    <p className="text-xs font-medium text-foreground">
-                                      v{entry.version} ·{" "}
-                                      {getEstimateVersionActionLabel(entry.action)}
-                                    </p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {new Date(entry.createdAt).toLocaleString()}
-                                    </p>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    {isCurrent ? (
-                                      <Badge variant="outline" className="bg-background/80">
-                                        Current
-                                      </Badge>
-                                    ) : null}
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={() =>
-                                        void handleRevertTeamEstimateVersion(
-                                          selectedHistoryEstimate,
-                                          entry
-                                        )
-                                      }
-                                      disabled={reverting || isCurrent || !entry.payload}
-                                    >
-                                      {reverting ? (
-                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                  <div className="flex items-center justify-between gap-4">
+                                    <div>
+                                      <p className="text-xs font-medium text-foreground">
+                                        v{entry.version} ·{" "}
+                                        {getEstimateVersionActionLabel(entry.action)}
+                                      </p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {new Date(entry.createdAt).toLocaleString()}
+                                      </p>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      {isCurrent ? (
+                                        <Badge variant="outline" className="bg-background/80">
+                                          Current
+                                        </Badge>
                                       ) : null}
-                                      Revert
-                                    </Button>
+                                      {!isCurrent && entry.payload ? (
+                                        <Button
+                                          variant={isPreviewing ? "secondary" : "ghost"}
+                                          size="sm"
+                                          onClick={() =>
+                                            setPreviewVersionEntry(
+                                              isPreviewing ? null : entry
+                                            )
+                                          }
+                                        >
+                                          <Eye className="h-3.5 w-3.5" />
+                                          {isPreviewing ? "Close" : "Preview"}
+                                        </Button>
+                                      ) : null}
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() =>
+                                          void handleRevertTeamEstimateVersion(
+                                            selectedHistoryEstimate,
+                                            entry
+                                          )
+                                        }
+                                        disabled={reverting || isCurrent || !entry.payload}
+                                      >
+                                        {reverting ? (
+                                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        ) : null}
+                                        Revert
+                                      </Button>
+                                    </div>
                                   </div>
                                 </div>
                               );
@@ -3748,6 +3850,70 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
                           No versions recorded yet.
                         </div>
                       )}
+                      {previewVersionEntry ? (() => {
+                        const currentPayload = selectedHistoryEstimate?.payload;
+                        const versionPayload = previewVersionEntry.payload;
+                        const currentTotals = selectedHistoryEstimate?.totals;
+                        const versionTotals = previewVersionEntry.totals;
+                        const diffs: Array<{ field: string; current: string; version: string }> = [];
+                        const infoFields = ["prepared_for", "project_name", "prepared_by", "project_address", "project_type"];
+                        for (const field of infoFields) {
+                          const cur = String(currentPayload?.values?.[field] ?? currentPayload?.info?.[field] ?? "").trim();
+                          const ver = String(versionPayload?.values?.[field] ?? versionPayload?.info?.[field] ?? "").trim();
+                          if (cur !== ver) {
+                            diffs.push({ field: field.replace(/_/g, " "), current: cur || "(empty)", version: ver || "(empty)" });
+                          }
+                        }
+                        const curTitle = String(selectedHistoryEstimate?.title ?? "").trim();
+                        const verTitle = String(previewVersionEntry.title ?? "").trim();
+                        if (curTitle !== verTitle) {
+                          diffs.push({ field: "title", current: curTitle || "(empty)", version: verTitle || "(empty)" });
+                        }
+                        const totalFields = ["total_contract_price", "product_price", "installation_price", "bucking_price", "waterproofing_price"];
+                        for (const field of totalFields) {
+                          const cur = currentTotals?.[field];
+                          const ver = versionTotals?.[field];
+                          if (cur !== ver && (cur != null || ver != null)) {
+                            const fmt = (v: any) => typeof v === "number" ? `$${v.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "(none)";
+                            diffs.push({ field: field.replace(/_/g, " "), current: fmt(cur), version: fmt(ver) });
+                          }
+                        }
+                        const curProducts = Array.isArray(currentPayload?.products) ? currentPayload.products.length : 0;
+                        const verProducts = Array.isArray(versionPayload?.products) ? versionPayload.products.length : 0;
+                        if (curProducts !== verProducts) {
+                          diffs.push({ field: "product lines", current: String(curProducts), version: String(verProducts) });
+                        }
+                        const curBucking = Array.isArray(currentPayload?.bucking) ? currentPayload.bucking.length : 0;
+                        const verBucking = Array.isArray(versionPayload?.bucking) ? versionPayload.bucking.length : 0;
+                        if (curBucking !== verBucking) {
+                          diffs.push({ field: "bucking lines", current: String(curBucking), version: String(verBucking) });
+                        }
+                        return (
+                          <div className="rounded-lg border border-accent/30 bg-accent/5 p-3 space-y-2">
+                            <p className="text-xs font-medium text-foreground">
+                              Comparing current with v{previewVersionEntry.version}
+                            </p>
+                            {diffs.length ? (
+                              <div className="rounded-md border border-border/60 bg-background/70 overflow-hidden">
+                                <div className="grid grid-cols-3 gap-px bg-border/40 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                                  <div className="bg-card/90 px-2 py-1.5">Field</div>
+                                  <div className="bg-card/90 px-2 py-1.5">Current</div>
+                                  <div className="bg-card/90 px-2 py-1.5">v{previewVersionEntry.version}</div>
+                                </div>
+                                {diffs.map((diff) => (
+                                  <div key={diff.field} className="grid grid-cols-3 gap-px bg-border/40 text-xs">
+                                    <div className="bg-card/70 px-2 py-1.5 text-muted-foreground capitalize">{diff.field}</div>
+                                    <div className="bg-red-500/5 px-2 py-1.5 text-foreground">{diff.current}</div>
+                                    <div className="bg-emerald-500/5 px-2 py-1.5 text-foreground">{diff.version}</div>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-muted-foreground">No differences detected in key fields.</p>
+                            )}
+                          </div>
+                        );
+                      })() : null}
                     </div>
                   ) : null}
                   {editingEstimateId ? (
@@ -3758,14 +3924,28 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
                 </CardContent>
               </Card>
             </div>
+            ) : null}
           </section>
         ) : null}
 
-        {bidFlowStarted ? (
+        {(isEstimateMode || bidFlowStarted) ? (
           <section
             id="step-input"
-            className="mt-12 grid gap-6 xl:grid-cols-[minmax(0,1.28fr)_minmax(360px,0.72fr)] 2xl:grid-cols-[minmax(0,1.38fr)_minmax(440px,0.62fr)]"
+            className={cn(
+              "grid gap-6 xl:grid-cols-[minmax(0,1.28fr)_minmax(360px,0.72fr)] 2xl:grid-cols-[minmax(0,1.38fr)_minmax(440px,0.62fr)]",
+              !isEstimateMode && "mt-12"
+            )}
           >
+          {isEstimateMode ? (
+            <div className="col-span-full mb-4">
+              <Button variant="outline" size="sm" asChild>
+                <Link href="/">
+                  <ArrowDownToLine className="h-3.5 w-3.5 rotate-90" />
+                  Back to Dashboard
+                </Link>
+              </Button>
+            </div>
+          ) : null}
           <div className="space-y-6">
             <EstimateBuilderCard
               values={estimateValues}
@@ -3857,7 +4037,7 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
                     </Badge>
                     <CardTitle className="text-xl font-serif">At a glance</CardTitle>
                   </div>
-                  <Workflow className="mt-1 h-5 w-5 text-muted-foreground" />
+                  <FileText className="mt-1 h-5 w-5 text-muted-foreground" />
                 </div>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -4202,267 +4382,6 @@ export default function HomePage({ routeEstimateId = null }: HomePageProps = {})
 
           </>
         )}
-
-        {bidFlowStarted ? (
-          <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3">
-          <div className="relative flex flex-col items-end gap-2">
-            <div
-              className={cn(
-                "flex flex-col items-center gap-2 transition-all duration-250",
-                floatingDockOpen
-                  ? "translate-y-0 opacity-100"
-                  : "pointer-events-none translate-y-3 opacity-0"
-              )}
-            >
-              <div className="group relative flex h-11 w-11 items-center justify-center">
-                <span className="pointer-events-none absolute right-[calc(100%+0.6rem)] top-1/2 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
-                  Save To Project
-                </span>
-                <Button
-                  variant="secondary"
-                  size="icon"
-                  className="h-11 w-11 rounded-full border border-border/60 shadow-lg"
-                  onClick={() => void handleSaveEstimateToDb()}
-                  disabled={!isSignedIn || !teamReady || !hasSelectedProject}
-                >
-                  <Save className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <div className="group relative flex h-11 w-11 items-center justify-center">
-                <span className="pointer-events-none absolute right-[calc(100%+0.6rem)] top-1/2 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
-                  Generate PandaDoc
-                </span>
-                <Button
-                  variant="secondary"
-                  size="icon"
-                  className="h-11 w-11 rounded-full border border-border/60 shadow-lg"
-                  onClick={handleGenerate}
-                  disabled={!canGenerate || isGenerating}
-                >
-                  <Rocket className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <div className="group relative flex h-11 w-11 items-center justify-center">
-                <span className="pointer-events-none absolute right-[calc(100%+0.6rem)] top-1/2 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
-                  Move Loaded Estimate
-                </span>
-                <Button
-                  variant="secondary"
-                  size="icon"
-                  className="h-11 w-11 rounded-full border border-border/60 shadow-lg"
-                  onClick={() => void handleMoveEditingEstimateToProject()}
-                  disabled={
-                    !activeEditingEstimate ||
-                    !floatingDockMoveTargetId ||
-                    !floatingDockMoveOptions.length ||
-                    movingEstimateId === activeEditingEstimate.id
-                  }
-                >
-                  {movingEstimateId === activeEditingEstimate?.id ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <ArrowRightLeft className="h-4 w-4" />
-                  )}
-                </Button>
-              </div>
-
-              <Popover
-                open={dockRenameEstimateOpen}
-                onOpenChange={(open) => {
-                  setDockRenameEstimateOpen(open);
-                  if (open) openDockRenameEstimate();
-                }}
-              >
-                <div className="group relative flex h-11 w-11 items-center justify-center">
-                  <span className="pointer-events-none absolute right-[calc(100%+0.6rem)] top-1/2 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
-                    Rename Estimate
-                  </span>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="secondary"
-                      size="icon"
-                      className="h-11 w-11 rounded-full border border-border/60 shadow-lg"
-                    >
-                      <PencilLine className="h-4 w-4" />
-                    </Button>
-                  </PopoverTrigger>
-                </div>
-                <PopoverContent align="end" className="w-80 space-y-3">
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-foreground">Rename estimate</p>
-                    <p className="text-xs text-muted-foreground">
-                      Update the working estimate name for this session.
-                    </p>
-                  </div>
-                  <Input
-                    value={dockRenameEstimateValue}
-                    onChange={(event) => setDockRenameEstimateValue(event.target.value)}
-                    placeholder="Estimate name"
-                  />
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setDockRenameEstimateOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        handleRenameCurrentEstimate(dockRenameEstimateValue);
-                      }}
-                    >
-                      Save name
-                    </Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-
-              <Popover
-                open={dockRenameProjectOpen}
-                onOpenChange={(open) => {
-                  setDockRenameProjectOpen(open);
-                  if (open) openDockRenameProject();
-                }}
-              >
-                <div className="group relative flex h-11 w-11 items-center justify-center">
-                  <span className="pointer-events-none absolute right-[calc(100%+0.6rem)] top-1/2 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
-                    Rename Project
-                  </span>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="secondary"
-                      size="icon"
-                      className="h-11 w-11 rounded-full border border-border/60 shadow-lg"
-                      disabled={!activeProject}
-                    >
-                      <FolderKanban className="h-4 w-4" />
-                    </Button>
-                  </PopoverTrigger>
-                </div>
-                <PopoverContent align="end" className="w-80 space-y-3">
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-foreground">Rename project</p>
-                    <p className="text-xs text-muted-foreground">
-                      Keep the project library organized for your team.
-                    </p>
-                  </div>
-                  <Input
-                    value={dockRenameProjectValue}
-                    onChange={(event) => setDockRenameProjectValue(event.target.value)}
-                    placeholder="Project name"
-                  />
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setDockRenameProjectOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button size="sm" onClick={() => void handleRenameActiveProject()}>
-                      Save name
-                    </Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-
-              <div className="group relative flex h-11 w-11 items-center justify-center">
-                <span className="pointer-events-none absolute right-[calc(100%+0.6rem)] top-1/2 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
-                  Open Version History
-                </span>
-                <Button
-                  variant="secondary"
-                  size="icon"
-                  className="h-11 w-11 rounded-full border border-border/60 shadow-lg"
-                  onClick={handleOpenActiveEstimateHistory}
-                  disabled={!activeEditingEstimate}
-                >
-                  <History className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <div className="group relative flex h-11 w-11 items-center justify-center">
-                <span className="pointer-events-none absolute right-[calc(100%+0.6rem)] top-1/2 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
-                  New Estimate
-                </span>
-                <Button
-                  variant="secondary"
-                  size="icon"
-                  className="h-11 w-11 rounded-full border border-border/60 shadow-lg"
-                  onClick={resetEstimateWorkspace}
-                >
-                  <FileText className="h-4 w-4" />
-                </Button>
-              </div>
-
-              <Popover
-                open={dockCreateProjectOpen}
-                onOpenChange={(open) => {
-                  setDockCreateProjectOpen(open);
-                  if (open) openDockCreateProject();
-                }}
-              >
-                <div className="group relative flex h-11 w-11 items-center justify-center">
-                  <span className="pointer-events-none absolute right-[calc(100%+0.6rem)] top-1/2 -translate-y-1/2 translate-x-1 whitespace-nowrap rounded-full border border-border/70 bg-card/95 px-2.5 py-1 text-[11px] font-medium text-foreground opacity-0 shadow-lg transition-all duration-150 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100">
-                    Create Project
-                  </span>
-                  <PopoverTrigger asChild>
-                    <Button
-                      variant="secondary"
-                      size="icon"
-                      className="h-11 w-11 rounded-full border border-border/60 shadow-lg"
-                      disabled={!isSignedIn || !teamReady}
-                    >
-                      <Plus className="h-4 w-4" />
-                    </Button>
-                  </PopoverTrigger>
-                </div>
-                <PopoverContent align="end" className="w-80 space-y-3">
-                  <div className="space-y-1">
-                    <p className="text-sm font-semibold text-foreground">Create project</p>
-                    <p className="text-xs text-muted-foreground">
-                      Spin up a new destination for upcoming estimates.
-                    </p>
-                  </div>
-                  <Input
-                    value={dockCreateProjectValue}
-                    onChange={(event) => setDockCreateProjectValue(event.target.value)}
-                    placeholder="Project name"
-                  />
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setDockCreateProjectOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button size="sm" onClick={() => void handleCreateProjectFromDock()}>
-                      Create
-                    </Button>
-                  </div>
-                </PopoverContent>
-              </Popover>
-            </div>
-            <Button
-              variant="accent"
-              size="icon"
-              className="h-14 w-14 rounded-full border border-accent/40 shadow-xl"
-              onClick={() => setFloatingDockOpen((open) => !open)}
-            >
-              {floatingDockOpen ? (
-                <X className="h-5 w-5" />
-              ) : (
-                <Workflow className="h-5 w-5" />
-              )}
-            </Button>
-          </div>
-          </div>
-        ) : null}
 
         <AlertDialog
           open={Boolean(deleteEstimateDialog)}

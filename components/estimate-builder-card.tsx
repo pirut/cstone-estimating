@@ -2283,26 +2283,82 @@ export function EstimateBuilderCard({
 
         {showReview ? (
           <section className="space-y-4 rounded-2xl border border-border/60 bg-background/65 p-4">
-            <SectionHeader title="Calculated Totals" done={installStepComplete} />
+            <SectionHeader title="Pricing Breakdown" done={installStepComplete} />
 
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="rounded-xl border border-border/60 bg-card/70 overflow-hidden">
+              <div className="grid grid-cols-4 gap-px bg-border/40 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+                <div className="bg-card/90 px-3 py-2">Line Item</div>
+                <div className="bg-card/90 px-3 py-2 text-right">Cost</div>
+                <div className="bg-card/90 px-3 py-2 text-right">Markup</div>
+                <div className="bg-card/90 px-3 py-2 text-right">Customer Price</div>
+              </div>
               {[
-                ["Product price", computed.totals.product_price],
-                ["Bucking price", computed.totals.bucking_price],
-                ["Waterproofing price", computed.totals.waterproofing_price],
-                ["Installation price", computed.totals.installation_price],
-                ["Total contract", computed.totals.total_contract_price],
-              ].map(([label, value]) => (
+                {
+                  label: "Product",
+                  cost: computed.breakdown.product_cost_base,
+                  price: computed.totals.product_price,
+                },
+                {
+                  label: "Bucking",
+                  cost: computed.breakdown.bucking_cost_base,
+                  price: computed.totals.bucking_price,
+                },
+                {
+                  label: "Waterproofing",
+                  cost: computed.breakdown.waterproofing_cost_base,
+                  price: computed.totals.waterproofing_price,
+                },
+                {
+                  label: "Installation",
+                  cost: computed.breakdown.install_cost_base + computed.breakdown.covers_cost_base + computed.breakdown.punch_cost_base,
+                  price: computed.totals.installation_price,
+                },
+              ].map((row) => (
                 <div
-                  key={label}
-                  className="flex items-center justify-between rounded-lg border border-border/60 bg-card/70 px-3 py-2"
+                  key={row.label}
+                  className="grid grid-cols-4 gap-px bg-border/40 text-sm"
                 >
-                  <span className="text-sm text-muted-foreground">{label}</span>
-                  <span className="text-sm font-semibold text-foreground">
-                    {formatCurrency(value as number)}
-                  </span>
+                  <div className="bg-card/70 px-3 py-2 text-muted-foreground">{row.label}</div>
+                  <div className="bg-card/70 px-3 py-2 text-right font-medium text-foreground">
+                    {formatCurrency(row.cost)}
+                  </div>
+                  <div className="bg-card/70 px-3 py-2 text-right font-medium text-foreground">
+                    {formatCurrency(row.price - row.cost)}
+                  </div>
+                  <div className="bg-card/70 px-3 py-2 text-right font-semibold text-foreground">
+                    {formatCurrency(row.price)}
+                  </div>
                 </div>
               ))}
+              <div className="grid grid-cols-4 gap-px bg-border/40">
+                <div className="bg-accent/10 px-3 py-2.5 text-sm font-semibold text-foreground">
+                  Total Contract
+                </div>
+                <div className="bg-accent/10 px-3 py-2.5 text-right text-sm font-semibold text-foreground">
+                  {formatCurrency(
+                    computed.breakdown.product_cost_base +
+                    computed.breakdown.bucking_cost_base +
+                    computed.breakdown.waterproofing_cost_base +
+                    computed.breakdown.install_cost_base +
+                    computed.breakdown.covers_cost_base +
+                    computed.breakdown.punch_cost_base
+                  )}
+                </div>
+                <div className="bg-accent/10 px-3 py-2.5 text-right text-sm font-semibold text-foreground">
+                  {formatCurrency(
+                    computed.totals.total_contract_price -
+                    (computed.breakdown.product_cost_base +
+                    computed.breakdown.bucking_cost_base +
+                    computed.breakdown.waterproofing_cost_base +
+                    computed.breakdown.install_cost_base +
+                    computed.breakdown.covers_cost_base +
+                    computed.breakdown.punch_cost_base)
+                  )}
+                </div>
+                <div className="bg-accent/10 px-3 py-2.5 text-right text-base font-bold text-foreground">
+                  {formatCurrency(computed.totals.total_contract_price)}
+                </div>
+              </div>
             </div>
 
             <div>

@@ -55,5 +55,5 @@ export async function generateMetadata({
 export default function EstimatePage({ params }: EstimatePageProps) {
   const estimateId = parseEstimateId(params.estimateId);
 
-  return <HomePage routeEstimateId={estimateId} />;
+  return <HomePage routeEstimateId={estimateId} mode="estimate" />;
 }

@@ -221,6 +221,7 @@ export type EstimateComputed = {
   breakdown: {
     total_lineal_ft: number;
     total_install_value: number;
+    product_cost_base: number;
     install_cost_base: number;
     covers_cost_base: number;
     punch_cost_base: number;
@@ -460,6 +461,7 @@ export function computeEstimate(
     breakdown: {
       total_lineal_ft: totalLinealFt,
       total_install_value: totalInstallValue,
+      product_cost_base: productCostBase,
       install_cost_base: installCostBase,
       covers_cost_base: coversCostBase,
       punch_cost_base: punchCostBase,
@@ -550,6 +552,7 @@ function computeChangeOrderEstimate(
     breakdown: {
       total_lineal_ft: 0,
       total_install_value: laborCost,
+      product_cost_base: vendorCost,
       install_cost_base: laborCost,
       covers_cost_base: 0,
       punch_cost_base: 0,

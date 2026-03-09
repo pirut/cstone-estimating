@@ -138,6 +138,13 @@ export async function POST(request: NextRequest) {
       mappingConfig
     );
 
+    const estimateTitle = String(
+      estimatePayload?.name ?? ""
+    ).trim();
+    if (estimateTitle) {
+      fieldValues.estimate_title = estimateTitle;
+    }
+
     const updateDraftPayload = buildPandaDocDraft({
       fieldValues,
       templateUuid: pandadocTemplateUuid,

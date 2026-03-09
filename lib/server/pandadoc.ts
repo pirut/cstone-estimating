@@ -302,14 +302,14 @@ function toDocumentValue(
 
 function inferDocumentName(fieldValues: Record<string, string>) {
   const preparedFor = coerceString(fieldValues.prepared_for);
-  const projectName = coerceString(fieldValues.project_name);
+  const estimateTitle = coerceString(fieldValues.estimate_title);
 
-  if (projectName && preparedFor) {
-    return `${projectName} - ${preparedFor}`;
+  if (preparedFor && estimateTitle) {
+    return `${preparedFor} - ${estimateTitle}`;
   }
 
-  if (projectName) {
-    return projectName;
+  if (estimateTitle) {
+    return estimateTitle;
   }
 
   if (preparedFor) {
