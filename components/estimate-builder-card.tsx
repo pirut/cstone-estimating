@@ -1023,7 +1023,8 @@ export function EstimateBuilderCard({
     draft.calculator.override_install_total
   );
   const buckingStepReady = hasBuckingLineItems || hasBuckingOverrides;
-  const installInputsComplete = hasBuckingLineItems || hasInstallOverride;
+  const installInputsComplete =
+    hasBuckingLineItems || hasBuckingOverrides || hasInstallOverride;
   const installStepReady = isChangeOrderMode
     ? computed.totals.total_contract_price > 0
     : computed.totals.total_contract_price > 0 && installInputsComplete;
