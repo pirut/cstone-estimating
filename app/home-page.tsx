@@ -238,6 +238,9 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
   const [knownOrgLookupLoaded, setKnownOrgLookupLoaded] = useState(false);
   const [editingEstimateId, setEditingEstimateId] = useState<string | null>(null);
   const [historyEstimateId, setHistoryEstimateId] = useState<string | null>(null);
+  const projectsCardRef = useRef<HTMLDivElement>(null);
+  const estimatesCardRef = useRef<HTMLDivElement>(null);
+  const [estimatesCardHeight, setEstimatesCardHeight] = useState<number | null>(null);
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyActionId, setHistoryActionId] = useState<string | null>(null);
   const [movingEstimateId, setMovingEstimateId] = useState<string | null>(null);
@@ -861,6 +864,16 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
   useEffect(() => {
     setUrlEstimateId(normalizedRouteEstimateId || null);
   }, [normalizedRouteEstimateId]);
+
+  useEffect(() => {
+    const el = estimatesCardRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => {
+      setEstimatesCardHeight(el.offsetHeight);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -2928,9 +2941,9 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
             ) : null}
 
             {!isEstimateMode ? (
-            <div className="grid gap-6 lg:grid-cols-[minmax(280px,0.35fr)_minmax(0,0.65fr)] xl:grid-cols-[minmax(320px,0.35fr)_minmax(0,0.65fr)] items-stretch">
-              <div className="flex flex-col">
-                <Card className="shadow-elevated flex-1 flex flex-col">
+            <div className="grid gap-6 lg:grid-cols-[minmax(280px,0.35fr)_minmax(0,0.65fr)] xl:grid-cols-[minmax(320px,0.35fr)_minmax(0,0.65fr)] items-start">
+              <div className="lg:sticky lg:top-[80px]" ref={projectsCardRef}>
+                <Card className="shadow-elevated flex flex-col overflow-hidden" style={{ maxHeight: estimatesCardHeight ? `${estimatesCardHeight}px` : undefined }}>
                 <CardHeader className="pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base font-serif font-light tracking-tight">Projects</CardTitle>
@@ -3056,7 +3069,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                       </button>
                     </div>
                     {filteredProjectLibraryItems.length ? (
-                      <ScrollArea className="flex-1 min-h-[200px]">
+                      <ScrollArea className="flex-1">
                         <div className="space-y-0.5">
                           {filteredProjectLibraryItems.map((project) => {
                             const isActive = activeProjectId === project.id;
@@ -3168,7 +3181,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                 </Card>
               </div>
 
-              <Card className="shadow-elevated">
+              <Card ref={estimatesCardRef} className="shadow-elevated">
                 <CardHeader className="space-y-3 pb-3">
                   <div className="flex items-center justify-between">
                     <CardTitle className="text-base font-serif font-light tracking-tight">
