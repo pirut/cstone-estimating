@@ -2876,7 +2876,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
             <div className="flex items-center gap-4">
               <BrandMark tone="auto" size="sm" />
               <div className="hidden h-6 w-px bg-border sm:block" />
-              <span className="hidden text-[13px] font-medium tracking-wide uppercase text-muted-foreground sm:inline">
+              <span className="hidden text-[13px] text-muted-foreground sm:inline">
                 Proposal Studio
               </span>
             </div>
@@ -3089,7 +3089,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                           New project
                         </p>
                           <div className="space-y-2">
-                            <label className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                            <label className="text-xs text-muted-foreground">
                               Project name
                             </label>
                             <Input
@@ -3300,10 +3300,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                       {projectActionNotice}
                     </div>
                   ) : null}
-                  <div className="flex items-center justify-between gap-3 rounded-lg bg-muted/50 px-4 py-3">
-                    <p className="text-sm text-muted-foreground">
-                      {!bidFlowStarted ? "Select an estimate or create a new one." : `${filteredTeamEstimates.length} estimates`}
-                    </p>
+                  <div className="flex items-center justify-end">
                     <Button
                       variant="accent"
                       size="sm"
@@ -3429,24 +3426,41 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                                   ) : null}
                                 </div>
                                 <div className="flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" onClick={() => { setRenamingEstimateId(estimate.id); setRenameEstimateValue(String(estimate.title ?? "")); }}>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground" title="Rename" onClick={() => { setRenamingEstimateId(estimate.id); setRenameEstimateValue(String(estimate.title ?? "")); }}>
                                     <PencilLine className="h-3 w-3" />
+                                  </Button>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className={cn("h-7 w-7", historyOpen ? "text-accent" : "text-muted-foreground")}
+                                    title="Version history"
+                                    disabled={isDeletingEstimate}
+                                    onClick={() => {
+                                      setHistoryError(null);
+                                      setPreviewVersionEntry(null);
+                                      setHistoryEstimateId((current) =>
+                                        current === estimate.id ? null : estimate.id
+                                      );
+                                    }}
+                                  >
+                                    <History className="h-3 w-3" />
                                   </Button>
                                   {destinationProjects.length ? (
                                     <Popover>
                                       <PopoverTrigger asChild>
                                         <Button
-                                          variant="outline"
-                                          size="sm"
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-7 w-7 text-muted-foreground"
+                                          title="Move to project"
                                           disabled={isMovingEstimate || isDeletingEstimate}
                                         >
-                                          <ArrowRightLeft className="h-3.5 w-3.5" />
-                                          Move
+                                          <ArrowRightLeft className="h-3 w-3" />
                                         </Button>
                                       </PopoverTrigger>
                                       <PopoverContent align="end" className="w-72 space-y-3">
-                                        <p className="text-sm font-semibold text-foreground">
-                                          Move estimate
+                                        <p className="text-xs text-muted-foreground">
+                                          Move to project
                                         </p>
                                         <Select
                                           value={selectedMoveTarget || undefined}
@@ -3493,22 +3507,8 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                                   <Button
                                     variant="ghost"
                                     size="icon"
-                                    className={cn("h-7 w-7", historyOpen ? "text-accent" : "text-muted-foreground")}
-                                    disabled={isDeletingEstimate}
-                                    onClick={() => {
-                                      setHistoryError(null);
-                                      setPreviewVersionEntry(null);
-                                      setHistoryEstimateId((current) =>
-                                        current === estimate.id ? null : estimate.id
-                                      );
-                                    }}
-                                  >
-                                    <History className="h-3 w-3" />
-                                  </Button>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
                                     className="h-7 w-7 text-muted-foreground"
+                                    title={isEstimateArchived ? "Restore" : "Archive"}
                                     disabled={archivingId === estimate.id || isDeletingEstimate}
                                     onClick={() => void handleArchiveEstimate(estimate.id, !isEstimateArchived)}
                                   >
@@ -3525,6 +3525,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                                       variant="ghost"
                                       size="icon"
                                       className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                                      title="Delete"
                                       disabled={isDeletingEstimate}
                                       onClick={() =>
                                         void handleDeleteTeamEstimate(estimate)
@@ -3890,11 +3891,9 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
               }}
             />
             <Card className="shadow-subtle">
-              <CardHeader className="pb-3">
-                <CardTitle className="text-sm font-sans font-medium">Tags</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex flex-wrap gap-2">
+              <CardContent className="pt-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Tag className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                   <Input
                     value={estimateTagInput}
                     onChange={(event) => setEstimateTagInput(event.target.value)}
@@ -3905,12 +3904,13 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                         setEstimateTagInput("");
                       }
                     }}
-                    placeholder="Add a tag and press Enter..."
-                    className="min-w-[220px] flex-1"
+                    placeholder="Add tag..."
+                    className="flex-1"
                   />
                   <Button
                     type="button"
                     variant="secondary"
+                    size="sm"
                     onClick={() => {
                       if (addEstimateTag(estimateTagInput)) {
                         setEstimateTagInput("");
@@ -3918,12 +3918,11 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                     }}
                     disabled={!estimateTagInput.trim()}
                   >
-                    <Tag className="h-4 w-4" />
-                    Add tag
+                    Add
                   </Button>
                 </div>
                 {estimateTags.length ? (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-1.5">
                     {estimateTags.map((tag) => (
                       <Badge
                         key={tag}
@@ -3942,9 +3941,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                       </Badge>
                     ))}
                   </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">No tags.</p>
-                )}
+                ) : null}
               </CardContent>
             </Card>
           </div>
@@ -3953,7 +3950,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
             <Card className="shadow-elevated overflow-hidden">
               <div className="bg-cs-gunmetal px-5 py-4 dark:bg-card dark:border-b dark:border-border">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold uppercase tracking-wider text-white/80 dark:text-muted-foreground">Progress</span>
+                  <span className="text-sm font-medium text-white/80 dark:text-muted-foreground">Progress</span>
                   <span className="text-lg font-serif font-light text-cs-gold">{workflowPercent}%</span>
                 </div>
                 <div className="mt-3 h-1 w-full overflow-hidden rounded-full bg-white/15 dark:bg-muted">
@@ -4021,39 +4018,18 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                     </div>
                   </div>
                 ) : null}
-                <div className="space-y-2 text-sm">
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-muted-foreground">Input source</span>
-                    <span className="text-right font-medium text-foreground">
-                      Manual estimate
-                    </span>
-                  </div>
+                <div className="space-y-1.5 text-sm">
                   <div className="flex items-center justify-between gap-4">
                     <span className="text-muted-foreground">Estimate</span>
-                    <span className="text-right font-medium text-foreground">
+                    <span className="truncate text-right font-medium text-foreground ml-4">
                       {estimateName.trim() ||
                         selectedEstimate?.name ||
                         (hasEstimateInput ? "Manual entry" : "Not started")}
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-4">
-                    <span className="text-muted-foreground">Project</span>
-                    <span className="text-right font-medium text-foreground">
-                      {activeProject?.name ??
-                        (activeProjectId === UNASSIGNED_PROJECT_KEY
-                          ? "Unassigned estimates"
-                          : "Not selected")}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
-                    <span className="text-muted-foreground">Tags</span>
-                    <span className="text-right font-medium text-foreground">
-                      {estimateTags.length ? estimateTags.join(", ") : "None"}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between gap-4">
                     <span className="text-muted-foreground">Preset</span>
-                    <span className="text-right font-medium text-foreground">
+                    <span className="truncate text-right font-medium text-foreground ml-4">
                       {templateConfig
                         ? formatTemplateDisplayName(
                             templateConfig.name,
@@ -4063,16 +4039,16 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                     </span>
                   </div>
                   <div className="flex items-center justify-between gap-4">
-                    <span className="text-muted-foreground">Linked PandaDoc</span>
-                    <span className="text-right font-medium text-foreground">
+                    <span className="text-muted-foreground">PandaDoc</span>
+                    <span className="truncate text-right font-medium text-foreground ml-4">
                       {activeTrackedPandaDocDocument?.documentId
                         ? `Revising ${activeTrackedPandaDocDocument.name ?? activeTrackedPandaDocDocument.documentId}`
-                        : "Create new document"}
+                        : "New document"}
                     </span>
                   </div>
                   {activeTrackedPandaDocDocument?.documentId ? (
                     <div className="flex items-center justify-between gap-4">
-                      <span className="text-muted-foreground">Linked status</span>
+                      <span className="text-muted-foreground">Status</span>
                       <span className="text-right font-medium text-foreground">
                         {linkedDocumentLive?.loading
                           ? "Checking..."
@@ -4208,18 +4184,16 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
           </section>
         ) : (
           <section className="mt-10">
-            <div className="flex flex-col items-center gap-4 rounded-lg border border-dashed border-border py-16 text-center">
-              <div className="rounded-full bg-accent/10 p-4">
-                <FileText className="h-6 w-6 text-accent" />
-              </div>
+            <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border/60 py-12 text-center">
+              <FileText className="h-5 w-5 text-muted-foreground/50" />
               <div>
-                <p className="text-base font-serif font-light">Ready to build a proposal?</p>
-                <p className="mt-1 text-sm text-muted-foreground">
-                  Select an existing estimate above or create a new one.
+                <p className="text-sm font-serif font-light text-foreground">Ready to build a proposal?</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Select an estimate above or start a new one.
                 </p>
               </div>
-              <Button variant="accent" className="mt-2 shadow-glow/50" onClick={resetEstimateWorkspace}>
-                <Plus className="h-4 w-4" />
+              <Button variant="accent" size="sm" className="mt-1 shadow-glow/50" onClick={resetEstimateWorkspace}>
+                <Plus className="h-3.5 w-3.5" />
                 New estimate
               </Button>
             </div>
@@ -4274,7 +4248,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
         <footer className="mt-16 border-t border-border pt-6 pb-8">
           <div className="flex flex-wrap items-center justify-between gap-4 text-xs text-muted-foreground">
             <div className="flex items-center gap-2">
-              <span className="font-semibold uppercase tracking-[0.2em] text-muted-foreground/70">Cornerstone</span>
+              <span className="font-medium text-muted-foreground/70">Cornerstone</span>
               <span>&middot;</span>
               <span>Proposal Studio v{APP_VERSION}</span>
             </div>
