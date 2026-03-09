@@ -8,3 +8,4 @@ __pycache__
 .venv
 .workbooks
 output
+.claude/settings.local.json
