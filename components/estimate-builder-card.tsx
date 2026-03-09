@@ -56,6 +56,7 @@ import { cn } from "@/lib/utils";
 import { db, id } from "@/lib/convex";
 import {
   CheckCircle2,
+  ChevronDown,
   CircleDashed,
   Loader2,
   LockKeyhole,
@@ -368,6 +369,12 @@ export function EstimateBuilderCard({
   const [sessionFeatureOptions, setSessionFeatureOptions] = useState<
     ProductFeatureOption[]
   >([]);
+  const [collapsedSections, setCollapsedSections] = useState<Set<string>>(
+    new Set()
+  );
+  const [expandedProductDetails, setExpandedProductDetails] = useState<Set<string>>(
+    new Set()
+  );
   const addressLookupRequestRef = useRef(0);
   const normalizedPreparedByName = preparedByName?.trim() ?? "";
 
@@ -1082,6 +1089,65 @@ export function EstimateBuilderCard({
     (isChangeOrderMode && showChangeOrder && changeOrderStepComplete) ||
     (!isChangeOrderMode && showInstall);
 
+  const toggleSection = useCallback((sectionId: string) => {
+    setCollapsedSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(sectionId)) {
+        next.delete(sectionId);
+      } else {
+        next.add(sectionId);
+      }
+      return next;
+    });
+  }, []);
+
+  const isSectionOpen = useCallback(
+    (sectionId: string, isDone: boolean) => {
+      if (collapsedSections.has(sectionId)) return false;
+      // If user hasn't manually toggled this section, auto-collapse completed sections
+      // when there's a later section visible
+      if (isDone) {
+        // Find if there's a later section that's visible and not done
+        const sectionOrder = ["project", "changeOrder", "product", "bucking", "install", "review"];
+        const sectionVisible: Record<string, boolean> = {
+          project: true,
+          changeOrder: showChangeOrder,
+          product: showProducts,
+          bucking: showBucking,
+          install: showInstall,
+          review: showReview,
+        };
+        const sectionDone: Record<string, boolean> = {
+          project: projectStepComplete,
+          changeOrder: changeOrderStepComplete,
+          product: productStepComplete,
+          bucking: buckingStepComplete,
+          install: installStepComplete,
+          review: installStepComplete,
+        };
+        const currentIdx = sectionOrder.indexOf(sectionId);
+        const hasLaterActiveSection = sectionOrder.some(
+          (id, idx) => idx > currentIdx && sectionVisible[id] && !sectionDone[id]
+        );
+        if (hasLaterActiveSection) return false;
+      }
+      return true;
+    },
+    [
+      collapsedSections,
+      showChangeOrder,
+      showProducts,
+      showBucking,
+      showInstall,
+      showReview,
+      projectStepComplete,
+      changeOrderStepComplete,
+      productStepComplete,
+      buckingStepComplete,
+      installStepComplete,
+    ]
+  );
+
   return (
     <Card className="relative overflow-hidden shadow-elevated">
       <CardHeader className="space-y-4 pb-4">
@@ -1095,27 +1161,55 @@ export function EstimateBuilderCard({
             style={{ width: `${completionPercent}%` }}
           />
         </div>
-        <div className="flex flex-wrap gap-x-4 gap-y-1">
-          {stepProgress.map((step) => (
-            <div
-              key={step.id}
-              className={cn(
-                "flex items-center gap-1.5 text-xs",
-                step.done && "text-foreground",
-                !step.done && !step.locked && "text-muted-foreground",
-                step.locked && "text-muted-foreground/50"
-              )}
-            >
-              {step.done ? (
-                <CheckCircle2 className="h-3.5 w-3.5 text-accent" />
-              ) : step.locked ? (
-                <LockKeyhole className="h-3.5 w-3.5" />
-              ) : (
-                <CircleDashed className="h-3.5 w-3.5" />
-              )}
-              <span>{step.label}</span>
-            </div>
-          ))}
+        <div className="flex flex-wrap gap-x-1 gap-y-1">
+          {stepProgress.map((step) => {
+            const sectionMap: Record<string, string> = {
+              project: "project",
+              changeOrder: "changeOrder",
+              product: "product",
+              bucking: "bucking",
+              install: "install",
+              review: "review",
+            };
+            const sectionId = sectionMap[step.id];
+            const canClick = !step.locked && sectionId;
+            return (
+              <button
+                key={step.id}
+                type="button"
+                disabled={!canClick}
+                className={cn(
+                  "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors",
+                  step.done && "text-foreground hover:bg-muted/60",
+                  !step.done && !step.locked && "text-muted-foreground hover:bg-muted/60",
+                  step.locked && "text-muted-foreground/50 cursor-default"
+                )}
+                onClick={() => {
+                  if (!canClick) return;
+                  // Expand this section (remove from collapsed), collapse all others
+                  setCollapsedSections((prev) => {
+                    const next = new Set(prev);
+                    next.delete(sectionId);
+                    // Collapse other visible sections
+                    const allSections = ["project", "changeOrder", "product", "bucking", "install", "review"];
+                    for (const id of allSections) {
+                      if (id !== sectionId) next.add(id);
+                    }
+                    return next;
+                  });
+                }}
+              >
+                {step.done ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 text-accent" />
+                ) : step.locked ? (
+                  <LockKeyhole className="h-3.5 w-3.5" />
+                ) : (
+                  <CircleDashed className="h-3.5 w-3.5" />
+                )}
+                <span>{step.label}</span>
+              </button>
+            );
+          })}
         </div>
       </CardHeader>
 
@@ -1166,7 +1260,14 @@ export function EstimateBuilderCard({
         <Separator />
 
         <section className="space-y-4">
-          <SectionHeader title="Project Details" done={projectStepComplete} />
+          <SectionHeader
+            title="Project Details"
+            done={projectStepComplete}
+            isOpen={isSectionOpen("project", projectStepComplete)}
+            onToggle={() => toggleSection("project")}
+            summary={projectStepComplete ? `${draft.info.prepared_for || ""}${draft.info.project_name ? ` — ${draft.info.project_name}` : ""}` : undefined}
+          />
+          {isSectionOpen("project", projectStepComplete) ? (
           <div className="grid gap-x-4 gap-y-3 md:grid-cols-2">
             {groupList.flatMap((group) =>
               group.fields.map((field) => {
@@ -1337,6 +1438,7 @@ export function EstimateBuilderCard({
               })
             )}
           </div>
+          ) : null}
         </section>
 
         {showChangeOrder ? (
@@ -1347,8 +1449,12 @@ export function EstimateBuilderCard({
             <SectionHeader
               title="Change Order Pricing"
               done={changeOrderStepComplete}
+              isOpen={isSectionOpen("changeOrder", changeOrderStepComplete)}
+              onToggle={() => toggleSection("changeOrder")}
+              summary={changeOrderStepComplete ? formatCurrency(computed.totals.total_contract_price) : undefined}
             />
-
+            {isSectionOpen("changeOrder", changeOrderStepComplete) ? (
+            <>
             {!vendorOptions.length ? (
               <div className="text-xs text-muted-foreground">No active vendors.</div>
             ) : null}
@@ -1433,6 +1539,8 @@ export function EstimateBuilderCard({
                 <p className="text-base font-semibold text-accent">{formatCurrency(computed.totals.total_contract_price)}</p>
               </div>
             </div>
+            </>
+            ) : null}
 
           </section>
           </>
@@ -1443,8 +1551,15 @@ export function EstimateBuilderCard({
           <Separator />
 
           <section className="space-y-4">
-            <SectionHeader title="Product Pricing" done={productStepComplete} />
-
+            <SectionHeader
+              title="Product Pricing"
+              done={productStepComplete}
+              isOpen={isSectionOpen("product", productStepComplete)}
+              onToggle={() => toggleSection("product")}
+              summary={productStepComplete ? `${draft.products.length} product${draft.products.length !== 1 ? "s" : ""} — ${formatCurrency(computed.totals.product_price)}` : undefined}
+            />
+            {isSectionOpen("product", productStepComplete) ? (
+            <>
             <div className="grid gap-3 md:grid-cols-3">
               <div className="space-y-1.5">
                 <label className="text-xs text-muted-foreground">
@@ -1584,11 +1699,26 @@ export function EstimateBuilderCard({
                     </div>
 
                     {usesEuroPricing ? (
-                      <div className="mt-3 space-y-3 border-t border-border/40 pt-3">
+                      <div className="mt-3 border-t border-border/40 pt-3">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                          <p className="text-xs font-medium text-muted-foreground">
+                          <button
+                            type="button"
+                            className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+                            onClick={() => {
+                              setExpandedProductDetails((prev) => {
+                                const next = new Set(prev);
+                                const key = `${item.id}-euro`;
+                                if (next.has(key)) next.delete(key); else next.add(key);
+                                return next;
+                              });
+                            }}
+                          >
+                            <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", !expandedProductDetails.has(`${item.id}-euro`) && "-rotate-90")} />
                             EUR Cost Calculator
-                          </p>
+                            {!expandedProductDetails.has(`${item.id}-euro`) && euroTotals.usdSubtotal > 0 ? (
+                              <span className="text-foreground ml-1">{formatCurrency(euroTotals.usdSubtotal)}</span>
+                            ) : null}
+                          </button>
                           <Button
                             variant="outline"
                             size="sm"
@@ -1603,6 +1733,8 @@ export function EstimateBuilderCard({
                             Refresh rate
                           </Button>
                         </div>
+                        {expandedProductDetails.has(`${item.id}-euro`) ? (
+                        <div className="mt-3 space-y-3">
                         {rateStatus.error ? (
                           <p className="text-xs text-destructive">{rateStatus.error}</p>
                         ) : null}
@@ -1701,7 +1833,7 @@ export function EstimateBuilderCard({
                                     disabled={Boolean(legacyValues)}
                                   />
                                 ) : (
-                                  <div className="flex items-center rounded-md border border-border bg-muted/30 px-3 text-sm text-foreground">
+                                  <div className="flex items-center px-1 text-sm text-muted-foreground">
                                     {section.label}
                                   </div>
                                 )}
@@ -1781,14 +1913,34 @@ export function EstimateBuilderCard({
                             {formatCurrency(euroTotals.usdSubtotal, "USD")}
                           </div>
                         </div>
+                        </div>
+                        ) : null}
                       </div>
                     ) : null}
 
-                    <div className="mt-3 space-y-3 border-t border-border/40 pt-3">
-                      <p className="text-xs font-medium text-muted-foreground">
+                    <div className="mt-3 border-t border-border/40 pt-3">
+                      <button
+                        type="button"
+                        className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+                        onClick={() => {
+                          setExpandedProductDetails((prev) => {
+                            const next = new Set(prev);
+                            const key = `${item.id}-features`;
+                            if (next.has(key)) next.delete(key); else next.add(key);
+                            return next;
+                          });
+                        }}
+                      >
+                        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform duration-200", !expandedProductDetails.has(`${item.id}-features`) && "-rotate-90")} />
                         Features
-                      </p>
-
+                        {!expandedProductDetails.has(`${item.id}-features`) ? (
+                          <span className="text-foreground/60 ml-1">
+                            {[item.interior_frame_color, item.glass_type].filter(Boolean).join(", ") || "Not configured"}
+                          </span>
+                        ) : null}
+                      </button>
+                      {expandedProductDetails.has(`${item.id}-features`) ? (
+                      <div className="mt-3 space-y-3">
                       <div className="grid gap-3 md:grid-cols-2">
                         {visibleFeatureFields.map((field) => {
                           const options =
@@ -1872,7 +2024,8 @@ export function EstimateBuilderCard({
                           Screens
                         </label>
                       </div>
-
+                      </div>
+                      ) : null}
                     </div>
                   </div>
                 );
@@ -1884,6 +2037,8 @@ export function EstimateBuilderCard({
                 Product subtotal: {formatCurrency(computed.totals.product_price)}
               </div>
             </div>
+            </>
+            ) : null}
 
           </section>
           </>
@@ -1894,8 +2049,15 @@ export function EstimateBuilderCard({
           <Separator />
 
           <section className="space-y-4">
-            <SectionHeader title="Bucking & Waterproof" done={buckingStepComplete} />
-
+            <SectionHeader
+              title="Bucking & Waterproof"
+              done={buckingStepComplete}
+              isOpen={isSectionOpen("bucking", buckingStepComplete)}
+              onToggle={() => toggleSection("bucking")}
+              summary={buckingStepComplete ? `${computed.breakdown.total_lineal_ft.toFixed(0)} lineal ft` : undefined}
+            />
+            {isSectionOpen("bucking", buckingStepComplete) ? (
+            <>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <RateField
                 label="Bucking $/ft"
@@ -2124,6 +2286,8 @@ export function EstimateBuilderCard({
                 Total lineal ft: {computed.breakdown.total_lineal_ft.toFixed(2)}
               </div>
             </div>
+            </>
+            ) : null}
 
           </section>
           </>
@@ -2134,8 +2298,15 @@ export function EstimateBuilderCard({
           <Separator />
 
           <section className="space-y-4">
-            <SectionHeader title="Install Calculator" done={installStepComplete} />
-
+            <SectionHeader
+              title="Install Calculator"
+              done={installStepComplete}
+              isOpen={isSectionOpen("install", installStepComplete)}
+              onToggle={() => toggleSection("install")}
+              summary={installStepComplete ? formatCurrency(computed.breakdown.total_install_value) : undefined}
+            />
+            {isSectionOpen("install", installStepComplete) ? (
+            <>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               <RateField
                 label="Install markup"
@@ -2213,6 +2384,8 @@ export function EstimateBuilderCard({
             <div className="text-xs text-muted-foreground">
               Total installation value: {formatCurrency(computed.breakdown.total_install_value)}
             </div>
+            </>
+            ) : null}
           </section>
           </>
         ) : null}

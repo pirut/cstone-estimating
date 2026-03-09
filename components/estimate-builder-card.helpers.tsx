@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ChevronDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input, inputVariants } from "@/components/ui/input";
 import { toNumber } from "@/lib/estimate-calculator";
@@ -9,20 +10,48 @@ const defaultInputClassName = inputVariants({ uiSize: "default" });
 export function SectionHeader({
   title,
   done,
+  summary,
+  isOpen,
+  onToggle,
 }: {
   title: string;
   done: boolean;
+  summary?: string;
+  isOpen?: boolean;
+  onToggle?: () => void;
 }) {
+  const isCollapsible = onToggle !== undefined;
   return (
-    <div className="flex items-center justify-between gap-3">
-      <p className="text-base font-serif font-light tracking-tight text-foreground">{title}</p>
+    <button
+      type="button"
+      className={cn(
+        "flex w-full items-center justify-between gap-3 text-left",
+        isCollapsible && "cursor-pointer select-none"
+      )}
+      onClick={onToggle}
+      disabled={!isCollapsible}
+    >
+      <div className="flex items-center gap-2 min-w-0">
+        {isCollapsible ? (
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 shrink-0 text-muted-foreground transition-transform duration-200",
+              !isOpen && "-rotate-90"
+            )}
+          />
+        ) : null}
+        <p className="text-base font-serif font-light tracking-tight text-foreground">{title}</p>
+        {!isOpen && summary ? (
+          <span className="truncate text-xs text-muted-foreground">&mdash; {summary}</span>
+        ) : null}
+      </div>
       <Badge
         variant={done ? "accent" : "outline"}
         className={cn("text-[10px] shrink-0", done && "bg-accent/90")}
       >
         {done ? "Complete" : "In progress"}
       </Badge>
-    </div>
+    </button>
   );
 }
 
