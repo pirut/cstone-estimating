@@ -2783,7 +2783,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
         onAuthError={setConvexSetupError}
       />
       <div className="relative w-full min-h-screen flex flex-col">
-        <header className="sticky top-0 z-30 border-b border-border bg-background/95 backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
+        <header className="sticky top-0 z-30 border-b border-border bg-background/95 shadow-[0_1px_3px_rgba(0,0,0,0.04)] backdrop-blur-md supports-[backdrop-filter]:bg-background/80">
           <div className="mx-auto flex h-16 max-w-[1400px] items-center justify-between gap-4 px-5 sm:px-8">
             <div className="flex items-center gap-4">
               <BrandMark tone="auto" size="sm" />
@@ -2834,7 +2834,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
             enable the project library.
           </div>
         ) : null}
-        <div className="mb-8">
+        <div className="mb-8 animate-fade-up">
           <h1 className="text-3xl font-serif font-light tracking-tight sm:text-4xl">
             {isEstimateMode ? "Estimate Editor" : "Dashboard"}
           </h1>
@@ -2910,7 +2910,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
               </div>
             ) : null}
             {teamReady ? (
-              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-5 py-3 shadow-subtle">
+              <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card px-5 py-3 shadow-subtle border-l-2 border-l-accent">
                 <div className="flex items-center gap-2.5 text-sm">
                   <div className="h-2 w-2 rounded-full bg-accent" />
                   <span className="font-medium">{orgTeam?.name}</span>
@@ -3162,11 +3162,18 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                         </div>
                       </ScrollArea>
                     ) : (
-                      <p className="py-6 text-center text-sm text-muted-foreground">
-                        {projectLibraryItems.length
-                          ? "No projects match your search."
-                          : "No projects yet."}
-                      </p>
+                      <div className="flex flex-col items-center gap-2 py-8 text-center">
+                        <p className="text-sm text-muted-foreground">
+                          {projectLibraryItems.length
+                            ? "No projects match your search."
+                            : "No projects yet."}
+                        </p>
+                        {!projectLibraryItems.length ? (
+                          <p className="text-xs text-muted-foreground/70">
+                            Create a project to organize your estimates.
+                          </p>
+                        ) : null}
+                      </div>
                     )}
                   </div>
                 </CardContent>
@@ -3235,8 +3242,8 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                           Preparing your team workspace...
                         </div>
                       ) : !activeProjectId ? (
-                        <div className="rounded-xl border border-border bg-muted/30 px-4 py-4 text-sm text-muted-foreground">
-                          Create your first project to start organizing estimates.
+                        <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-border/60 px-4 py-8 text-center">
+                          <p className="text-sm text-muted-foreground">Create your first project to start organizing estimates.</p>
                         </div>
                       ) : filteredTeamEstimates.length ? (
                         <div className="space-y-1">
@@ -4010,12 +4017,14 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
             </Card>
           </section>
         ) : (
-          <section className="mt-10">
-            <div className="flex flex-col items-center gap-3 rounded-xl border border-dashed border-border/60 py-12 text-center">
-              <FileText className="h-5 w-5 text-muted-foreground/50" />
+          <section className="mt-10 animate-fade-up">
+            <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed border-border/60 bg-card/50 py-14 text-center">
+              <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/10">
+                <FileText className="h-5 w-5 text-accent/70" />
+              </div>
               <div>
-                <p className="text-sm font-serif font-light text-foreground">Ready to build a proposal?</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">
+                <p className="text-base font-serif font-light text-foreground">Ready to build a proposal?</p>
+                <p className="mt-1 text-sm text-muted-foreground">
                   Select an estimate above or start a new one.
                 </p>
               </div>
@@ -4072,11 +4081,11 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
           </AlertDialogContent>
         </AlertDialog>
 
-        <footer className="mt-16 border-t border-border pt-6 pb-8">
-          <div className="flex flex-wrap items-center justify-between gap-4 text-xs text-muted-foreground">
+        <footer className="mt-16 border-t border-border/60 pt-6 pb-8">
+          <div className="flex flex-wrap items-center justify-between gap-4 text-xs text-muted-foreground/80">
             <div className="flex items-center gap-2">
-              <span className="font-medium text-muted-foreground/70">Cornerstone</span>
-              <span>&middot;</span>
+              <span className="font-medium text-muted-foreground/60">Cornerstone</span>
+              <span className="text-border">&middot;</span>
               <span>Proposal Studio v{APP_VERSION}</span>
             </div>
             <div className="flex items-center gap-4">

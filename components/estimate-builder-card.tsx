@@ -1202,15 +1202,15 @@ export function EstimateBuilderCard({
   );
 
   return (
-    <Card className="relative overflow-hidden shadow-elevated">
+    <Card className="relative overflow-hidden shadow-elevated hover:shadow-elevated-lg">
       <CardHeader className="space-y-4 pb-4">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base font-serif font-light tracking-tight">Estimate Builder</CardTitle>
           <span className="text-lg font-serif font-light text-accent tabular-nums">{completionPercent}%</span>
         </div>
-        <div className="h-1 w-full overflow-hidden rounded-full bg-muted">
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
           <div
-            className="h-full rounded-full bg-accent transition-all duration-500"
+            className="h-full rounded-full bg-gradient-to-r from-accent/80 to-accent transition-all duration-500 ease-out"
             style={{ width: `${completionPercent}%` }}
           />
         </div>
@@ -1232,10 +1232,10 @@ export function EstimateBuilderCard({
                 type="button"
                 disabled={!canClick}
                 className={cn(
-                  "flex items-center gap-1.5 rounded-md px-2 py-1 text-xs transition-colors",
-                  step.done && "text-foreground hover:bg-muted/60",
+                  "flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs transition-all duration-150",
+                  step.done && "text-foreground bg-accent/5 hover:bg-accent/10",
                   !step.done && !step.locked && "text-muted-foreground hover:bg-muted/60",
-                  step.locked && "text-muted-foreground/50 cursor-default"
+                  step.locked && "text-muted-foreground/40 cursor-default"
                 )}
                 onClick={() => {
                   if (!canClick) return;
@@ -2626,12 +2626,12 @@ export function EstimateBuilderCard({
             ) : null}
 
             {hasMarginRisk ? (
-              <div className="flex items-center gap-2 rounded-lg bg-destructive/10 px-4 py-3 text-sm text-foreground">
+              <div className="flex items-center gap-2.5 rounded-lg border border-destructive/20 bg-destructive/5 px-4 py-3.5 text-sm font-medium text-foreground">
                 <Sparkles className="h-4 w-4 text-destructive" />
                 Margin review required.
               </div>
             ) : (
-              <div className="flex items-center gap-2 rounded-lg bg-accent/10 px-4 py-3 text-sm text-foreground">
+              <div className="flex items-center gap-2.5 rounded-lg border border-accent/20 bg-accent/5 px-4 py-3.5 text-sm font-medium text-foreground">
                 <Sparkles className="h-4 w-4 text-accent" />
                 Ready to generate.
               </div>
