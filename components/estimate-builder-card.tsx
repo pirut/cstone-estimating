@@ -1591,6 +1591,7 @@ export function EstimateBuilderCard({
                   ? toNumber(item.markup)
                   : toNumber(draft.calculator.product_markup_default);
                 const total = roundUp(price * (1 + markup));
+                const markupAmount = total - price;
                 const selectedVendorRecord = resolveVendorForProduct(item);
                 const selectedVendor = selectedVendorRecord?.id ?? "__none__";
                 const usesEuroPricing =
@@ -1692,9 +1693,16 @@ export function EstimateBuilderCard({
                         />
                       </div>
                       <div className="flex items-end justify-end">
-                        <p className="px-1 py-2 text-sm font-semibold text-foreground tabular-nums">
-                          {Number.isFinite(total) ? formatCurrency(total) : "-"}
-                        </p>
+                        <div className="px-1 py-2 text-right">
+                          <p className="text-sm font-semibold text-foreground tabular-nums">
+                            {Number.isFinite(total) ? formatCurrency(total) : "-"}
+                          </p>
+                          <p className="text-xs text-muted-foreground tabular-nums">
+                            {Number.isFinite(markupAmount)
+                              ? `${formatCurrency(markupAmount)} (${formatMargin(markup)})`
+                              : "-"}
+                          </p>
+                        </div>
                       </div>
                     </div>
 
@@ -2425,23 +2433,34 @@ export function EstimateBuilderCard({
                   cost: computed.breakdown.install_cost_base + computed.breakdown.covers_cost_base + computed.breakdown.punch_cost_base,
                   price: computed.totals.installation_price,
                 },
-              ].map((row) => (
-                <div
-                  key={row.label}
-                  className="grid grid-cols-4 gap-px bg-border/30 text-sm"
-                >
-                  <div className="bg-card px-3 py-2 text-muted-foreground">{row.label}</div>
-                  <div className="bg-card px-3 py-2 text-right font-medium text-foreground">
-                    {formatCurrency(row.cost)}
+              ].map((row) => {
+                const markupAmount = row.price - row.cost;
+                const markupPercent =
+                  row.cost > 0 && Number.isFinite(markupAmount)
+                    ? markupAmount / row.cost
+                    : Number.NaN;
+
+                return (
+                  <div
+                    key={row.label}
+                    className="grid grid-cols-4 gap-px bg-border/30 text-sm"
+                  >
+                    <div className="bg-card px-3 py-2 text-muted-foreground">{row.label}</div>
+                    <div className="bg-card px-3 py-2 text-right font-medium text-foreground">
+                      {formatCurrency(row.cost)}
+                    </div>
+                    <div className="bg-card px-3 py-2 text-right font-medium text-foreground">
+                      <div>{formatCurrency(markupAmount)}</div>
+                      <div className="text-xs text-muted-foreground">
+                        {Number.isFinite(markupPercent) ? formatMargin(markupPercent) : "-"}
+                      </div>
+                    </div>
+                    <div className="bg-card px-3 py-2 text-right font-semibold text-foreground">
+                      {formatCurrency(row.price)}
+                    </div>
                   </div>
-                  <div className="bg-card px-3 py-2 text-right font-medium text-foreground">
-                    {formatCurrency(row.price - row.cost)}
-                  </div>
-                  <div className="bg-card px-3 py-2 text-right font-semibold text-foreground">
-                    {formatCurrency(row.price)}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
               <div className="grid grid-cols-4 gap-px bg-border/30">
                 <div className="bg-accent/10 px-3 py-2.5 text-sm font-semibold text-foreground">
                   Total Contract
@@ -2457,15 +2476,30 @@ export function EstimateBuilderCard({
                   )}
                 </div>
                 <div className="bg-accent/10 px-3 py-2.5 text-right text-sm font-semibold text-foreground">
-                  {formatCurrency(
-                    computed.totals.total_contract_price -
-                    (computed.breakdown.product_cost_base +
-                    computed.breakdown.bucking_cost_base +
-                    computed.breakdown.waterproofing_cost_base +
-                    computed.breakdown.install_cost_base +
-                    computed.breakdown.covers_cost_base +
-                    computed.breakdown.punch_cost_base)
-                  )}
+                  {(() => {
+                    const totalCost =
+                      computed.breakdown.product_cost_base +
+                      computed.breakdown.bucking_cost_base +
+                      computed.breakdown.waterproofing_cost_base +
+                      computed.breakdown.install_cost_base +
+                      computed.breakdown.covers_cost_base +
+                      computed.breakdown.punch_cost_base;
+                    const markupAmount =
+                      computed.totals.total_contract_price - totalCost;
+                    const markupPercent =
+                      totalCost > 0 && Number.isFinite(markupAmount)
+                        ? markupAmount / totalCost
+                        : Number.NaN;
+
+                    return (
+                      <>
+                        <div>{formatCurrency(markupAmount)}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {Number.isFinite(markupPercent) ? formatMargin(markupPercent) : "-"}
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
                 <div className="bg-accent/10 px-3 py-2.5 text-right text-base font-bold text-foreground">
                   {formatCurrency(computed.totals.total_contract_price)}
