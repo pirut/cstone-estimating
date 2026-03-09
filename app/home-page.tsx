@@ -2878,7 +2878,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
         ) : (
           <>
         {authLoaded && isSignedIn ? (
-          <section className="space-y-6">
+          <section className="space-y-6 lg:min-h-[calc(100dvh-12rem)]">
             {(convexAuthError || teamError) ? (
               <div className="space-y-2">
                 {convexAuthError ? (
@@ -2928,7 +2928,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
             ) : null}
 
             {!isEstimateMode ? (
-            <div className="grid gap-6 lg:grid-cols-[minmax(280px,0.35fr)_minmax(0,0.65fr)] xl:grid-cols-[minmax(320px,0.35fr)_minmax(0,0.65fr)]">
+            <div className="grid min-h-0 gap-6 lg:h-[calc(100dvh-18rem)] lg:max-h-[calc(100dvh-18rem)] lg:grid-cols-[minmax(280px,0.35fr)_minmax(0,0.65fr)] lg:overflow-hidden xl:grid-cols-[minmax(320px,0.35fr)_minmax(0,0.65fr)]">
               <div className="min-h-0 lg:h-full">
                 <Card className="shadow-elevated flex h-full min-h-0 flex-col overflow-hidden">
                 <CardHeader className="pb-3">
@@ -3241,6 +3241,13 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                           const editingCurrent = editingEstimateId === estimate.id;
                           const tags = normalizeEstimateTags(estimate?.tags);
                           const projectType = getEstimateProjectType(estimate);
+                          const latestPandaDocDocument =
+                            getLatestPandaDocDocumentForEstimate(estimate);
+                          const pandaDocUrl = String(
+                            latestPandaDocDocument?.appUrl ??
+                              latestPandaDocDocument?.sharedLink ??
+                              ""
+                          ).trim();
                           const isEstimateArchived = String(estimate?.status ?? "").trim() === "archived";
                           const estimateProjectId = String(
                             estimate?.project?.id ?? ""
@@ -3336,6 +3343,25 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                                           {tag}
                                         </Badge>
                                       ))}
+                                    </div>
+                                  ) : null}
+                                  {pandaDocUrl ? (
+                                    <div className="mt-2">
+                                      <Button
+                                        asChild
+                                        variant="outline"
+                                        size="sm"
+                                        className="h-7 text-[11px]"
+                                      >
+                                        <a
+                                          href={pandaDocUrl}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          onClick={(event) => event.stopPropagation()}
+                                        >
+                                          Open PandaDoc
+                                        </a>
+                                      </Button>
                                     </div>
                                   ) : null}
                                 </div>
