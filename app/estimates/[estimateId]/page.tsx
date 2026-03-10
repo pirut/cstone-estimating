@@ -24,7 +24,7 @@ export async function generateMetadata({
   const projectLabel = preview?.projectName || preview?.title || `Estimate ${previewId}`;
   const statusLabel = formatEstimatePreviewStatus(preview);
   const title = `${projectLabel} — ${customerLabel} | Cornerstone`;
-  const description = `Cornerstone shared estimate. Project: ${projectLabel}. Customer: ${customerLabel}. Status: ${statusLabel}.`;
+  const description = `Project: ${projectLabel}. Customer: ${customerLabel}. Status: ${statusLabel}.`;
   const estimatePath = `/estimates/${encodedEstimateId}`;
   const ogImagePath = `${estimatePath}/opengraph-image`;
 
