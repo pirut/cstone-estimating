@@ -183,9 +183,9 @@ export function formatEstimatePreviewId(estimateId: string) {
 
 export function formatEstimateStatus(status: string) {
   const normalized = coerceText(status).toLowerCase();
-  if (!normalized) return "Draft";
+  if (!normalized) return "Estimate Draft";
   if (normalized === "generated") return "Generated";
-  if (normalized === "draft") return "Draft";
+  if (normalized === "draft") return "Estimate Draft";
   if (normalized === "archived") return "Archived";
   return normalized
     .split(/[_\s-]+/)
@@ -194,11 +194,23 @@ export function formatEstimateStatus(status: string) {
     .join(" ");
 }
 
+function formatPandaDocPreviewStatus(status: string) {
+  const normalized = coerceText(status).toLowerCase();
+  if (!normalized) return "Generated";
+  const withoutPrefix = normalized.replace(/^document\./, "");
+  if (withoutPrefix === "draft") return "PandaDoc Draft";
+  return withoutPrefix
+    .split(/[_\s.-]+/)
+    .filter(Boolean)
+    .map((segment) => `${segment.charAt(0).toUpperCase()}${segment.slice(1)}`)
+    .join(" ");
+}
+
 export function formatEstimatePreviewStatus(preview: EstimateSharePreview | null) {
-  if (!preview) return "Draft";
+  if (!preview) return "Estimate Draft";
   const estimateStatus = coerceText(preview.status).toLowerCase();
   if (estimateStatus === "generated" && preview.pandaDocStatus) {
-    return formatEstimateStatus(preview.pandaDocStatus);
+    return formatPandaDocPreviewStatus(preview.pandaDocStatus);
   }
   return formatEstimateStatus(preview.status);
 }
