@@ -284,6 +284,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
   const progressResetTimeoutRef = useRef<number | null>(null);
   const draftRestoredRef = useRef(false);
   const routedEstimateLoadedRef = useRef<string | null>(null);
+  const prefetchedEstimateRoutesRef = useRef<Set<string>>(new Set());
   const [library, setLibrary] = useState<LibraryState>({
     workbook: { items: [], loading: false, error: null },
     template: { items: [], loading: false, error: null },
@@ -911,6 +912,15 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
     [router]
   );
 
+  const prefetchEstimateRoute = useCallback(
+    (href: string) => {
+      if (!href || prefetchedEstimateRoutesRef.current.has(href)) return;
+      prefetchedEstimateRoutesRef.current.add(href);
+      router.prefetch(href);
+    },
+    [router]
+  );
+
   useEffect(() => {
     setUrlEstimateId(normalizedRouteEstimateId || null);
   }, [normalizedRouteEstimateId]);
@@ -924,6 +934,15 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
   }, [isEstimateMode]);
+
+  useEffect(() => {
+    if (isEstimateMode) return;
+    filteredTeamEstimates.slice(0, 8).forEach((estimate) => {
+      const estimateId = String(estimate?.id ?? "").trim();
+      if (!estimateId) return;
+      prefetchEstimateRoute(`/estimates/${encodeURIComponent(estimateId)}`);
+    });
+  }, [filteredTeamEstimates, isEstimateMode, prefetchEstimateRoute]);
 
   useEffect(() => {
     if (!teamName && teamDomain) {
@@ -3357,7 +3376,14 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                                   ) : (
                                     <Link
                                       href={estimateHref}
+                                      prefetch
                                       className="text-sm font-medium text-foreground hover:text-accent transition-colors"
+                                      onMouseEnter={() =>
+                                        prefetchEstimateRoute(estimateHref)
+                                      }
+                                      onFocus={() =>
+                                        prefetchEstimateRoute(estimateHref)
+                                      }
                                       onClick={(event) => {
                                         if (!isPlainLeftClick(event)) return;
                                         event.preventDefault();
