@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import HomePage from "@/app/home-page";
 import {
   formatEstimatePreviewId,
-  formatEstimateStatus,
+  formatEstimatePreviewStatus,
   parseEstimateId,
   resolveEstimateSharePreview,
 } from "@/app/estimates/[estimateId]/estimate-share-preview";
@@ -22,7 +22,7 @@ export async function generateMetadata({
   const preview = await resolveEstimateSharePreview(estimateId);
   const customerLabel = preview?.customerName || "Customer not set";
   const projectLabel = preview?.projectName || preview?.title || `Estimate ${previewId}`;
-  const statusLabel = preview ? formatEstimateStatus(preview.status) : "Draft";
+  const statusLabel = formatEstimatePreviewStatus(preview);
   const title = `${projectLabel} — ${customerLabel} | Cornerstone`;
   const description = `Cornerstone shared estimate. Project: ${projectLabel}. Customer: ${customerLabel}. Status: ${statusLabel}.`;
   const estimatePath = `/estimates/${encodedEstimateId}`;

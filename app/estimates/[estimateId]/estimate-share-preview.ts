@@ -7,6 +7,7 @@ type RawEstimateRecord = {
   status?: string;
   updatedAt?: number;
   payload?: Record<string, any> | null;
+  versionHistory?: unknown;
   project?: {
     id?: string;
     name?: string;
@@ -23,6 +24,7 @@ export type EstimateSharePreview = {
   estimateId: string;
   title: string;
   status: string;
+  pandaDocStatus: string;
   updatedAt: number | null;
   customerName: string;
   projectName: string;
@@ -108,11 +110,13 @@ function createPreview(
   const payloadProjectName = extractEstimateField(estimate, ["project_name"]);
   const workspaceProjectName = coerceText(estimate?.project?.name);
   const projectName = payloadProjectName || workspaceProjectName || title;
+  const pandaDocStatus = resolveLatestPandaDocStatus(estimate?.versionHistory);
 
   return {
     estimateId,
     title,
     status: coerceText(estimate?.status) || "draft",
+    pandaDocStatus,
     updatedAt:
       typeof estimate?.updatedAt === "number" && Number.isFinite(estimate.updatedAt)
         ? estimate.updatedAt
@@ -122,6 +126,33 @@ function createPreview(
     workspaceProjectName,
     teamName: coerceText(team?.name) || "Cornerstone",
   };
+}
+
+function resolveLatestPandaDocStatus(rawHistory: unknown) {
+  if (!Array.isArray(rawHistory)) return "";
+  let latestStatus = "";
+  let latestUpdatedAt = 0;
+  for (const entry of rawHistory) {
+    if (!entry || typeof entry !== "object") continue;
+    const pandadoc =
+      "pandadoc" in entry && entry.pandadoc && typeof entry.pandadoc === "object"
+        ? (entry.pandadoc as Record<string, unknown>)
+        : null;
+    const status = coerceText(pandadoc?.status);
+    if (!status) continue;
+    const updatedAtRaw =
+      typeof pandadoc?.updatedAt === "number" && Number.isFinite(pandadoc.updatedAt)
+        ? pandadoc.updatedAt
+        : typeof (entry as Record<string, unknown>).createdAt === "number" &&
+            Number.isFinite((entry as Record<string, unknown>).createdAt)
+          ? ((entry as Record<string, unknown>).createdAt as number)
+          : 0;
+    if (!latestStatus || updatedAtRaw >= latestUpdatedAt) {
+      latestStatus = status;
+      latestUpdatedAt = updatedAtRaw;
+    }
+  }
+  return latestStatus;
 }
 
 async function findEstimateInDomain(domain: string, estimateId: string) {
@@ -161,6 +192,15 @@ export function formatEstimateStatus(status: string) {
     .filter(Boolean)
     .map((segment) => `${segment.charAt(0).toUpperCase()}${segment.slice(1)}`)
     .join(" ");
+}
+
+export function formatEstimatePreviewStatus(preview: EstimateSharePreview | null) {
+  if (!preview) return "Draft";
+  const estimateStatus = coerceText(preview.status).toLowerCase();
+  if (estimateStatus === "generated" && preview.pandaDocStatus) {
+    return formatEstimateStatus(preview.pandaDocStatus);
+  }
+  return formatEstimateStatus(preview.status);
 }
 
 export async function resolveEstimateSharePreview(rawEstimateId: string) {

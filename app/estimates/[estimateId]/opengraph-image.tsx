@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   formatEstimatePreviewId,
-  formatEstimateStatus,
+  formatEstimatePreviewStatus,
   parseEstimateId,
   resolveEstimateSharePreview,
 } from "@/app/estimates/[estimateId]/estimate-share-preview";
@@ -70,7 +70,7 @@ export default async function OpenGraphImage({ params }: OpenGraphImageProps) {
     62
   );
   const workspaceLabel = preview?.workspaceProjectName || preview?.teamName || "Cornerstone";
-  const statusLabel = formatEstimateStatus(preview?.status || "draft");
+  const statusLabel = formatEstimatePreviewStatus(preview);
   const updatedOnLabel = formatEstimateUpdatedAt(preview?.updatedAt ?? null);
   const estimateNumberLabel = `EST • ${previewId}`;
 
