@@ -184,11 +184,14 @@ export function formatEstimatePreviewId(estimateId: string) {
 export function formatEstimateStatus(status: string) {
   const normalized = coerceText(status).toLowerCase();
   if (!normalized) return "Estimate Draft";
+  if (normalized.startsWith("document.")) {
+    return formatPandaDocPreviewStatus(normalized);
+  }
   if (normalized === "generated") return "Generated";
   if (normalized === "draft") return "Estimate Draft";
   if (normalized === "archived") return "Archived";
   return normalized
-    .split(/[_\s-]+/)
+    .split(/[_\s.-]+/)
     .filter(Boolean)
     .map((segment) => `${segment.charAt(0).toUpperCase()}${segment.slice(1)}`)
     .join(" ");

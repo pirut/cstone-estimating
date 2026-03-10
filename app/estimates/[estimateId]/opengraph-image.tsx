@@ -1,6 +1,4 @@
 import { ImageResponse } from "next/og";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import {
   formatEstimatePreviewId,
   formatEstimatePreviewStatus,
@@ -21,7 +19,7 @@ type OpenGraphImageProps = {
   };
 };
 
-let logoDataUrlPromise: Promise<string | null> | null = null;
+const DEFAULT_APP_URL = "https://estimating.cornerstonecompaniesfl.com";
 
 function clampText(value: string, maxLength: number) {
   const normalized = String(value ?? "").trim();
@@ -30,25 +28,19 @@ function clampText(value: string, maxLength: number) {
   return `${normalized.slice(0, Math.max(1, maxLength - 1)).trimEnd()}…`;
 }
 
-async function getLogoDataUrl() {
-  if (!logoDataUrlPromise) {
-    logoDataUrlPromise = (async () => {
-      const candidatePaths = [
-        join(process.cwd(), "app", "icon.png"),
-        join(process.cwd(), "public", "brand", "cornerstone-logo.png"),
-      ];
-      for (const absolutePath of candidatePaths) {
-        try {
-          const file = await readFile(absolutePath);
-          return `data:image/png;base64,${file.toString("base64")}`;
-        } catch {
-          continue;
-        }
-      }
-      return null;
-    })();
+function resolveIconUrl() {
+  const rawBaseUrl =
+    process.env.NEXT_PUBLIC_APP_URL?.trim() ||
+    process.env.NEXT_PUBLIC_SITE_URL?.trim() ||
+    DEFAULT_APP_URL;
+  const normalizedBaseUrl = /^https?:\/\//i.test(rawBaseUrl)
+    ? rawBaseUrl
+    : `https://${rawBaseUrl}`;
+  try {
+    return new URL("/icon.png", normalizedBaseUrl).toString();
+  } catch {
+    return `${DEFAULT_APP_URL}/icon.png`;
   }
-  return logoDataUrlPromise;
 }
 
 function formatEstimateUpdatedAt(updatedAt: number | null) {
@@ -63,7 +55,7 @@ function formatEstimateUpdatedAt(updatedAt: number | null) {
 export default async function OpenGraphImage({ params }: OpenGraphImageProps) {
   const estimateId = parseEstimateId(params.estimateId);
   const preview = await resolveEstimateSharePreview(estimateId);
-  const logoDataUrl = await getLogoDataUrl();
+  const iconUrl = resolveIconUrl();
   const previewId = formatEstimatePreviewId(estimateId);
   const customerName = clampText(preview?.customerName || "Customer not set", 54);
   const projectName = clampText(
@@ -145,9 +137,9 @@ export default async function OpenGraphImage({ params }: OpenGraphImageProps) {
               boxShadow: "0 18px 34px rgba(52, 61, 66, 0.08)",
             }}
           >
-            {logoDataUrl ? (
+            {iconUrl ? (
               <img
-                src={logoDataUrl}
+                src={iconUrl}
                 alt="Cornerstone"
                 width={54}
                 height={54}
