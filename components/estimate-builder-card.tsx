@@ -1055,13 +1055,13 @@ export function EstimateBuilderCard({
           id: "change-order",
           label: "Change Order Pricing",
           done: changeOrderStepComplete,
-          locked: !projectStepComplete,
+          locked: !projectStepReady,
         },
         {
           id: "review",
           label: "Review Totals",
           done: installStepComplete,
-          locked: !projectStepComplete || !changeOrderStepComplete,
+          locked: !projectStepReady || !changeOrderStepReady,
         },
       ] as const)
     : ([
@@ -1075,37 +1075,37 @@ export function EstimateBuilderCard({
           id: "products",
           label: "Product Pricing",
           done: productStepComplete,
-          locked: !projectStepComplete,
+          locked: !projectStepReady,
         },
         {
           id: "bucking",
           label: "Bucking & Waterproof",
           done: buckingStepComplete,
-          locked: !projectStepComplete || !productStepComplete,
+          locked: !projectStepReady || !productStepReady,
         },
         {
           id: "install",
           label: "Install Calculator",
           done: installStepComplete,
-          locked: !projectStepComplete || !productStepComplete || !buckingStepComplete,
+          locked: !projectStepReady || !productStepReady || !buckingStepReady,
         },
         {
           id: "review",
           label: "Review Totals",
           done: installStepComplete,
-          locked: !projectStepComplete || !productStepComplete || !buckingStepComplete,
+          locked: !projectStepReady || !productStepReady || !buckingStepReady,
         },
       ] as const);
 
   const completedCount = stepProgress.filter((step) => step.done).length;
   const completionPercent = Math.round((completedCount / stepProgress.length) * 100);
 
-  const showProducts = projectStepComplete && !isChangeOrderMode;
-  const showChangeOrder = projectStepComplete && isChangeOrderMode;
-  const showBucking = showProducts && productStepComplete;
-  const showInstall = showBucking && buckingStepComplete;
+  const showProducts = projectStepReady && !isChangeOrderMode;
+  const showChangeOrder = projectStepReady && isChangeOrderMode;
+  const showBucking = showProducts && productStepReady;
+  const showInstall = showBucking && buckingStepReady;
   const showReview =
-    (isChangeOrderMode && showChangeOrder && changeOrderStepComplete) ||
+    (isChangeOrderMode && showChangeOrder && changeOrderStepReady) ||
     (!isChangeOrderMode && showInstall);
 
   const getDefaultSectionOpen = useCallback(
