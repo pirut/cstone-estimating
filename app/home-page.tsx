@@ -281,6 +281,9 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
   > | null>(null);
   const [estimateTags, setEstimateTags] = useState<string[]>([]);
   const [estimateTagInput, setEstimateTagInput] = useState("");
+  const [requestedDashboardProjectId, setRequestedDashboardProjectId] = useState<
+    string | null
+  >(null);
   const progressResetTimeoutRef = useRef<number | null>(null);
   const draftRestoredRef = useRef(false);
   const routedEstimateLoadedRef = useRef<string | null>(null);
@@ -642,6 +645,12 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
   const activeEditingEstimateProjectId = String(
     activeEditingEstimate?.project?.id ?? ""
   ).trim();
+  const dashboardReturnProjectId =
+    activeEditingEstimateProjectId ||
+    (activeProjectId === UNASSIGNED_PROJECT_KEY ? UNASSIGNED_PROJECT_KEY : "");
+  const dashboardHref = dashboardReturnProjectId
+    ? `/?project=${encodeURIComponent(dashboardReturnProjectId)}`
+    : "/";
   const activeTrackedPandaDocDocument = useMemo(
     () =>
       activeEditingEstimate
@@ -928,8 +937,16 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
   useEffect(() => {
     if (typeof window === "undefined") return;
     if (isEstimateMode) return;
+    const nextRequestedProjectId = String(
+      new URLSearchParams(window.location.search).get("project") ?? ""
+    ).trim();
+    setRequestedDashboardProjectId(nextRequestedProjectId || null);
     const onPopState = () => {
       setUrlEstimateId(parseEstimateIdFromPathname(window.location.pathname));
+      const nextProjectId = String(
+        new URLSearchParams(window.location.search).get("project") ?? ""
+      ).trim();
+      setRequestedDashboardProjectId(nextProjectId || null);
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -984,12 +1001,40 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
     ) {
       return;
     }
+    const requestedProjectIsValid =
+      requestedDashboardProjectId === UNASSIGNED_PROJECT_KEY
+        ? hasUnassigned
+        : Boolean(
+            requestedDashboardProjectId &&
+              teamProjects.some(
+                (project) => project.id === requestedDashboardProjectId
+              )
+          );
+    if (requestedProjectIsValid && requestedDashboardProjectId) {
+      setActiveProjectId(requestedDashboardProjectId);
+      setRequestedDashboardProjectId(null);
+      if (typeof window !== "undefined") {
+        const nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.delete("project");
+        window.history.replaceState(
+          window.history.state,
+          "",
+          `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`
+        );
+      }
+      return;
+    }
     const nextProjectId =
       teamProjects[0]?.id ?? (hasUnassigned ? UNASSIGNED_PROJECT_KEY : null);
     if (nextProjectId) {
       setActiveProjectId(nextProjectId);
     }
-  }, [activeProjectId, teamProjects, unassignedTeamEstimates.length]);
+  }, [
+    activeProjectId,
+    requestedDashboardProjectId,
+    teamProjects,
+    unassignedTeamEstimates.length,
+  ]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -3915,11 +3960,11 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
             <div>
               <Button variant="ghost" size="sm" className="h-8 text-xs text-muted-foreground hover:text-foreground" asChild>
                 <Link
-                  href="/"
+                  href={dashboardHref}
                   onClick={(event) => {
                     if (!isPlainLeftClick(event)) return;
                     event.preventDefault();
-                    navigateWithRouteTransition("/", "back");
+                    navigateWithRouteTransition(dashboardHref, "back");
                   }}
                 >
                   <ArrowLeft className="h-3 w-3" />

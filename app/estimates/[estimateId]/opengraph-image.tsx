@@ -83,10 +83,10 @@ export default async function OpenGraphImage({ params }: OpenGraphImageProps) {
           display: "flex",
           flexDirection: "column",
           justifyContent: "space-between",
-          padding: "46px 56px",
+          padding: "42px 48px",
           background:
-            "radial-gradient(circle at 80% 12%, rgba(214, 176, 112, 0.22), transparent 32%), radial-gradient(circle at 6% 98%, rgba(176, 132, 72, 0.2), transparent 34%), linear-gradient(140deg, rgb(27, 21, 13) 0%, rgb(18, 14, 10) 45%, rgb(56, 40, 22) 100%)",
-          color: "rgb(248, 241, 230)",
+            "radial-gradient(circle at 88% 16%, rgba(209, 163, 90, 0.18), transparent 26%), radial-gradient(circle at 0% 100%, rgba(52, 61, 66, 0.12), transparent 34%), linear-gradient(135deg, rgb(248, 244, 228) 0%, rgb(243, 237, 218) 52%, rgb(236, 229, 205) 100%)",
+          color: "rgb(18, 18, 18)",
           fontFamily: "Work Sans, Arial, sans-serif",
           position: "relative",
           overflow: "hidden",
@@ -98,71 +98,106 @@ export default async function OpenGraphImage({ params }: OpenGraphImageProps) {
             top: 0,
             left: 0,
             right: 0,
-            height: 3,
-            background: "linear-gradient(90deg, rgb(242, 214, 165), rgb(170, 126, 66))",
+            height: 6,
+            background: "linear-gradient(90deg, rgb(209, 163, 90), rgb(111, 86, 49))",
           }}
         />
         <div
           style={{
             position: "absolute",
-            top: 28,
-            right: 28,
-            width: 260,
-            height: 260,
-            borderRadius: 30,
-            border: "1px solid rgba(241, 216, 174, 0.2)",
-            opacity: 0.45,
-            transform: "rotate(12deg)",
+            top: 34,
+            right: 40,
+            width: 292,
+            height: 292,
+            borderRadius: 44,
+            border: "1px solid rgba(52, 61, 66, 0.12)",
+            background:
+              "linear-gradient(145deg, rgba(255,255,255,0.5), rgba(209,163,90,0.08))",
+            opacity: 0.85,
+            transform: "rotate(10deg)",
+          }}
+        />
+        <div
+          style={{
+            position: "absolute",
+            right: -110,
+            bottom: -138,
+            width: 340,
+            height: 340,
+            borderRadius: 999,
+            background: "rgba(52, 61, 66, 0.08)",
           }}
         />
 
         <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-          {logoDataUrl ? (
-            <div
-              style={{
-                width: 66,
-                height: 66,
-                borderRadius: 18,
-                overflow: "hidden",
-                border: "1px solid rgba(244, 214, 166, 0.42)",
-                background: "rgba(13, 11, 8, 0.65)",
-                display: "flex",
-              }}
-            >
+          <div
+            style={{
+              width: 78,
+              height: 78,
+              borderRadius: 22,
+              overflow: "hidden",
+              border: "1px solid rgba(52, 61, 66, 0.14)",
+              background: "rgba(255,255,255,0.72)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              boxShadow: "0 18px 34px rgba(52, 61, 66, 0.08)",
+            }}
+          >
+            {logoDataUrl ? (
               <img
                 src={logoDataUrl}
                 alt="Cornerstone"
-                width={66}
-                height={66}
-                style={{ width: 66, height: 66, objectFit: "cover" }}
+                width={54}
+                height={54}
+                style={{ width: 54, height: 54, objectFit: "contain" }}
               />
-            </div>
-          ) : null}
+            ) : (
+              <div
+                style={{
+                  fontSize: 20,
+                  fontWeight: 700,
+                  color: "rgb(52, 61, 66)",
+                }}
+              >
+                C
+              </div>
+            )}
+          </div>
           <div
             style={{
               display: "flex",
               flexDirection: "column",
-              gap: 6,
+              gap: 7,
             }}
           >
             <div
               style={{
-                fontSize: 20,
-                letterSpacing: 2.2,
+                fontSize: 19,
+                letterSpacing: 3.4,
                 textTransform: "uppercase",
-                opacity: 0.92,
-                color: "rgb(244, 214, 166)",
+                color: "rgba(52, 61, 66, 0.72)",
               }}
             >
-              Cornerstone Proposal Generator
+              Cornerstone
+            </div>
+            <div
+              style={{
+                fontSize: 44,
+                lineHeight: 1,
+                fontWeight: 500,
+                fontFamily: "Georgia, 'Times New Roman', serif",
+                color: "rgb(20, 24, 26)",
+              }}
+            >
+              Proposal Studio
             </div>
             <div
               style={{
                 fontSize: 14,
-                letterSpacing: 1.8,
+                letterSpacing: 2.1,
                 textTransform: "uppercase",
-                opacity: 0.84,
-                color: "rgb(219, 195, 154)",
+                color: "rgb(209, 163, 90)",
               }}
             >
               Shared Estimate Preview
@@ -170,34 +205,10 @@ export default async function OpenGraphImage({ params }: OpenGraphImageProps) {
           </div>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          <div
-            style={{
-              fontSize: 22,
-              letterSpacing: 2,
-              textTransform: "uppercase",
-              color: "rgb(244, 214, 166)",
-              opacity: 0.9,
-            }}
-          >
-            Project
-          </div>
-          <div
-            style={{
-              fontSize: 64,
-              fontWeight: 700,
-              lineHeight: 1.04,
-              fontFamily: "Georgia, 'Times New Roman', serif",
-            }}
-          >
-            {projectName}
-          </div>
-        </div>
-
         <div
           style={{
             display: "flex",
-            gap: 20,
+            gap: 24,
             alignItems: "stretch",
           }}
         >
@@ -205,44 +216,66 @@ export default async function OpenGraphImage({ params }: OpenGraphImageProps) {
             style={{
               display: "flex",
               flexDirection: "column",
-              flex: "1.2 1 0%",
-              gap: 12,
-              padding: "22px 24px",
-              borderRadius: 22,
-              background: "rgba(10, 9, 7, 0.46)",
-              border: "1px solid rgba(244, 214, 166, 0.35)",
+              flex: "1.3 1 0%",
+              gap: 22,
+              padding: "28px 30px",
+              borderRadius: 30,
+              background: "rgba(255,255,255,0.7)",
+              border: "1px solid rgba(52, 61, 66, 0.1)",
+              boxShadow: "0 18px 44px rgba(52, 61, 66, 0.08)",
             }}
           >
             <div
               style={{
                 fontSize: 20,
-                letterSpacing: 1.4,
+                letterSpacing: 2.1,
                 textTransform: "uppercase",
-                color: "rgb(244, 214, 166)",
+                color: "rgb(209, 163, 90)",
               }}
             >
-              Customer
+              Project
             </div>
             <div
               style={{
-                fontSize: 40,
-                lineHeight: 1.12,
+                fontSize: 62,
+                lineHeight: 1.02,
                 fontWeight: 700,
+                fontFamily: "Georgia, 'Times New Roman', serif",
                 wordBreak: "break-word",
+                color: "rgb(20, 24, 26)",
               }}
             >
-              {customerName}
+              {projectName}
             </div>
             <div
               style={{
                 display: "flex",
-                gap: 18,
-                fontSize: 21,
-                opacity: 0.94,
+                flexDirection: "column",
+                gap: 8,
+                paddingTop: 22,
+                borderTop: "1px solid rgba(52, 61, 66, 0.12)",
               }}
             >
-              <div>{`Status: ${statusLabel}`}</div>
-              <div>{`Updated: ${updatedOnLabel}`}</div>
+              <div
+                style={{
+                  fontSize: 18,
+                  letterSpacing: 1.8,
+                  textTransform: "uppercase",
+                  color: "rgba(52, 61, 66, 0.68)",
+                }}
+              >
+                Prepared For
+              </div>
+              <div
+                style={{
+                  fontSize: 34,
+                  lineHeight: 1.12,
+                  fontWeight: 700,
+                  color: "rgb(20, 24, 26)",
+                }}
+              >
+                {customerName}
+              </div>
             </div>
           </div>
 
@@ -250,28 +283,31 @@ export default async function OpenGraphImage({ params }: OpenGraphImageProps) {
             style={{
               display: "flex",
               flexDirection: "column",
-              flex: "0.8 1 0%",
+              flex: "0.9 1 0%",
               justifyContent: "space-between",
-              gap: 14,
-              padding: "22px 24px",
-              borderRadius: 22,
-              background: "rgba(244, 214, 166, 0.12)",
-              border: "1px solid rgba(244, 214, 166, 0.38)",
+              gap: 18,
+              padding: "28px 28px 24px",
+              borderRadius: 30,
+              background:
+                "linear-gradient(160deg, rgb(52, 61, 66) 0%, rgb(32, 39, 43) 100%)",
+              border: "1px solid rgba(209, 163, 90, 0.26)",
+              color: "rgb(248, 244, 228)",
+              boxShadow: "0 20px 48px rgba(33, 39, 43, 0.2)",
             }}
           >
             <div
               style={{
                 display: "flex",
                 flexDirection: "column",
-                gap: 8,
+                gap: 14,
               }}
             >
               <div
                 style={{
-                  fontSize: 14,
-                  letterSpacing: 1.5,
+                  fontSize: 13,
+                  letterSpacing: 2,
                   textTransform: "uppercase",
-                  color: "rgb(244, 214, 166)",
+                  color: "rgba(248, 244, 228, 0.66)",
                 }}
               >
                 Workspace
@@ -279,21 +315,72 @@ export default async function OpenGraphImage({ params }: OpenGraphImageProps) {
               <div
                 style={{
                   fontSize: 30,
-                  lineHeight: 1.18,
+                  lineHeight: 1.16,
                   fontWeight: 700,
                 }}
               >
                 {clampText(workspaceLabel, 28)}
               </div>
             </div>
+
             <div
               style={{
-                paddingTop: 10,
-                borderTop: "1px solid rgba(244, 214, 166, 0.35)",
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 6,
+                  padding: "16px 18px",
+                  borderRadius: 20,
+                  background: "rgba(255,255,255,0.06)",
+                  border: "1px solid rgba(209, 163, 90, 0.24)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 12,
+                    letterSpacing: 1.8,
+                    textTransform: "uppercase",
+                    color: "rgba(248, 244, 228, 0.58)",
+                  }}
+                >
+                  Status
+                </div>
+                <div
+                  style={{
+                    fontSize: 24,
+                    fontWeight: 700,
+                    color: "rgb(209, 163, 90)",
+                  }}
+                >
+                  {statusLabel}
+                </div>
+              </div>
+              <div
+                style={{
+                  display: "flex",
+                  gap: 18,
+                  fontSize: 18,
+                  color: "rgba(248, 244, 228, 0.88)",
+                }}
+              >
+                <div>{`Updated ${updatedOnLabel}`}</div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                paddingTop: 16,
+                borderTop: "1px solid rgba(209, 163, 90, 0.26)",
                 fontSize: 17,
-                letterSpacing: 1.4,
+                letterSpacing: 1.6,
                 textTransform: "uppercase",
-                color: "rgb(222, 197, 153)",
+                color: "rgba(248, 244, 228, 0.78)",
               }}
             >
               {estimateNumberLabel}
@@ -304,12 +391,12 @@ export default async function OpenGraphImage({ params }: OpenGraphImageProps) {
         <div
           style={{
             position: "absolute",
-            right: 56,
-            bottom: 16,
+            right: 48,
+            bottom: 18,
             fontSize: 12,
-            letterSpacing: 1.1,
+            letterSpacing: 1.3,
             textTransform: "uppercase",
-            color: "rgba(241, 223, 191, 0.68)",
+            color: "rgba(52, 61, 66, 0.6)",
           }}
         >
           estimating.cornerstonecompaniesfl.com
