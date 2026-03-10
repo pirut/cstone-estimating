@@ -33,18 +33,19 @@ function clampText(value: string, maxLength: number) {
 async function getLogoDataUrl() {
   if (!logoDataUrlPromise) {
     logoDataUrlPromise = (async () => {
-      try {
-        const absolutePath = join(
-          process.cwd(),
-          "public",
-          "brand",
-          "cornerstone-logo.png"
-        );
-        const file = await readFile(absolutePath);
-        return `data:image/png;base64,${file.toString("base64")}`;
-      } catch {
-        return null;
+      const candidatePaths = [
+        join(process.cwd(), "app", "icon.png"),
+        join(process.cwd(), "public", "brand", "cornerstone-logo.png"),
+      ];
+      for (const absolutePath of candidatePaths) {
+        try {
+          const file = await readFile(absolutePath);
+          return `data:image/png;base64,${file.toString("base64")}`;
+        } catch {
+          continue;
+        }
       }
+      return null;
     })();
   }
   return logoDataUrlPromise;
