@@ -1109,43 +1109,8 @@ export function EstimateBuilderCard({
     (!isChangeOrderMode && showInstall);
 
   const getDefaultSectionOpen = useCallback(
-    (sectionId: string, isDone: boolean) => {
-      if (!isDone) return true;
-      const sectionOrder = ["project", "changeOrder", "product", "bucking", "install", "review"];
-      const sectionVisible: Record<string, boolean> = {
-        project: true,
-        changeOrder: showChangeOrder,
-        product: showProducts,
-        bucking: showBucking,
-        install: showInstall,
-        review: showReview,
-      };
-      const sectionDone: Record<string, boolean> = {
-        project: projectStepComplete,
-        changeOrder: changeOrderStepComplete,
-        product: productStepComplete,
-        bucking: buckingStepComplete,
-        install: installStepComplete,
-        review: installStepComplete,
-      };
-      const currentIdx = sectionOrder.indexOf(sectionId);
-      const hasLaterActiveSection = sectionOrder.some(
-        (id, idx) => idx > currentIdx && sectionVisible[id] && !sectionDone[id]
-      );
-      return !hasLaterActiveSection;
-    },
-    [
-      showChangeOrder,
-      showProducts,
-      showBucking,
-      showInstall,
-      showReview,
-      projectStepComplete,
-      changeOrderStepComplete,
-      productStepComplete,
-      buckingStepComplete,
-      installStepComplete,
-    ]
+    (_sectionId: string, _isDone: boolean) => true,
+    []
   );
 
   const toggleSection = useCallback(
