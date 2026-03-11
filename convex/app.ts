@@ -63,8 +63,42 @@ type EstimateGraphDoc = {
   totals?: any;
   tags?: any;
   versionHistory?: any;
+  pandadocDocumentId?: string;
+  pandadocState?: {
+    documentId?: string;
+    status?: string;
+    recipientEmail?: string;
+    recipientRole?: string;
+    accessMode?: string;
+    lastSentAt?: number;
+    lastViewedAt?: number;
+    lastCompletedAt?: number;
+    lastSyncedAt?: number;
+  };
   owner: UserGraphDoc | null;
   project: ProjectGraphReferenceDoc | null;
+};
+
+type ProposalInviteDoc = {
+  id: string;
+  estimateId: string;
+  teamId: string;
+  documentId: string;
+  recipientEmail: string;
+  recipientFirstName?: string;
+  recipientLastName?: string;
+  recipientRole?: string;
+  accessMode: string;
+  deliveryChannel: string;
+  expiresAt: number;
+  status: string;
+  emailedAt?: number;
+  firstOpenedAt?: number;
+  lastOpenedAt?: number;
+  completedAt?: number;
+  createdByUserId?: string;
+  createdAt: number;
+  updatedAt: number;
 };
 
 type ProjectGraphDoc = {
@@ -299,6 +333,14 @@ async function deleteTeamCascade(ctx: MutationCtx, teamDoc: Doc<"teams">) {
     .collect();
   for (const estimate of estimates) {
     await ctx.db.delete(estimate._id);
+  }
+
+  const proposalInvites = await ctx.db
+    .query("proposalInvites")
+    .withIndex("by_teamId", (q) => q.eq("teamId", teamDoc.id))
+    .collect();
+  for (const invite of proposalInvites) {
+    await ctx.db.delete(invite._id);
   }
 
   const projects = await ctx.db
@@ -836,5 +878,307 @@ export const importRows = mutation({
     }
 
     return { count };
+  },
+});
+
+function toPositiveNumber(value: unknown) {
+  const parsed =
+    typeof value === "number"
+      ? value
+      : typeof value === "string"
+        ? Number(value)
+        : NaN;
+  if (!Number.isFinite(parsed)) return undefined;
+  return parsed > 0 ? parsed : undefined;
+}
+
+function sanitizeProposalInvite(doc: Doc<"proposalInvites"> | null): ProposalInviteDoc | null {
+  if (!doc) return null;
+  const publicDoc = toPublicDoc(doc) as ProposalInviteDoc & {
+    tokenHash?: string;
+  };
+  delete publicDoc.tokenHash;
+  return publicDoc;
+}
+
+function sanitizeEstimate(doc: Doc<"estimates"> | null) {
+  return doc ? toPublicDoc(doc) : null;
+}
+
+async function getEstimateDocById(ctx: Ctx, estimateId: string) {
+  return await ctx.db
+    .query("estimates")
+    .withIndex("by_custom_id", (q) => q.eq("id", estimateId))
+    .unique();
+}
+
+async function getProposalInviteDocById(ctx: Ctx, inviteId: string) {
+  return await ctx.db
+    .query("proposalInvites")
+    .withIndex("by_custom_id", (q) => q.eq("id", inviteId))
+    .unique();
+}
+
+export const estimateById = query({
+  args: {
+    estimateId: v.string(),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const estimate = await getEstimateDocById(ctx, args.estimateId);
+    return sanitizeEstimate(estimate);
+  },
+});
+
+export const proposalInviteByTokenHash = query({
+  args: {
+    tokenHash: v.string(),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const invite = await ctx.db
+      .query("proposalInvites")
+      .withIndex("by_tokenHash", (q) => q.eq("tokenHash", args.tokenHash))
+      .unique();
+    if (!invite) return null;
+    const estimate = await getEstimateDocById(ctx, invite.estimateId);
+    return {
+      invite: sanitizeProposalInvite(invite),
+      estimate: sanitizeEstimate(estimate),
+    };
+  },
+});
+
+export const createProposalInvite = mutation({
+  args: {
+    id: v.string(),
+    estimateId: v.string(),
+    teamId: v.string(),
+    documentId: v.string(),
+    recipientEmail: v.string(),
+    recipientFirstName: v.optional(v.string()),
+    recipientLastName: v.optional(v.string()),
+    recipientRole: v.optional(v.string()),
+    accessMode: v.string(),
+    deliveryChannel: v.string(),
+    tokenHash: v.string(),
+    expiresAt: v.number(),
+    status: v.string(),
+    createdByUserId: v.optional(v.string()),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const now = Date.now();
+    const existing = await ctx.db
+      .query("proposalInvites")
+      .withIndex("by_estimateId", (q) => q.eq("estimateId", args.estimateId))
+      .collect();
+
+    for (const invite of existing) {
+      if (
+        invite.status === "completed" ||
+        invite.status === "superseded" ||
+        invite.status === "expired" ||
+        invite.status === "revoked"
+      ) {
+        continue;
+      }
+      await ctx.db.patch(invite._id, {
+        status: "superseded",
+        updatedAt: now,
+      });
+    }
+
+    await ctx.db.insert("proposalInvites", {
+      id: args.id,
+      estimateId: args.estimateId,
+      teamId: args.teamId,
+      documentId: args.documentId,
+      recipientEmail: args.recipientEmail,
+      recipientFirstName: args.recipientFirstName,
+      recipientLastName: args.recipientLastName,
+      recipientRole: args.recipientRole,
+      accessMode: args.accessMode,
+      deliveryChannel: args.deliveryChannel,
+      tokenHash: args.tokenHash,
+      expiresAt: args.expiresAt,
+      status: args.status,
+      createdByUserId: args.createdByUserId,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const invite = await getProposalInviteDocById(ctx, args.id);
+    return sanitizeProposalInvite(invite);
+  },
+});
+
+export const markProposalInviteDelivery = mutation({
+  args: {
+    inviteId: v.string(),
+    status: v.string(),
+    emailedAt: v.optional(v.number()),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const invite = await getProposalInviteDocById(ctx, args.inviteId);
+    if (!invite) return null;
+    await ctx.db.patch(invite._id, {
+      status: args.status,
+      emailedAt: args.emailedAt,
+      updatedAt: Date.now(),
+    });
+    const updated = await getProposalInviteDocById(ctx, args.inviteId);
+    return sanitizeProposalInvite(updated);
+  },
+});
+
+export const markProposalInviteOpened = mutation({
+  args: {
+    inviteId: v.string(),
+    openedAt: v.number(),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const invite = await getProposalInviteDocById(ctx, args.inviteId);
+    if (!invite) return null;
+    await ctx.db.patch(invite._id, {
+      status:
+        invite.status === "completed" || invite.status === "expired"
+          ? invite.status
+          : "opened",
+      firstOpenedAt: invite.firstOpenedAt ?? args.openedAt,
+      lastOpenedAt: args.openedAt,
+      updatedAt: Date.now(),
+    });
+    const updated = await getProposalInviteDocById(ctx, args.inviteId);
+    return sanitizeProposalInvite(updated);
+  },
+});
+
+export const recordPandaDocWebhookEvent = mutation({
+  args: {
+    id: v.string(),
+    eventKey: v.string(),
+    eventType: v.string(),
+    documentId: v.string(),
+    payload: v.any(),
+    receivedAt: v.number(),
+  },
+  returns: v.object({
+    duplicate: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("pandadocWebhookEvents")
+      .withIndex("by_eventKey", (q) => q.eq("eventKey", args.eventKey))
+      .unique();
+    if (existing) {
+      return { duplicate: true };
+    }
+
+    await ctx.db.insert("pandadocWebhookEvents", {
+      id: args.id,
+      eventKey: args.eventKey,
+      eventType: args.eventType,
+      documentId: args.documentId,
+      payload: args.payload,
+      receivedAt: args.receivedAt,
+    });
+    return { duplicate: false };
+  },
+});
+
+export const applyPandaDocWebhookState = mutation({
+  args: {
+    documentId: v.string(),
+    status: v.string(),
+    recipientEmail: v.optional(v.string()),
+    recipientRole: v.optional(v.string()),
+    accessMode: v.optional(v.string()),
+    occurredAt: v.number(),
+    markViewed: v.optional(v.boolean()),
+    markCompleted: v.optional(v.boolean()),
+  },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    const estimate = await ctx.db
+      .query("estimates")
+      .withIndex("by_pandadocDocumentId", (q) => q.eq("pandadocDocumentId", args.documentId))
+      .unique();
+
+    const invites = await ctx.db
+      .query("proposalInvites")
+      .withIndex("by_documentId", (q) => q.eq("documentId", args.documentId))
+      .collect();
+    const primaryInvite = invites[0] ?? null;
+
+    const now = Date.now();
+
+    for (const invite of invites) {
+      await ctx.db.patch(invite._id, {
+        status: args.markCompleted
+          ? "completed"
+          : args.markViewed
+            ? invite.status === "completed"
+              ? "completed"
+              : "opened"
+            : invite.status,
+        firstOpenedAt:
+          args.markViewed && !invite.firstOpenedAt
+            ? args.occurredAt
+            : invite.firstOpenedAt,
+        lastOpenedAt: args.markViewed ? args.occurredAt : invite.lastOpenedAt,
+        completedAt: args.markCompleted ? args.occurredAt : invite.completedAt,
+        updatedAt: now,
+      });
+    }
+
+    if (!estimate) {
+      return {
+        inviteCount: invites.length,
+        estimateUpdated: false,
+      };
+    }
+
+    const previousState =
+      estimate.pandadocState && typeof estimate.pandadocState === "object"
+        ? estimate.pandadocState
+        : {};
+    await ctx.db.patch(estimate._id, {
+      status:
+        args.markCompleted && estimate.status === "generated"
+          ? "completed"
+          : estimate.status,
+      updatedAt: now,
+      pandadocState: {
+        ...previousState,
+        documentId: args.documentId,
+        status: args.status,
+        recipientEmail: args.recipientEmail ?? previousState.recipientEmail,
+        recipientRole: args.recipientRole ?? previousState.recipientRole,
+        accessMode:
+          args.accessMode ??
+          primaryInvite?.accessMode ??
+          previousState.accessMode,
+        lastSentAt:
+          args.status === "document.sent"
+            ? args.occurredAt
+            : previousState.lastSentAt,
+        lastViewedAt: args.markViewed
+          ? args.occurredAt
+          : previousState.lastViewedAt,
+        lastCompletedAt: args.markCompleted
+          ? args.occurredAt
+          : previousState.lastCompletedAt,
+        lastSyncedAt: args.occurredAt,
+      },
+    });
+
+    return {
+      inviteCount: invites.length,
+      estimateUpdated: true,
+      estimateId: estimate.id,
+    };
   },
 });

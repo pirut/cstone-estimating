@@ -115,6 +115,50 @@ export type PandaDocTemplateConfig = {
   rules?: PandaDocTemplateRule[];
 };
 
+export type ProposalSignerMode = "internal" | "external";
+
+export type ProposalSignerRecipient = {
+  mode: ProposalSignerMode;
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  role?: string;
+};
+
+export type EstimatePandaDocState = {
+  documentId?: string;
+  status?: string;
+  recipientEmail?: string;
+  recipientRole?: string;
+  accessMode?: ProposalSignerMode;
+  lastSentAt?: number;
+  lastViewedAt?: number;
+  lastCompletedAt?: number;
+  lastSyncedAt?: number;
+};
+
+export type ProposalInvite = {
+  id: string;
+  estimateId: string;
+  teamId: string;
+  documentId: string;
+  recipientEmail: string;
+  recipientFirstName?: string;
+  recipientLastName?: string;
+  recipientRole?: string;
+  accessMode: ProposalSignerMode;
+  deliveryChannel: string;
+  expiresAt: number;
+  status: string;
+  emailedAt?: number;
+  firstOpenedAt?: number;
+  lastOpenedAt?: number;
+  completedAt?: number;
+  createdByUserId?: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
 export type TemplateConfig = {
   version: number;
   id: string;

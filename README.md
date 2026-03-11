@@ -26,6 +26,9 @@ CLERK_SECRET_KEY=...
 NEXT_PUBLIC_ALLOWED_EMAIL_DOMAIN=cornerstonecompaniesfl.com
 NEXT_PUBLIC_PRIMARY_OWNER_EMAIL=jr@cornerstonecompaniesfl.com
 NEXT_PUBLIC_ORG_TEAM_NAME=CORNERSTONE
+
+# Public app URL for signing links
+APP_BASE_URL=http://localhost:3000
 ```
 
 Optional download limits and allowlist:
@@ -54,6 +57,10 @@ PANDADOC_READY_TIMEOUT_MS=45000
 PANDADOC_READY_POLL_INTERVAL_MS=1200
 PANDADOC_OWNER_MEMBERSHIP_ID=... # preferred, PandaDoc workspace membership_id for responsible owner
 PANDADOC_OWNER_EMAIL=... # optional override for create requests (default is sales@cornerstonecompaniesfl.com)
+PANDADOC_WEBHOOK_SHARED_KEY=...
+PROPOSAL_SIGN_LINK_TTL_HOURS=168
+RESEND_API_KEY=...
+RESEND_FROM_EMAIL=proposals@cornerstonecompaniesfl.com
 ```
 
 ## Convex local deployment

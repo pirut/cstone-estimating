@@ -109,6 +109,22 @@ export async function POST(request: NextRequest) {
     const sendMessage = String(pandadocConfig?.message ?? "").trim() || undefined;
     const sendSubject = String(pandadocConfig?.subject ?? "").trim() || undefined;
     const sendSilent = toBoolean(pandadocConfig?.silent, false);
+    const pandadocMetadata:
+      | Record<string, string | number | boolean | null | undefined>
+      | undefined =
+      pandadocConfig?.metadata && typeof pandadocConfig.metadata === "object"
+        ? Object.fromEntries(
+            Object.entries(pandadocConfig.metadata as Record<string, unknown>).filter(
+              ([key, value]) =>
+                Boolean(key) &&
+                (typeof value === "string" ||
+                  typeof value === "number" ||
+                  typeof value === "boolean" ||
+                  value === null ||
+                  value === undefined)
+            )
+          ) as Record<string, string | number | boolean | null | undefined>
+        : undefined;
 
     if (!estimateUrl && !estimatePayload) {
       return NextResponse.json(
@@ -153,6 +169,7 @@ export async function POST(request: NextRequest) {
       recipientRole: pandadocRecipientRole,
       bindings: pandadocBindings,
       useEnvRecipient: !pandadocDocumentId,
+      metadata: pandadocMetadata,
     });
     const createDraftPayload = buildPandaDocDraft({
       fieldValues,
@@ -162,6 +179,7 @@ export async function POST(request: NextRequest) {
       recipientRole: pandadocRecipientRole,
       bindings: pandadocBindings,
       useEnvRecipient: true,
+      metadata: pandadocMetadata,
     });
 
     const missingConfig = [...getPandaDocMissingEnvVars()];

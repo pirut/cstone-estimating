@@ -46,10 +46,7 @@ export type PandaDocDraft = {
       role?: string;
     }
   >;
-  metadata: {
-    source: string;
-    preparedAt: string;
-  };
+  metadata: Record<string, string>;
 };
 
 type BuildPandaDocDraftOptions = {
@@ -60,6 +57,7 @@ type BuildPandaDocDraftOptions = {
   recipientRole?: string;
   bindings?: PandaDocTemplateBinding[];
   useEnvRecipient?: boolean;
+  metadata?: Record<string, string | number | boolean | null | undefined>;
 };
 
 export type PandaDocSendOptions = {
@@ -397,6 +395,22 @@ function buildFieldsFromBindings(
   return fields;
 }
 
+function buildDraftMetadata(
+  metadata?: Record<string, string | number | boolean | null | undefined>
+) {
+  const base: Record<string, string> = {
+    source: "cstone-estimating",
+    preparedAt: new Date().toISOString(),
+  };
+  if (!metadata) return base;
+  Object.entries(metadata).forEach(([key, value]) => {
+    const normalizedKey = coerceString(key);
+    if (!normalizedKey || value === undefined || value === null) return;
+    base[normalizedKey] = String(value);
+  });
+  return base;
+}
+
 function resolveDraftOwner() {
   const membershipId = coerceString(process.env.PANDADOC_OWNER_MEMBERSHIP_ID);
   if (membershipId) {
@@ -673,6 +687,7 @@ export function buildPandaDocDraft(
     recipientRole,
     bindings,
     useEnvRecipient = true,
+    metadata,
   } = options;
 
   const envTemplateUuid = coerceString(process.env.PANDADOC_TEMPLATE_UUID);
@@ -725,10 +740,7 @@ export function buildPandaDocDraft(
       : [],
     tokens: mappedTokens,
     fields: mappedFields,
-    metadata: {
-      source: "cstone-estimating",
-      preparedAt: new Date().toISOString(),
-    },
+    metadata: buildDraftMetadata(metadata),
   };
 }
 
@@ -1343,6 +1355,82 @@ export async function updatePandaDocDocument(
       revertedToDraft,
       previousStatus: revertedToDraft ? initialStatus : undefined,
     },
+  };
+}
+
+export async function preparePandaDocForEmbeddedSigning(options: {
+  documentId: string;
+  recipientEmail: string;
+  sessionLifetimeSeconds?: number;
+  sendOptions?: PandaDocSendOptions;
+}) {
+  const documentId = coerceString(options.documentId);
+  const recipientEmail = coerceString(options.recipientEmail).toLowerCase();
+  if (!documentId) {
+    throw new Error("PandaDoc document id is required.");
+  }
+  if (!recipientEmail) {
+    throw new Error("Recipient email is required for embedded signing.");
+  }
+
+  let statusResponse = await waitForDocumentReady(documentId);
+  let documentStatus = coerceString(statusResponse.status) || "unknown";
+
+  if (documentStatus === ERROR_STATUS) {
+    throw new Error("PandaDoc document is not available for embedded signing.");
+  }
+
+  let sendResult: PandaDocCreateResult["sendResult"];
+  if (documentStatus === DRAFT_STATUS) {
+    sendResult = await sendPandaDocDocument(documentId, {
+      ...options.sendOptions,
+      silent: true,
+    });
+    statusResponse = await waitForDocumentReady(documentId);
+    documentStatus =
+      coerceString(sendResult?.status) ||
+      coerceString(statusResponse.status) ||
+      "unknown";
+  }
+
+  const session = await createPandaDocSession(
+    documentId,
+    recipientEmail,
+    toPositiveInteger(options.sessionLifetimeSeconds, 900)
+  );
+  if (!session) {
+    throw new Error("Unable to create PandaDoc signing session.");
+  }
+
+  const detailsSummary = await getPandaDocMatchedRecipient(documentId, recipientEmail);
+  const matchedRecipient = detailsSummary.matchedRecipient;
+  const value = detailsSummary.value;
+
+  return {
+    document: {
+      id: documentId,
+      name: coerceString(statusResponse.name) || documentId,
+      status: documentStatus,
+      appUrl: buildDocumentAppUrl(documentId),
+      apiUrl: `${getApiBaseUrl()}/documents/${documentId}`,
+      sharedLink: coerceString(matchedRecipient?.shared_link) || undefined,
+      valueAmount: value?.amount,
+      valueCurrency: value?.currency,
+      valueFormatted: value?.formatted,
+    },
+    recipient:
+      matchedRecipient && coerceString(matchedRecipient.email)
+        ? {
+            email: coerceString(matchedRecipient.email),
+            firstName: coerceString(matchedRecipient.first_name) || undefined,
+            lastName: coerceString(matchedRecipient.last_name) || undefined,
+            role: coerceString(matchedRecipient.role) || undefined,
+          }
+        : {
+            email: recipientEmail,
+          },
+    sendResult,
+    session,
   };
 }
 

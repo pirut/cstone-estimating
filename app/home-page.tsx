@@ -47,9 +47,11 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import type {
+  EstimatePandaDocState,
   LibraryItem,
   LibraryState,
   LibraryType,
+  ProposalSignerRecipient,
   TemplateConfig,
   UploadedFile,
 } from "@/lib/types";
@@ -105,15 +107,18 @@ import {
 } from "@/lib/clerk";
 import { id } from "@/lib/convex";
 import {
+  buildEstimatePandaDocState,
   formatPandaDocStatus,
   formatRelativeTime,
   getEstimateProjectType,
+  getEstimateSigningRecipient,
   getManualEstimateProgress,
   getMostRecentLibraryItem,
   hasEstimateSnapshotChanges,
   normalizeEstimateTags,
   resolvePandaDocTemplateConfigForEstimate,
   toPandaDocVersionDocument,
+  withEstimateSigningRecipient,
   type EstimateSnapshot,
   type PandaDocGenerationResponse,
 } from "@/lib/home-page-utils";
@@ -123,6 +128,19 @@ type DeleteEstimateDialogState = {
   id: string;
   title: string;
   projectId: string;
+};
+
+type ProposalInviteResponse = {
+  signUrl?: string;
+  invite?: {
+    id?: string;
+    status?: string;
+    expiresAt?: number;
+  };
+  email?: {
+    status?: "sent" | "failed";
+    error?: string;
+  };
 };
 
 type HomePageProps = {
@@ -220,12 +238,23 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
   const [estimatePayload, setEstimatePayload] = useState<Record<string, any> | null>(
     null
   );
+  const [signerMode, setSignerMode] = useState<ProposalSignerRecipient["mode"]>("internal");
+  const [signerEmail, setSignerEmail] = useState("");
+  const [signerFirstName, setSignerFirstName] = useState("");
+  const [signerLastName, setSignerLastName] = useState("");
+  const [signerRole, setSignerRole] = useState("");
   const [estimateName, setEstimateName] = useState("");
   const [selectedEstimate, setSelectedEstimate] = useState<UploadedFile | null>(
     null
   );
   const [lastGeneration, setLastGeneration] =
     useState<PandaDocGenerationResponse | null>(null);
+  const [lastInviteResult, setLastInviteResult] = useState<ProposalInviteResponse | null>(
+    null
+  );
+  const [inviteActionLoading, setInviteActionLoading] = useState<
+    "internal" | "external" | null
+  >(null);
   const [linkedDocumentLive, setLinkedDocumentLive] = useState<{
     id: string;
     name?: string;
@@ -825,13 +854,41 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
   const canDownloadPlanningLines = Boolean(
     estimatePayload || Object.keys(estimateValues).length
   );
+  const currentSigningRecipient = useMemo<ProposalSignerRecipient | null>(() => {
+    if (signerMode === "external") {
+      return {
+        mode: "external",
+        email: signerEmail.trim().toLowerCase() || undefined,
+        firstName: signerFirstName.trim() || undefined,
+        lastName: signerLastName.trim() || undefined,
+        role: signerRole.trim() || undefined,
+      };
+    }
+    return {
+      mode: "internal",
+      email: signerEmail.trim().toLowerCase() || undefined,
+      firstName: signerFirstName.trim() || undefined,
+      lastName: signerLastName.trim() || undefined,
+      role: signerRole.trim() || undefined,
+    };
+  }, [signerEmail, signerFirstName, signerLastName, signerMode, signerRole]);
+  const canLaunchEmbeddedSigning = Boolean(
+    activeTrackedPandaDocDocument?.documentId &&
+      currentSigningRecipient?.email &&
+      signerMode === "internal"
+  );
+  const canSendSigningEmail = Boolean(
+    activeTrackedPandaDocDocument?.documentId &&
+      signerMode === "external" &&
+      currentSigningRecipient?.email
+  );
   const progressSteps = useMemo(
     () => [
       { label: "Loading estimate values", value: 0.2 },
       { label: "Preparing PandaDoc variables", value: 0.45 },
       { label: "Formatting estimate fields", value: 0.58 },
       { label: "Creating or revising PandaDoc", value: 0.78 },
-      { label: "Starting signing session", value: 0.9 },
+      { label: "Finalizing proposal", value: 0.9 },
     ],
     []
   );
@@ -1047,6 +1104,11 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
       estimateName,
       estimateValues,
       estimatePayload,
+      signerMode,
+      signerEmail,
+      signerFirstName,
+      signerLastName,
+      signerRole,
       estimateTags,
       editingEstimateId,
       activeProjectId,
@@ -1060,6 +1122,11 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
     estimatePayload,
     estimateTags,
     estimateValues,
+    signerEmail,
+    signerFirstName,
+    signerLastName,
+    signerMode,
+    signerRole,
   ]);
 
   useEffect(() => {
@@ -1097,6 +1164,23 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
           ? parsed.estimatePayload
           : null;
       const restoredTags = normalizeEstimateTags(parsed?.estimateTags);
+      const restoredSignerMode =
+        String((parsed as { signerMode?: string })?.signerMode ?? "").trim().toLowerCase() ===
+        "external"
+          ? "external"
+          : "internal";
+      const restoredSignerEmail = String(
+        (parsed as { signerEmail?: string })?.signerEmail ?? ""
+      ).trim();
+      const restoredSignerFirstName = String(
+        (parsed as { signerFirstName?: string })?.signerFirstName ?? ""
+      ).trim();
+      const restoredSignerLastName = String(
+        (parsed as { signerLastName?: string })?.signerLastName ?? ""
+      ).trim();
+      const restoredSignerRole = String(
+        (parsed as { signerRole?: string })?.signerRole ?? ""
+      ).trim();
       const restoredEditingEstimateId = String(
         parsed?.editingEstimateId ?? ""
       ).trim();
@@ -1114,6 +1198,11 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
       setEstimateValues(restoredValues);
       setEstimatePayload(restoredPayload);
       setLoadedEstimatePayload(restoredPayload);
+      setSignerMode(restoredSignerMode);
+      setSignerEmail(restoredSignerEmail);
+      setSignerFirstName(restoredSignerFirstName);
+      setSignerLastName(restoredSignerLastName);
+      setSignerRole(restoredSignerRole || pandadocSignerRole);
       setEstimateTags(restoredTags);
       if (restoredEditingEstimateId) {
         setEditingEstimateId(restoredEditingEstimateId);
@@ -1131,6 +1220,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
     estimatePayload,
     estimateTags,
     estimateValues,
+    pandadocSignerRole,
     urlEstimateId,
   ]);
 
@@ -1168,6 +1258,16 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
     loadedEstimatePayload,
     findTeamEstimateById,
   ]);
+
+  useEffect(() => {
+    if (loadedEstimatePayload) {
+      hydrateSignerState(getEstimateSigningRecipient(loadedEstimatePayload));
+      return;
+    }
+    if (!editingEstimateId && !estimatePayload) {
+      hydrateSignerState(null);
+    }
+  }, [editingEstimateId, estimatePayload, hydrateSignerState, loadedEstimatePayload]);
 
   useEffect(() => {
     if (!activeTrackedDocumentId) {
@@ -1298,6 +1398,18 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
       .transact([
         db.tx.estimates[editingEstimateId].update({
           updatedAt: now,
+          pandadocDocumentId: activeTrackedDocumentId,
+          pandadocState: {
+            ...(activeEditingEstimate?.pandadocState ?? {}),
+            documentId: activeTrackedDocumentId,
+            status: nextStatus,
+            recipientEmail: existingDocument.recipientEmail,
+            recipientRole: existingDocument.recipientRole,
+            accessMode:
+              activeEditingEstimate?.pandadocState?.accessMode ??
+              currentSigningRecipient?.mode,
+            lastSyncedAt: now,
+          } satisfies EstimatePandaDocState,
           versionHistory: nextHistory,
         }),
       ])
@@ -1309,6 +1421,8 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
     activeTrackedDocumentId,
     linkedDocumentLive,
     lastGeneration?.document?.id,
+    activeEditingEstimate?.pandadocState,
+    currentSigningRecipient?.mode,
     findTeamEstimateById,
     getPersistedEstimateHistory,
   ]);
@@ -1517,10 +1631,33 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
 
   const progressPercent = Math.max(0, Math.min(Math.round(progress * 100), 100));
 
+  const hydrateSignerState = useCallback(
+    (recipient: ProposalSignerRecipient | null | undefined) => {
+      const fallbackNameSegments = preparedByName.split(/\s+/).filter(Boolean);
+      const defaultFirstName = user?.firstName?.trim() || fallbackNameSegments[0] || "";
+      const defaultLastName =
+        user?.lastName?.trim() || fallbackNameSegments.slice(1).join(" ");
+      const defaultInternalEmail = emailAddress || "";
+      const nextMode = recipient?.mode === "external" ? "external" : "internal";
+      setSignerMode(nextMode);
+      setSignerEmail(
+        (recipient?.email?.trim().toLowerCase() ||
+          (nextMode === "internal" ? defaultInternalEmail : ""))
+      );
+      setSignerFirstName(recipient?.firstName?.trim() || defaultFirstName);
+      setSignerLastName(recipient?.lastName?.trim() || defaultLastName);
+      setSignerRole(recipient?.role?.trim() || pandadocSignerRole);
+    },
+    [emailAddress, pandadocSignerRole, preparedByName, user?.firstName, user?.lastName]
+  );
+
   const buildCurrentEstimateSnapshot = useCallback((): EstimateSnapshot => {
-    const payload =
+    const rawPayload =
       estimatePayload ??
       (Object.keys(estimateValues).length ? { values: estimateValues } : null);
+    const payload = rawPayload
+      ? withEstimateSigningRecipient(rawPayload, currentSigningRecipient)
+      : null;
     const title = estimateName.trim() || "Untitled Estimate";
     const totals =
       payload &&
@@ -1537,6 +1674,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
       templateUrl: undefined,
     };
   }, [
+    currentSigningRecipient,
     estimateName,
     estimatePayload,
     estimateValues,
@@ -1554,11 +1692,13 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
     setEstimatePayload(null);
     setEstimateTags([]);
     setEstimateTagInput("");
+    setLastInviteResult(null);
+    hydrateSignerState(null);
     setProjectActionNotice("Started a new estimate.");
     if (urlEstimateId) {
       updateEstimateUrl(null);
     }
-  }, [updateEstimateUrl, urlEstimateId]);
+  }, [hydrateSignerState, updateEstimateUrl, urlEstimateId]);
 
   const persistGeneratedEstimateVersion = useCallback(
     async (generation?: PandaDocGenerationResponse | null) => {
@@ -1569,6 +1709,11 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
       const now = Date.now();
       const tags = normalizeEstimateTags(estimateTags);
       const pandadocDocument = toPandaDocVersionDocument(generation, now);
+      const pandadocState = buildEstimatePandaDocState(
+        generation,
+        currentSigningRecipient?.mode,
+        now
+      );
       const totalsWithPandaDocValue = mergeTotalsWithPandaDocValue(
         snapshot.totals,
         generation
@@ -1601,9 +1746,13 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                 lastGeneratedAt: now,
                 templateName: snapshot.templateName,
                 templateUrl: snapshot.templateUrl,
+                payload: snapshot.payload,
+                totals: totalsWithPandaDocValue,
                 tags,
-              })
-              .link(estimateLinks),
+                pandadocDocumentId: pandadocState?.documentId,
+                pandadocState,
+            })
+            .link(estimateLinks),
             ...(targetProjectId
               ? [db.tx.projects[targetProjectId].update({ updatedAt: now })]
               : []),
@@ -1639,6 +1788,8 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
               version: versioned.currentVersion,
               versionHistory: versioned.history,
               tags,
+              pandadocDocumentId: pandadocState?.documentId,
+              pandadocState,
             })
             .link(estimateLinks),
           ...(targetProjectId
@@ -1682,6 +1833,8 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
             version: versioned.currentVersion,
             versionHistory: versioned.history,
             tags,
+            pandadocDocumentId: pandadocState?.documentId,
+            pandadocState,
           })
           .link(estimateLinks),
         ...(targetProjectId
@@ -1696,6 +1849,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
       activeMembership,
       activeTeam,
       buildCurrentEstimateSnapshot,
+      currentSigningRecipient?.mode,
       estimateTags,
       editingEstimateId,
       findTeamEstimateById,
@@ -1833,41 +1987,44 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
     const trackedRecipientRole = String(
       activeTrackedPandaDocDocument?.recipientRole ?? templateRecipientRole
     ).trim();
-    const defaultSignerRole = pandadocSignerRole || trackedRecipientRole || templateRecipientRole;
-    const signerEmail = emailAddress || trackedRecipientEmail;
-    const fallbackNameSegments = preparedByName.split(/\s+/).filter(Boolean);
-    const fallbackFirstName = fallbackNameSegments[0] ?? "";
-    const fallbackLastName = fallbackNameSegments.slice(1).join(" ");
-    const signerFirstName =
-      user?.firstName?.trim() || trackedRecipientFirstName || fallbackFirstName;
-    const signerLastName =
-      user?.lastName?.trim() || trackedRecipientLastName || fallbackLastName;
-    const usesStandardCornerstoneSigner =
-      defaultSignerRole.toLowerCase() === pandadocSignerRole.toLowerCase();
-    const generationRecipient = usesStandardCornerstoneSigner
-      ? trackedRecipientEmail
-        ? {
-            email: trackedRecipientEmail,
-            firstName: trackedRecipientFirstName || undefined,
-            lastName: trackedRecipientLastName || undefined,
-            role: trackedRecipientRole || defaultSignerRole || undefined,
-          }
-        : undefined
-      : signerEmail
-        ? {
-            email: signerEmail,
-            firstName: signerFirstName || undefined,
-            lastName: signerLastName || undefined,
-            role: defaultSignerRole || undefined,
-          }
-        : undefined;
+    const defaultSignerRole =
+      currentSigningRecipient?.role?.trim() ||
+      trackedRecipientRole ||
+      templateRecipientRole ||
+      pandadocSignerRole;
+    const generationRecipient = currentSigningRecipient?.email
+      ? {
+          email: currentSigningRecipient.email,
+          firstName: currentSigningRecipient.firstName || trackedRecipientFirstName || undefined,
+          lastName: currentSigningRecipient.lastName || trackedRecipientLastName || undefined,
+          role: defaultSignerRole || undefined,
+        }
+      : undefined;
+    if (!generationRecipient?.email) {
+      setError(
+        signerMode === "external"
+          ? "Enter the external signer email before generating PandaDoc."
+          : "Sign in or provide an internal signer email before generating PandaDoc."
+      );
+      return;
+    }
     const generatedBy = emailAddress
       ? {
           email: emailAddress,
-          firstName: user?.firstName?.trim() || fallbackFirstName || undefined,
-          lastName: user?.lastName?.trim() || fallbackLastName || undefined,
+          firstName: user?.firstName?.trim() || currentSigningRecipient?.firstName || undefined,
+          lastName: user?.lastName?.trim() || currentSigningRecipient?.lastName || undefined,
         }
       : undefined;
+    const estimateForGeneration = withEstimateSigningRecipient(
+      {
+        ...(estimatePayload ?? {}),
+        name: estimateName.trim(),
+        values:
+          estimatePayload?.values ??
+          (Object.keys(estimateValues).length ? estimateValues : undefined),
+      },
+      currentSigningRecipient
+    );
     let generationSucceeded = false;
 
     if (progressResetTimeoutRef.current !== null) {
@@ -1884,13 +2041,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mappingOverride,
-          estimate: {
-            ...(estimatePayload ?? {}),
-            name: estimateName.trim(),
-            values:
-              estimatePayload?.values ??
-              (Object.keys(estimateValues).length ? estimateValues : undefined),
-          },
+          estimate: estimateForGeneration,
           pandadoc: {
             templateUuid: templateUuid || undefined,
             recipientRole:
@@ -1902,6 +2053,14 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
             allowCreateFallback: true,
             createSession: false,
             send: false,
+            metadata: {
+              estimateId: editingEstimateId || undefined,
+              teamId: activeTeam?.id || undefined,
+              estimateVersion: activeEditingEstimate
+                ? getCurrentVersionForEstimate(activeEditingEstimate)
+                : undefined,
+              recipientMode: currentSigningRecipient?.mode || undefined,
+            },
           },
         }),
       });
@@ -1940,14 +2099,6 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
         });
       }
 
-      const launchUrl =
-        data.session?.url ||
-        data.document?.sharedLink ||
-        data.document?.appUrl;
-      if (launchUrl) {
-        window.open(launchUrl, "_blank", "noopener,noreferrer");
-      }
-
       setProgress(1);
       setProgressLabel(
         data.operation === "updated" ? "PandaDoc revised" : "PandaDoc ready"
@@ -1980,6 +2131,54 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
     }
   };
 
+  const handleCreateSigningInvite = useCallback(
+    async (mode: "internal" | "external") => {
+      setError(null);
+      setLastInviteResult(null);
+      const estimateId = String(editingEstimateId ?? activeEditingEstimate?.id ?? "").trim();
+      if (!estimateId) {
+        setError("Generate and save the proposal before creating a signing link.");
+        return;
+      }
+      setInviteActionLoading(mode);
+      try {
+        const response = await fetch(
+          `/api/proposals/${encodeURIComponent(estimateId)}/invite`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              sendEmail: mode === "external",
+            }),
+          }
+        );
+        const data = (await response.json().catch(() => null)) as
+          | ProposalInviteResponse
+          | { error?: string }
+          | null;
+        if (!response.ok) {
+          throw new Error(data && "error" in data ? data.error || "Failed to create signing invite." : "Failed to create signing invite.");
+        }
+        const inviteData = data as ProposalInviteResponse;
+        setLastInviteResult(inviteData);
+        if (mode === "internal" && inviteData.signUrl) {
+          window.open(inviteData.signUrl, "_blank", "noopener,noreferrer");
+        }
+        if (mode === "external" && inviteData.email?.status === "failed") {
+          setError(inviteData.email.error || "Signing email failed to send.");
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error.";
+        setError(message);
+      } finally {
+        setInviteActionLoading(null);
+      }
+    },
+    [activeEditingEstimate?.id, editingEstimateId]
+  );
+
   const handleSaveEstimateToDb = async () => {
     setError(null);
     if (!convexAppUrl) {
@@ -2000,7 +2199,10 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
     }
 
     const now = Date.now();
-    const payload = estimatePayload ?? { values: estimateValues };
+    const payload = withEstimateSigningRecipient(
+      estimatePayload ?? { values: estimateValues },
+      currentSigningRecipient
+    );
     const title = estimateName.trim() || "Untitled Estimate";
     const totals =
       payload.totals && typeof payload.totals === "object" ? payload.totals : null;
@@ -2779,6 +2981,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
 
       setEstimateName(revision.title);
       setLoadedEstimatePayload(revision.payload);
+      hydrateSignerState(getEstimateSigningRecipient(revision.payload));
       setEstimateTags(normalizeEstimateTags(estimate?.tags));
       setEstimateTagInput("");
       setHasBidFlowStarted(true);
@@ -4017,6 +4220,75 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                   </div>
                 ) : null}
 
+                <div className="rounded-2xl border border-border/70 bg-muted/25 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Signer</p>
+                      <p className="text-xs text-muted-foreground">
+                        Choose who will sign this proposal after generation.
+                      </p>
+                    </div>
+                    <Badge variant="outline" className="bg-card">
+                      {signerMode === "external" ? "External recipient" : "Internal staff"}
+                    </Badge>
+                  </div>
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-muted-foreground">Signer mode</label>
+                      <Select
+                        value={signerMode}
+                        onValueChange={(value) =>
+                          setSignerMode(value === "external" ? "external" : "internal")
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select signer mode" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="internal">Internal</SelectItem>
+                          <SelectItem value="external">External</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-muted-foreground">Signer role</label>
+                      <Input
+                        value={signerRole}
+                        onChange={(event) => setSignerRole(event.target.value)}
+                        placeholder={pandadocSignerRole}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-muted-foreground">Email</label>
+                      <Input
+                        value={signerEmail}
+                        onChange={(event) => setSignerEmail(event.target.value)}
+                        placeholder={
+                          signerMode === "external"
+                            ? "client@example.com"
+                            : "team@cornerstonecompaniesfl.com"
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-muted-foreground">First name</label>
+                      <Input
+                        value={signerFirstName}
+                        onChange={(event) => setSignerFirstName(event.target.value)}
+                        placeholder="First name"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <label className="text-xs text-muted-foreground">Last name</label>
+                      <Input
+                        value={signerLastName}
+                        onChange={(event) => setSignerLastName(event.target.value)}
+                        placeholder="Last name"
+                      />
+                    </div>
+                  </div>
+                </div>
+
                 <div className="flex flex-wrap items-center gap-3">
                   <Button
                     variant="secondary"
@@ -4038,6 +4310,30 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                       <ArrowDownToLine className="h-4 w-4" />
                     )}
                     {isGenerating ? "Generating..." : "Generate PandaDoc"}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => void handleCreateSigningInvite("internal")}
+                    disabled={!canLaunchEmbeddedSigning || inviteActionLoading !== null}
+                  >
+                    {inviteActionLoading === "internal" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <ArrowRightLeft className="h-4 w-4" />
+                    )}
+                    Open Embedded Signing
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => void handleCreateSigningInvite("external")}
+                    disabled={!canSendSigningEmail || inviteActionLoading !== null}
+                  >
+                    {inviteActionLoading === "external" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <FileText className="h-4 w-4" />
+                    )}
+                    Send Signing Email
                   </Button>
                   <Button
                     variant="secondary"
@@ -4096,6 +4392,34 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                   <p className="text-xs text-muted-foreground">
                     Unable to refresh PandaDoc status: {linkedDocumentLive.error}
                   </p>
+                ) : null}
+
+                {lastInviteResult?.signUrl ? (
+                  <div className="rounded-lg border border-border/70 bg-card px-4 py-3 text-sm">
+                    <p className="text-xs text-muted-foreground">
+                      Signing link ready
+                      {lastInviteResult.invite?.expiresAt
+                        ? ` · expires ${new Date(lastInviteResult.invite.expiresAt).toLocaleString()}`
+                        : ""}
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <Button asChild size="sm" variant="outline" className="h-8 text-xs">
+                        <a href={lastInviteResult.signUrl} target="_blank" rel="noreferrer">
+                          Open signing page
+                        </a>
+                      </Button>
+                      {lastInviteResult.email?.status === "sent" ? (
+                        <Badge variant="outline" className="bg-emerald-50 text-emerald-800">
+                          Email sent
+                        </Badge>
+                      ) : null}
+                      {lastInviteResult.email?.status === "failed" ? (
+                        <Badge variant="outline" className="bg-destructive/10 text-destructive">
+                          Email failed
+                        </Badge>
+                      ) : null}
+                    </div>
+                  </div>
                 ) : null}
 
                 <div className="flex items-center gap-2">

@@ -1,5 +1,10 @@
 import type { EstimateVersionPandaDocDocument } from "@/lib/estimate-versioning";
-import type { LibraryItem, PandaDocTemplateConfig } from "@/lib/types";
+import type {
+  EstimatePandaDocState,
+  LibraryItem,
+  PandaDocTemplateConfig,
+  ProposalSignerRecipient,
+} from "@/lib/types";
 import { hasOverrideInput } from "@/lib/estimate-calculator";
 
 export type EstimateSnapshot = {
@@ -45,11 +50,18 @@ export type PandaDocGenerationResponse = {
     status?: "shared" | "already_shared" | "failed";
     error?: string;
   };
+  sendResult?: {
+    status?: string;
+  };
   businessCentralSync?: {
     status?: string;
     reason?: string;
   };
 };
+
+function coerceString(value: unknown) {
+  return String(value ?? "").trim();
+}
 
 const REQUIRED_MANUAL_INFO_FIELDS = [
   "prepared_for",
@@ -205,6 +217,84 @@ export function toPandaDocVersionDocument(
     operation,
     updatedAt,
   };
+}
+
+export function buildEstimatePandaDocState(
+  generation: PandaDocGenerationResponse | null | undefined,
+  accessMode?: ProposalSignerRecipient["mode"],
+  updatedAt = Date.now()
+): EstimatePandaDocState | undefined {
+  const documentId = coerceString(generation?.document?.id);
+  if (!documentId) return undefined;
+  return {
+    documentId,
+    status: coerceString(generation?.document?.status) || undefined,
+    recipientEmail: coerceString(generation?.recipient?.email) || undefined,
+    recipientRole: coerceString(generation?.recipient?.role) || undefined,
+    accessMode,
+    lastSentAt:
+      coerceString(generation?.sendResult?.status) === "document.sent"
+        ? updatedAt
+        : undefined,
+    lastSyncedAt: updatedAt,
+  };
+}
+
+export function getEstimateSigningRecipient(
+  estimatePayload: Record<string, any> | null | undefined
+): ProposalSignerRecipient | null {
+  const recipient =
+    estimatePayload?.signing &&
+    typeof estimatePayload.signing === "object" &&
+    estimatePayload.signing.recipient &&
+    typeof estimatePayload.signing.recipient === "object"
+      ? (estimatePayload.signing.recipient as Record<string, unknown>)
+      : null;
+  if (!recipient) return null;
+  const mode = coerceString(recipient.mode).toLowerCase() === "external"
+    ? "external"
+    : "internal";
+  return {
+    mode,
+    email: coerceString(recipient.email) || undefined,
+    firstName: coerceString(recipient.firstName) || undefined,
+    lastName: coerceString(recipient.lastName) || undefined,
+    role: coerceString(recipient.role) || undefined,
+  };
+}
+
+export function withEstimateSigningRecipient(
+  estimatePayload: Record<string, any> | null | undefined,
+  recipient: ProposalSignerRecipient | null | undefined
+) {
+  const base =
+    estimatePayload && typeof estimatePayload === "object"
+      ? { ...estimatePayload }
+      : {};
+  if (!recipient) {
+    const signing =
+      base.signing && typeof base.signing === "object"
+        ? { ...(base.signing as Record<string, unknown>) }
+        : {};
+    delete signing.recipient;
+    if (Object.keys(signing).length) {
+      base.signing = signing;
+    } else {
+      delete base.signing;
+    }
+    return base;
+  }
+  base.signing = {
+    ...(base.signing && typeof base.signing === "object" ? base.signing : {}),
+    recipient: {
+      mode: recipient.mode,
+      email: recipient.email ?? "",
+      firstName: recipient.firstName ?? "",
+      lastName: recipient.lastName ?? "",
+      role: recipient.role ?? "",
+    },
+  };
+  return base;
 }
 
 export function getEstimateProjectType(estimate: any) {

@@ -60,6 +60,20 @@ export default defineSchema({
     totals: v.optional(v.any()),
     tags: v.optional(v.any()),
     versionHistory: v.optional(v.any()),
+    pandadocDocumentId: v.optional(v.string()),
+    pandadocState: v.optional(
+      v.object({
+        documentId: v.optional(v.string()),
+        status: v.optional(v.string()),
+        recipientEmail: v.optional(v.string()),
+        recipientRole: v.optional(v.string()),
+        accessMode: v.optional(v.string()),
+        lastSentAt: v.optional(v.number()),
+        lastViewedAt: v.optional(v.number()),
+        lastCompletedAt: v.optional(v.number()),
+        lastSyncedAt: v.optional(v.number()),
+      })
+    ),
     teamId: v.string(),
     ownerId: v.string(),
     projectId: v.optional(v.string()),
@@ -67,7 +81,49 @@ export default defineSchema({
     .index("by_custom_id", ["id"])
     .index("by_teamId", ["teamId"])
     .index("by_projectId", ["projectId"])
+    .index("by_pandadocDocumentId", ["pandadocDocumentId"])
     .index("by_teamId_and_updatedAt", ["teamId", "updatedAt"]),
+
+  proposalInvites: defineTable({
+    id: v.string(),
+    estimateId: v.string(),
+    teamId: v.string(),
+    documentId: v.string(),
+    recipientEmail: v.string(),
+    recipientFirstName: v.optional(v.string()),
+    recipientLastName: v.optional(v.string()),
+    recipientRole: v.optional(v.string()),
+    accessMode: v.string(),
+    deliveryChannel: v.string(),
+    tokenHash: v.string(),
+    expiresAt: v.number(),
+    status: v.string(),
+    emailedAt: v.optional(v.number()),
+    firstOpenedAt: v.optional(v.number()),
+    lastOpenedAt: v.optional(v.number()),
+    completedAt: v.optional(v.number()),
+    createdByUserId: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_custom_id", ["id"])
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_estimateId", ["estimateId"])
+    .index("by_teamId", ["teamId"])
+    .index("by_documentId", ["documentId"])
+    .index("by_estimateId_and_updatedAt", ["estimateId", "updatedAt"]),
+
+  pandadocWebhookEvents: defineTable({
+    id: v.string(),
+    eventKey: v.string(),
+    eventType: v.string(),
+    documentId: v.string(),
+    payload: v.any(),
+    receivedAt: v.number(),
+  })
+    .index("by_custom_id", ["id"])
+    .index("by_eventKey", ["eventKey"])
+    .index("by_documentId", ["documentId"]),
 
   projects: defineTable({
     id: v.string(),
