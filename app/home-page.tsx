@@ -1260,16 +1260,6 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
   ]);
 
   useEffect(() => {
-    if (loadedEstimatePayload) {
-      hydrateSignerState(getEstimateSigningRecipient(loadedEstimatePayload));
-      return;
-    }
-    if (!editingEstimateId && !estimatePayload) {
-      hydrateSignerState(null);
-    }
-  }, [editingEstimateId, estimatePayload, hydrateSignerState, loadedEstimatePayload]);
-
-  useEffect(() => {
     if (!activeTrackedDocumentId) {
       setLinkedDocumentLive(null);
       return;
@@ -1471,91 +1461,6 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
   }, [db, convexUser?.id, isPrimaryOwner, orgMembership, orgTeam]);
 
   useEffect(() => {
-    if (!convexAppUrl) return;
-    if (!authLoaded || !isSignedIn) return;
-    if (!knownOrgLookupLoaded) return;
-    if (!convexUser) return;
-    if (convexLoading) return;
-    if (teamReady) return;
-    if (!teamData) return;
-    if (teamLoading || teamQueryError) return;
-    if (teamSaving || teamSetupAction !== "idle" || teamSetupPending) return;
-    if (autoProvisionRef.current) return;
-    if (!teamDomain) {
-      setTeamError("Missing an allowed email domain.");
-      return;
-    }
-
-    autoProvisionRef.current = true;
-    setTeamError(null);
-
-    if (!orgTeam) {
-      if (!isPrimaryOwner) {
-        setTeamError(
-          "Organization workspace has not been created yet. Ask the org owner to create it."
-        );
-        autoProvisionRef.current = false;
-        return;
-      }
-      void (async () => {
-        try {
-          const existingTeams = await checkExistingOrgWorkspace();
-          if (!existingTeams) {
-            return;
-          }
-          if (existingTeams.length > 0) {
-            setTeamError(
-              "We found an existing organization workspace. Please wait while it syncs."
-            );
-            return;
-          }
-          if (knownOrgTeamId && knownOrgTeamDomain === teamDomain) {
-            setTeamError(
-              "We couldn't load your existing org workspace. Refresh and try again."
-            );
-            return;
-          }
-          await handleCreateTeam();
-        } finally {
-          autoProvisionRef.current = false;
-        }
-      })();
-      return;
-    }
-
-    if (orgTeam && !orgMembership) {
-      void handleJoinTeam().finally(() => {
-        autoProvisionRef.current = false;
-      });
-      return;
-    }
-
-    autoProvisionRef.current = false;
-  }, [
-    authLoaded,
-    orgMembership,
-    orgTeam,
-    orgTeam?.id,
-    convexAppUrl,
-    convexLoading,
-    convexUser,
-    isSignedIn,
-    teamData,
-    teamLoading,
-    teamQueryError,
-    teamDomain,
-    teamReady,
-    teamSaving,
-    teamSetupAction,
-    teamSetupPending,
-    knownOrgTeamId,
-    knownOrgTeamDomain,
-    knownOrgLookupLoaded,
-    isPrimaryOwner,
-    primaryOwnerEmail,
-  ]);
-
-  useEffect(() => {
     if (!teamQueryError) return;
     const message =
       teamQueryError instanceof Error
@@ -1650,6 +1555,16 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
     },
     [emailAddress, pandadocSignerRole, preparedByName, user?.firstName, user?.lastName]
   );
+
+  useEffect(() => {
+    if (loadedEstimatePayload) {
+      hydrateSignerState(getEstimateSigningRecipient(loadedEstimatePayload));
+      return;
+    }
+    if (!editingEstimateId && !estimatePayload) {
+      hydrateSignerState(null);
+    }
+  }, [editingEstimateId, estimatePayload, hydrateSignerState, loadedEstimatePayload]);
 
   const buildCurrentEstimateSnapshot = useCallback((): EstimateSnapshot => {
     const rawPayload =
@@ -2820,6 +2735,90 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
       return null;
     }
   }, [convexAppUrl, teamDomain, teamLookupDomain]);
+
+  useEffect(() => {
+    if (!convexAppUrl) return;
+    if (!authLoaded || !isSignedIn) return;
+    if (!knownOrgLookupLoaded) return;
+    if (!convexUser) return;
+    if (convexLoading) return;
+    if (teamReady) return;
+    if (!teamData) return;
+    if (teamLoading || teamQueryError) return;
+    if (teamSaving || teamSetupAction !== "idle" || teamSetupPending) return;
+    if (autoProvisionRef.current) return;
+    if (!teamDomain) {
+      setTeamError("Missing an allowed email domain.");
+      return;
+    }
+
+    autoProvisionRef.current = true;
+    setTeamError(null);
+
+    if (!orgTeam) {
+      if (!isPrimaryOwner) {
+        setTeamError(
+          "Organization workspace has not been created yet. Ask the org owner to create it."
+        );
+        autoProvisionRef.current = false;
+        return;
+      }
+      void (async () => {
+        try {
+          const existingTeams = await checkExistingOrgWorkspace();
+          if (!existingTeams) {
+            return;
+          }
+          if (existingTeams.length > 0) {
+            setTeamError(
+              "We found an existing organization workspace. Please wait while it syncs."
+            );
+            return;
+          }
+          if (knownOrgTeamId && knownOrgTeamDomain === teamDomain) {
+            setTeamError(
+              "We couldn't load your existing org workspace. Refresh and try again."
+            );
+            return;
+          }
+          await handleCreateTeam();
+        } finally {
+          autoProvisionRef.current = false;
+        }
+      })();
+      return;
+    }
+
+    if (orgTeam && !orgMembership) {
+      void handleJoinTeam().finally(() => {
+        autoProvisionRef.current = false;
+      });
+      return;
+    }
+
+    autoProvisionRef.current = false;
+  }, [
+    authLoaded,
+    orgMembership,
+    orgTeam,
+    convexAppUrl,
+    convexLoading,
+    convexUser,
+    isSignedIn,
+    teamData,
+    teamLoading,
+    teamQueryError,
+    teamDomain,
+    teamReady,
+    teamSaving,
+    teamSetupAction,
+    teamSetupPending,
+    knownOrgTeamId,
+    knownOrgTeamDomain,
+    knownOrgLookupLoaded,
+    isPrimaryOwner,
+    checkExistingOrgWorkspace,
+  ]);
 
   const handleRetryTeamSetup = () => {
     if (!orgTeam) {
