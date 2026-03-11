@@ -268,6 +268,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
     "all" | "mine" | "recent" | "archived"
   >("all");
   const [projectActionNotice, setProjectActionNotice] = useState<string | null>(null);
+  const [isSavingEstimate, setIsSavingEstimate] = useState(false);
   const [showArchivedProjects, setShowArchivedProjects] = useState(false);
   const [archivingId, setArchivingId] = useState<string | null>(null);
   const [renamingEstimateId, setRenamingEstimateId] = useState<string | null>(null);
@@ -2008,6 +2009,9 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
     const templateName = templateConfig?.name;
     const templateUrl = undefined;
 
+    setIsSavingEstimate(true);
+    setProjectActionNotice("Saving estimate to project...");
+
     try {
       if (editingEstimateId) {
         const existingEstimate = findTeamEstimateById(editingEstimateId);
@@ -2033,6 +2037,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
           JSON.stringify(existingTags.sort()) !== JSON.stringify(nextTags.sort());
         const projectChanged = existingProjectId !== targetProjectId;
         if (!snapshotChanged && !tagsChanged && !projectChanged) {
+          setProjectActionNotice("All changes are already saved to this project.");
           return true;
         }
         const history = existingEstimate
@@ -2116,8 +2121,11 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
       return true;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error.";
+      setProjectActionNotice(null);
       setError(message);
       return false;
+    } finally {
+      setIsSavingEstimate(false);
     }
   };
 
@@ -3992,6 +4000,7 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
               projectTypeOptions={mergedProjectTypeOptions}
               onActivate={() => {
                 setError(null);
+                setProjectActionNotice(null);
               }}
             />
 
@@ -4016,15 +4025,36 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
                     </div>
                   </div>
                 ) : null}
+                {projectActionNotice ? (
+                  <div
+                    className={cn(
+                      "rounded-lg border px-3 py-2 text-sm",
+                      isSavingEstimate
+                        ? "border-accent/30 bg-accent/10 text-accent-foreground"
+                        : "border-emerald-600/20 bg-emerald-50 text-emerald-800 dark:bg-emerald-900/20 dark:text-emerald-300"
+                    )}
+                  >
+                    {projectActionNotice}
+                  </div>
+                ) : null}
 
                 <div className="flex flex-wrap items-center gap-3">
                   <Button
                     variant="secondary"
                     onClick={() => void handleSaveEstimateToDb()}
-                    disabled={!isSignedIn || !teamReady || !hasSelectedProject}
+                    disabled={
+                      !isSignedIn ||
+                      !teamReady ||
+                      !hasSelectedProject ||
+                      isSavingEstimate
+                    }
                   >
-                    <Save className="h-4 w-4" />
-                    Save to project
+                    {isSavingEstimate ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Save className="h-4 w-4" />
+                    )}
+                    {isSavingEstimate ? "Saving..." : "Save to project"}
                   </Button>
                   <Button
                     variant="accent"
