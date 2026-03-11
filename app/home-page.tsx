@@ -2323,6 +2323,43 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
     }
   };
 
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const key = event.key.toLowerCase();
+      const withModifier = event.metaKey || event.ctrlKey;
+      if (!withModifier) return;
+
+      if (key === "s") {
+        event.preventDefault();
+        if (!hasSelectedProject) {
+          setError("Select or create a project before saving estimates.");
+          return;
+        }
+        void handleSaveEstimateToDb();
+        return;
+      }
+
+      if (key === "enter") {
+        event.preventDefault();
+        void handleGenerate();
+        return;
+      }
+
+      if (event.shiftKey && key === "n") {
+        event.preventDefault();
+        resetEstimateWorkspace();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    handleGenerate,
+    hasSelectedProject,
+    handleSaveEstimateToDb,
+    resetEstimateWorkspace,
+  ]);
+
   const handleRenameEstimate = useCallback(
     async (estimateId: string, newName: string) => {
       setError(null);
@@ -2623,45 +2660,6 @@ export default function HomePage({ routeEstimateId = null, mode = "dashboard" }:
     editingEstimateId,
     updateEstimateUrl,
     urlEstimateId,
-  ]);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const key = event.key.toLowerCase();
-      const withModifier = event.metaKey || event.ctrlKey;
-      if (!withModifier) return;
-
-      if (key === "s") {
-        event.preventDefault();
-        if (!hasSelectedProject) {
-          setError("Select or create a project before saving estimates.");
-          return;
-        }
-        void handleSaveEstimateToDb();
-        return;
-      }
-
-      if (key === "enter") {
-        event.preventDefault();
-        void handleGenerate();
-        return;
-      }
-
-      if (event.shiftKey && key === "n") {
-        event.preventDefault();
-        resetEstimateWorkspace();
-        return;
-      }
-
-    };
-
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [
-    handleGenerate,
-    hasSelectedProject,
-    handleSaveEstimateToDb,
-    resetEstimateWorkspace,
   ]);
 
   const handleOpenActiveEstimateHistory = useCallback(() => {
