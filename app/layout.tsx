@@ -3,6 +3,7 @@ import { OptionalClerkProvider } from "@/lib/clerk";
 import { ConvexClientProvider } from "@/components/convex-client-provider";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Playfair_Display, Work_Sans } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const playfair = Playfair_Display({
@@ -78,6 +79,7 @@ export default function RootLayout({
             <ConvexClientProvider>{children}</ConvexClientProvider>
           </OptionalClerkProvider>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
